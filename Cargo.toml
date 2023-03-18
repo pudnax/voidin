@@ -1,0 +1,14 @@
+[package]
+name = "poisson_corrode"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bytemuck = { version = "1.13.1", features = ["derive", "nightly_stdsimd"] }
+color-eyre = "0.6.2"
+glam = { version = "0.23.0", features = ["core-simd", "rand"] }
+pollster = { version = "0.3.0", features = ["macro"] }
+wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
+winit = "0.28.3"
