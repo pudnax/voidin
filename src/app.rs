@@ -4,7 +4,31 @@ use color_eyre::{eyre::ContextCompat, Result};
 use pollster::FutureExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-pub struct State {
+use crate::camera::{Camera, CameraBinding};
+
+pub struct AppState {
+    pub frame_count: u64,
+    pub total_time: f64,
+    pub camera: Camera,
+}
+
+impl AppState {
+    pub fn new(camera: Camera) -> Self {
+        Self {
+            frame_count: 0,
+            total_time: 0.,
+            camera,
+        }
+    }
+
+    pub fn update(&mut self, dt: f64) {
+        self.total_time += dt;
+        self.frame_count += 1;
+        self.camera.rig.update(dt as _);
+    }
+}
+
+pub struct App {
     adapter: wgpu::Adapter,
     pub instance: wgpu::Instance,
     pub device: wgpu::Device,
@@ -15,10 +39,12 @@ pub struct State {
     pub limits: wgpu::Limits,
     pub features: wgpu::Features,
 
+    camera_binding: CameraBinding,
+
     pipeline: wgpu::RenderPipeline,
 }
 
-impl State {
+impl App {
     pub fn get_info(&self) -> RendererInfo {
         let info = self.adapter.get_info();
         RendererInfo {
@@ -95,17 +121,20 @@ impl State {
             .block_on()?;
 
         let PhysicalSize { width, height } = window.inner_size();
-        let surface_config = surface
+        let mut surface_config = surface
             .get_default_config(&adapter, width, height)
             .context("Surface in not supported")?;
+        surface_config.present_mode = wgpu::PresentMode::Fifo;
         surface.configure(&device, &surface_config);
+
+        let camera_binding = CameraBinding::new(&device);
 
         let shader_module =
             device.create_shader_module(wgpu::include_wgsl!("../shaders/trig.wgsl"));
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&camera_binding.bind_group_layout],
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -145,6 +174,8 @@ impl State {
             surface_config,
             queue,
 
+            camera_binding,
+
             pipeline,
 
             limits,
@@ -161,7 +192,11 @@ impl State {
         self.surface.configure(&self.device, &self.surface_config);
     }
 
-    pub fn render(&self) -> Result<(), wgpu::SurfaceError> {
+    pub fn update(&mut self, state: &mut AppState) {
+        self.camera_binding.update(&self.queue, &mut state.camera);
+    }
+
+    pub fn render(&self, _state: &AppState) -> Result<(), wgpu::SurfaceError> {
         let target = self.surface.get_current_texture()?;
         let target_view = target.texture.create_view(&Default::default());
 
@@ -189,6 +224,7 @@ impl State {
             depth_stencil_attachment: None,
         });
         pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &self.camera_binding.binding, &[]);
         pass.draw(0..3, 0..1);
         drop(pass);
 
