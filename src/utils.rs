@@ -1,4 +1,11 @@
-use std::ops::Range;
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+};
+
+pub fn assets_dir() -> PathBuf {
+    Path::new(env!("OUT_DIR")).join("assets")
+}
 
 pub trait Lerp: Sized {
     fn lerp(self, range: Range<Self>) -> Self;

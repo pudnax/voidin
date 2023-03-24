@@ -2,9 +2,75 @@ use std::fmt::Display;
 
 use color_eyre::{eyre::ContextCompat, Result};
 use pollster::FutureExt;
+use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::camera::{Camera, CameraBinding};
+use crate::{
+    camera::{Camera, CameraBinding},
+    model::{self, DrawModel, Vertex},
+    resources,
+};
+
+struct Instance {
+    position: glam::Vec3,
+    rotation: glam::Quat,
+}
+
+impl Instance {
+    fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            model: (glam::Mat4::from_translation(self.position)
+                * glam::Mat4::from_quat(self.rotation))
+            .to_cols_array_2d(),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceRaw {
+    #[allow(dead_code)]
+    model: [[f32; 4]; 4],
+}
+
+impl InstanceRaw {
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            // We need to switch from using a step mode of Vertex to Instance
+            // This means that our shaders will only change to use the next
+            // instance when the shader starts processing a new instance
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
+                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
+                    shader_location: 5,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
+                // for each vec4. We don't have to do this in code though.
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+                    shader_location: 7,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
+                    shader_location: 8,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+            ],
+        }
+    }
+}
 
 pub struct AppState {
     pub frame_count: u64,
@@ -34,17 +100,25 @@ pub struct App {
     pub device: wgpu::Device,
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
+    depth_texture: wgpu::TextureView,
     queue: wgpu::Queue,
 
     pub limits: wgpu::Limits,
     pub features: wgpu::Features,
 
+    obj_model: model::Model,
+
     camera_binding: CameraBinding,
 
-    pipeline: wgpu::RenderPipeline,
+    render_pipeline: wgpu::RenderPipeline,
+
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
 }
 
 impl App {
+    const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
     pub fn get_info(&self) -> RendererInfo {
         let info = self.adapter.get_info();
         RendererInfo {
@@ -121,20 +195,75 @@ impl App {
             .block_on()?;
 
         let PhysicalSize { width, height } = window.inner_size();
-        let mut surface_config = surface
+        let surface_config = surface
             .get_default_config(&adapter, width, height)
             .context("Surface in not supported")?;
-        surface_config.present_mode = wgpu::PresentMode::Fifo;
         surface.configure(&device, &surface_config);
+        let depth_texture = Self::create_depth_texture(&device, &surface_config);
 
         let camera_binding = CameraBinding::new(&device);
 
+        const NUM_INSTANCES_PER_ROW: u32 = 10;
+        const SPACE_BETWEEN: f32 = 3.0;
+        let instances = (0..NUM_INSTANCES_PER_ROW)
+            .flat_map(|z| {
+                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                    let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                    let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+
+                    let position = glam::vec3(x, 0.0001, z);
+
+                    let rotation = glam::Quat::from_axis_angle(
+                        position.normalize(),
+                        std::f32::consts::PI / 4.,
+                    );
+
+                    Instance { position, rotation }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instance_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("texture_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let obj_model =
+            resources::load_model("cube/cube.obj", &device, &queue, &texture_bind_group_layout)?;
+
         let shader_module =
-            device.create_shader_module(wgpu::include_wgsl!("../shaders/trig.wgsl"));
+            device.create_shader_module(wgpu::include_wgsl!("../shaders/model.wgsl"));
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[&camera_binding.bind_group_layout],
+            bind_group_layouts: &[
+                &camera_binding.bind_group_layout,
+                &texture_bind_group_layout,
+            ],
             push_constant_ranges: &[],
         });
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -143,7 +272,7 @@ impl App {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[model::ModelVertex::DESC, InstanceRaw::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader_module,
@@ -157,7 +286,13 @@ impl App {
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Self::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
@@ -172,14 +307,20 @@ impl App {
             device,
             surface,
             surface_config,
+            depth_texture,
             queue,
 
             camera_binding,
 
-            pipeline,
+            render_pipeline: pipeline,
+
+            obj_model,
 
             limits,
             features,
+
+            instances,
+            instance_buffer,
         })
     }
 
@@ -190,6 +331,7 @@ impl App {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
+        self.depth_texture = Self::create_depth_texture(&self.device, &self.surface_config);
     }
 
     pub fn update(&mut self, state: &mut AppState) {
@@ -221,17 +363,56 @@ impl App {
                     store: true,
                 },
             })],
-            depth_stencil_attachment: None,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
         });
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, &self.camera_binding.binding, &[]);
-        pass.draw(0..3, 0..1);
+        // pass.set_pipeline(&self.render_pipeline);
+        // pass.set_bind_group(0, &self.camera_binding.binding, &[]);
+        // pass.draw(0..3, 0..1);
+
+        pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        pass.set_pipeline(&self.render_pipeline);
+        pass.draw_model_instanced(
+            &self.obj_model,
+            0..self.instances.len() as u32,
+            &self.camera_binding.binding,
+        );
+
         drop(pass);
 
         self.queue.submit(Some(encoder.finish()));
         target.present();
 
         Ok(())
+    }
+
+    fn create_depth_texture(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> wgpu::TextureView {
+        let size = wgpu::Extent3d {
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some("Depth Texture"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let tex = device.create_texture(&desc);
+        tex.create_view(&Default::default())
     }
 }
 

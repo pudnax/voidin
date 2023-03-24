@@ -92,9 +92,9 @@ impl Camera {
 
     pub fn new(screen_width: u32, screen_height: u32) -> Self {
         let rig: CameraRig = CameraRig::builder()
-            .with(YawPitch::new().yaw_degrees(45.0).pitch_degrees(-30.))
+            .with(YawPitch::new().yaw_degrees(45.0).pitch_degrees(-45.))
             .with(Smooth::new_rotation(1.5))
-            .with(Arm::new(Vec3::Z * 2.))
+            .with(Arm::new(Vec3::Z * 5.))
             .build();
 
         Self {
