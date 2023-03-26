@@ -6,6 +6,7 @@ use log::{info, warn};
 use poisson_corrode::{
     app::{App, AppState},
     camera::Camera,
+    input::{KeyMap, KeyboardMap},
 };
 use wgpu::SurfaceError;
 use winit::{
@@ -32,9 +33,19 @@ fn main() -> Result<()> {
     let PhysicalSize { width, height } = window.inner_size();
 
     let camera = Camera::new(vec3(1., 3., 1.), width, height);
+    use VirtualKeyCode::*;
+    let keyboard_map = KeyboardMap::new()
+        .bind(W, KeyMap::new("move_fwd", 1.0))
+        .bind(S, KeyMap::new("move_fwd", -1.0))
+        .bind(D, KeyMap::new("move_right", 1.0))
+        .bind(A, KeyMap::new("move_right", -1.0))
+        .bind(Q, KeyMap::new("move_up", 1.0))
+        .bind(E, KeyMap::new("move_up", -1.0))
+        .bind(LShift, KeyMap::new("boost", 1.0))
+        .bind(LControl, KeyMap::new("boost", -1.0));
+    let mut app_state = AppState::new(camera, Some(keyboard_map));
 
     let mut app = App::new(&window)?;
-    let mut app_state = AppState::new(camera);
     let info = app.get_info();
     println!("{info}");
 

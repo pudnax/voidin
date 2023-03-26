@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use glam::{vec2, Vec2};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
@@ -8,22 +10,194 @@ use winit::{
     window::Window,
 };
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
+pub struct KeyState {
+    pub ticks: u32,
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct KeyboardState {
+    keys_down: HashMap<VirtualKeyCode, KeyState>,
+}
+
+impl KeyboardState {
+    pub fn is_down(&self, key: VirtualKeyCode) -> bool {
+        self.get_down(key).is_some()
+    }
+
+    pub fn was_just_pressed(&self, key: VirtualKeyCode) -> bool {
+        self.get_down(key).map(|s| s.ticks == 1).unwrap_or_default()
+    }
+
+    pub fn get_down(&self, key: VirtualKeyCode) -> Option<&KeyState> {
+        self.keys_down.get(&key)
+    }
+
+    pub fn update(&mut self, events: &[Event<'_, ()>]) {
+        for event in events {
+            if let Event::WindowEvent {
+                event: WindowEvent::KeyboardInput { input, .. },
+                ..
+            } = event
+            {
+                if let Some(vk) = input.virtual_keycode {
+                    if input.state == ElementState::Pressed {
+                        self.keys_down.entry(vk).or_insert(KeyState { ticks: 0 });
+                    } else {
+                        self.keys_down.remove(&vk);
+                    }
+                }
+            }
+        }
+
+        for ks in self.keys_down.values_mut() {
+            ks.ticks += 1;
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct MouseState {
+    pub screen_position: Vec2,
+    pub delta: Vec2,
+    pub scroll: f32,
+    pub buttons_held: u32,
+    pub buttons_pressed: u32,
+    pub buttons_released: u32,
+}
+
+impl MouseState {
+    const LEFT: u32 = 0;
+    const MIDDLE: u32 = 1;
+    const RIGHT: u32 = 2;
+    pub fn left_pressed(&self) -> bool {
+        self.buttons_pressed & (1 << Self::LEFT) != 0
+    }
+    pub fn middle_pressed(&self) -> bool {
+        self.buttons_pressed & (1 << Self::MIDDLE) != 0
+    }
+    pub fn right_pressed(&self) -> bool {
+        self.buttons_pressed & (1 << Self::RIGHT) != 0
+    }
+    pub fn left_released(&self) -> bool {
+        self.buttons_released & (1 << Self::LEFT) != 0
+    }
+    pub fn middle_released(&self) -> bool {
+        self.buttons_released & (1 << Self::MIDDLE) != 0
+    }
+    pub fn right_released(&self) -> bool {
+        self.buttons_released & (1 << Self::RIGHT) != 0
+    }
+    pub fn left_held(&self) -> bool {
+        self.buttons_held & (1 << Self::LEFT) != 0
+    }
+    pub fn middle_held(&self) -> bool {
+        self.buttons_held & (1 << Self::MIDDLE) != 0
+    }
+    pub fn right_held(&self) -> bool {
+        self.buttons_held & (1 << Self::RIGHT) != 0
+    }
+}
+
+impl Default for MouseState {
+    fn default() -> Self {
+        Self {
+            screen_position: Vec2::ZERO,
+            delta: Vec2::ZERO,
+            scroll: 0.,
+            buttons_held: 0,
+            buttons_pressed: 0,
+            buttons_released: 0,
+        }
+    }
+}
+
+pub type Action = &'static str;
+
+pub struct KeyMap {
+    axis: Action,
+    multiplier: f32,
+    activation_time: f32,
+}
+
+impl KeyMap {
+    pub fn new(axis: Action, multiplier: f32) -> Self {
+        Self {
+            axis,
+            multiplier,
+            activation_time: 0.15,
+        }
+    }
+
+    pub fn activation_time(mut self, value: f32) -> Self {
+        self.activation_time = value;
+        self
+    }
+}
+
+struct KeyMapState {
+    map: KeyMap,
+    activation: f32,
+}
+
+pub struct KeyboardMap {
+    bindings: Vec<(VirtualKeyCode, KeyMapState)>,
+}
+
+impl Default for KeyboardMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KeyboardMap {
+    pub fn new() -> Self {
+        Self {
+            bindings: Default::default(),
+        }
+    }
+
+    pub fn bind(mut self, key: VirtualKeyCode, map: KeyMap) -> Self {
+        self.bindings.push((
+            key,
+            KeyMapState {
+                map,
+                activation: 0.0,
+            },
+        ));
+        self
+    }
+
+    pub fn map(&mut self, keyboard: &KeyboardState, dt: f32) -> HashMap<Action, f32> {
+        let mut result: HashMap<Action, f32> = HashMap::new();
+
+        for (key, s) in &mut self.bindings {
+            if s.map.activation_time > 1e-10 {
+                let change = if keyboard.is_down(*key) { dt } else { -dt };
+                s.activation = (s.activation + change / s.map.activation_time).clamp(0.0, 1.0);
+            } else {
+                if keyboard.is_down(*key) {
+                    s.activation = 1.0;
+                } else {
+                    s.activation = 0.0;
+                }
+            }
+
+            *result.entry(s.map.axis).or_default() += s.activation.powi(2) * s.map.multiplier;
+        }
+
+        for value in result.values_mut() {
+            *value = value.clamp(-1.0, 1.0);
+        }
+
+        result
+    }
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct Input {
-    pub q_pressed: bool,
-    pub e_pressed: bool,
-    pub up_pressed: bool,
-    pub down_pressed: bool,
-    pub right_pressed: bool,
-    pub left_pressed: bool,
-    pub shift_pressed: bool,
-    pub ctrl_pressed: bool,
-    pub enter_pressed: bool,
-    pub space_pressed: bool,
-    pub left_mouse_pressed: bool,
-    pub mouse_position: Vec2,
-    pub mouse_delta: Vec2,
-    pub mouse_scroll: f32,
+    pub keyboard_state: KeyboardState,
+    pub mouse_state: MouseState,
 }
 
 impl Input {
@@ -32,10 +206,13 @@ impl Input {
     }
 
     pub fn update<T>(&mut self, event: &Event<'_, T>, window: &Window) -> bool {
+        let mouse = &mut self.mouse_state;
+        let keyb = &mut self.keyboard_state.keys_down;
+
         match event {
             Event::DeviceEvent { event, .. } => match event {
                 DeviceEvent::MouseWheel { delta, .. } => {
-                    self.mouse_scroll = -match delta {
+                    mouse.scroll = -match delta {
                         MouseScrollDelta::LineDelta(_, scroll) => *scroll,
                         MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => {
                             *scroll as f32
@@ -43,11 +220,35 @@ impl Input {
                     };
                 }
                 DeviceEvent::MouseMotion { delta: (dx, dy) } => {
-                    self.mouse_delta = vec2(*dx as _, *dy as _);
+                    mouse.delta = vec2(*dx as _, *dy as _);
                 }
                 _ => {}
             },
             Event::WindowEvent { event, window_id } if *window_id == window.id() => match event {
+                WindowEvent::CursorMoved {
+                    position: PhysicalPosition { x, y },
+                    ..
+                } => {
+                    let PhysicalSize { width, height } = window.inner_size();
+                    let x = (*x as f32 / width as f32 - 0.5) * 2.;
+                    let y = -(*y as f32 / height as f32 - 0.5) * 2.;
+                    mouse.screen_position = vec2(x, y);
+                }
+                WindowEvent::MouseInput { button, state, .. } => {
+                    let button_id = match button {
+                        winit::event::MouseButton::Left => 0,
+                        winit::event::MouseButton::Middle => 1,
+                        winit::event::MouseButton::Right => 2,
+                        _ => 0,
+                    };
+                    if let ElementState::Pressed = state {
+                        mouse.buttons_held |= 1 << button_id;
+                        mouse.buttons_pressed |= 1 << button_id;
+                    } else {
+                        mouse.buttons_held &= !(1 << button_id);
+                        mouse.buttons_released |= 1 << button_id;
+                    }
+                }
                 WindowEvent::KeyboardInput {
                     input:
                         KeyboardInput {
@@ -57,55 +258,16 @@ impl Input {
                         },
                     ..
                 } => {
-                    let pressed = state == &ElementState::Pressed;
-                    match keycode {
-                        VirtualKeyCode::Q => {
-                            self.q_pressed = pressed;
-                        }
-                        VirtualKeyCode::E => {
-                            self.e_pressed = pressed;
-                        }
-                        VirtualKeyCode::Up | VirtualKeyCode::W => {
-                            self.up_pressed = pressed;
-                        }
-                        VirtualKeyCode::Down | VirtualKeyCode::S => {
-                            self.down_pressed = pressed;
-                        }
-                        VirtualKeyCode::Left | VirtualKeyCode::A => {
-                            self.left_pressed = pressed;
-                        }
-                        VirtualKeyCode::Right | VirtualKeyCode::D => {
-                            self.right_pressed = pressed;
-                        }
-                        VirtualKeyCode::RShift | VirtualKeyCode::LShift => {
-                            self.shift_pressed = pressed;
-                        }
-                        VirtualKeyCode::RControl | VirtualKeyCode::LControl => {
-                            self.ctrl_pressed = pressed;
-                        }
-                        VirtualKeyCode::Return => {
-                            self.enter_pressed = pressed;
-                        }
-                        VirtualKeyCode::Space => {
-                            self.space_pressed = pressed;
-                        }
-                        _ => return false,
-                    };
+                    if state == &ElementState::Pressed {
+                        keyb.entry(*keycode).or_insert(KeyState { ticks: 0 });
+                    } else {
+                        keyb.remove(keycode);
+                    }
+
+                    keyb.values_mut().for_each(|val| {
+                        val.ticks += 1;
+                    });
                 }
-                WindowEvent::CursorMoved {
-                    position: PhysicalPosition { x, y },
-                    ..
-                } => {
-                    let PhysicalSize { width, height } = window.inner_size();
-                    let x = (*x as f32 / width as f32 - 0.5) * 2.;
-                    let y = -(*y as f32 / height as f32 - 0.5) * 2.;
-                    self.mouse_position = vec2(x, y);
-                }
-                WindowEvent::MouseInput {
-                    button: winit::event::MouseButton::Left,
-                    state,
-                    ..
-                } => self.left_mouse_pressed = matches!(state, ElementState::Pressed),
                 _ => {}
             },
 

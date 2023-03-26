@@ -9,7 +9,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::{Camera, CameraBinding},
-    input::Input,
+    input::{Input, KeyboardMap},
     model::{self, DrawModel, Vertex},
     resources,
 };
@@ -80,15 +80,17 @@ pub struct AppState {
     pub total_time: f64,
     pub camera: Camera,
     pub input: Input,
+    pub keyboard_map: KeyboardMap,
 }
 
 impl AppState {
-    pub fn new(camera: Camera) -> Self {
+    pub fn new(camera: Camera, keyboard_map: Option<KeyboardMap>) -> Self {
         Self {
             input: Input::new(),
             frame_count: 0,
             total_time: 0.,
             camera,
+            keyboard_map: keyboard_map.unwrap_or_default(),
         }
     }
 
@@ -96,25 +98,24 @@ impl AppState {
         self.total_time += dt;
         self.frame_count += 1;
 
-        if self.input.left_mouse_pressed {
+        if self.input.mouse_state.left_held() {
             let sensitivity = 0.5;
             self.camera.rig.driver_mut::<YawPitch>().rotate_yaw_pitch(
-                -sensitivity * self.input.mouse_delta.x,
-                -sensitivity * self.input.mouse_delta.y,
+                -sensitivity * self.input.mouse_state.delta.x,
+                -sensitivity * self.input.mouse_state.delta.y,
             );
         }
 
-        let move_right = f32::from(self.input.right_pressed) - f32::from(self.input.left_pressed);
-        let move_up = f32::from(self.input.q_pressed) - f32::from(self.input.e_pressed);
-        let move_fwd = f32::from(self.input.up_pressed) - f32::from(self.input.down_pressed);
-        let boost = f32::from(self.input.shift_pressed) - f32::from(self.input.ctrl_pressed);
+        let moves = self.keyboard_map.map(&self.input.keyboard_state, dt as _);
         let move_vec = self.camera.rig.final_transform.rotation
-            * Vec3::new(move_right, move_up, -move_fwd).clamp_length_max(1.0)
-            * 4.0f32.powf(boost);
+            * Vec3::new(moves["move_right"], moves["move_up"], -moves["move_fwd"])
+                .clamp_length_max(1.0)
+            * 4.0f32.powf(moves["boost"]);
+
         self.camera
             .rig
             .driver_mut::<Position>()
-            .translate(move_vec * dt as f32 * 3.0);
+            .translate(move_vec * dt as f32 * 5.0);
 
         self.camera.rig.update(dt as _);
 
