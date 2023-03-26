@@ -106,7 +106,7 @@ impl AppState {
             );
         }
 
-        let moves = self.keyboard_map.map(&self.input.keyboard_state, dt as _);
+        let moves = self.keyboard_map.map(&self.input.keyboard_state);
         let move_vec = self.camera.rig.final_transform.rotation
             * Vec3::new(moves["move_right"], moves["move_up"], -moves["move_fwd"])
                 .clamp_length_max(1.0)

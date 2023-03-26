@@ -115,33 +115,18 @@ impl Default for MouseState {
 pub type Action = &'static str;
 
 pub struct KeyMap {
-    axis: Action,
+    action: Action,
     multiplier: f32,
-    activation_time: f32,
 }
 
 impl KeyMap {
-    pub fn new(axis: Action, multiplier: f32) -> Self {
-        Self {
-            axis,
-            multiplier,
-            activation_time: 0.15,
-        }
+    pub fn new(action: Action, multiplier: f32) -> Self {
+        Self { action, multiplier }
     }
-
-    pub fn activation_time(mut self, value: f32) -> Self {
-        self.activation_time = value;
-        self
-    }
-}
-
-struct KeyMapState {
-    map: KeyMap,
-    activation: f32,
 }
 
 pub struct KeyboardMap {
-    bindings: Vec<(VirtualKeyCode, KeyMapState)>,
+    bindings: Vec<(VirtualKeyCode, KeyMap)>,
 }
 
 impl Default for KeyboardMap {
@@ -158,32 +143,16 @@ impl KeyboardMap {
     }
 
     pub fn bind(mut self, key: VirtualKeyCode, map: KeyMap) -> Self {
-        self.bindings.push((
-            key,
-            KeyMapState {
-                map,
-                activation: 0.0,
-            },
-        ));
+        self.bindings.push((key, map));
         self
     }
 
-    pub fn map(&mut self, keyboard: &KeyboardState, dt: f32) -> HashMap<Action, f32> {
+    pub fn map(&mut self, keyboard: &KeyboardState) -> HashMap<Action, f32> {
         let mut result: HashMap<Action, f32> = HashMap::new();
 
         for (key, s) in &mut self.bindings {
-            if s.map.activation_time > 1e-10 {
-                let change = if keyboard.is_down(*key) { dt } else { -dt };
-                s.activation = (s.activation + change / s.map.activation_time).clamp(0.0, 1.0);
-            } else {
-                if keyboard.is_down(*key) {
-                    s.activation = 1.0;
-                } else {
-                    s.activation = 0.0;
-                }
-            }
-
-            *result.entry(s.map.axis).or_default() += s.activation.powi(2) * s.map.multiplier;
+            let activation = if keyboard.is_down(*key) { 1.0 } else { 0.0 };
+            *result.entry(s.action).or_default() += activation * s.multiplier;
         }
 
         for value in result.values_mut() {
