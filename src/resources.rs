@@ -22,15 +22,20 @@ pub fn load_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> color_eyre::Result<wgpu::Texture> {
+    load_texture_path(file_name.as_ref(), device, queue)
+}
+
+pub fn load_texture_path(
+    file_name: &Path,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> color_eyre::Result<wgpu::Texture> {
     let data = std::fs::read(&file_name)?;
     load_texture_from_bytes(
         device,
         queue,
         &data,
-        file_name
-            .as_ref()
-            .file_name()
-            .and_then(|name| name.to_str()),
+        file_name.file_name().and_then(|name| name.to_str()),
     )
 }
 
@@ -90,6 +95,15 @@ pub fn load_texture_from_image(
 
 pub fn load_model(
     file_name: impl AsRef<Path>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    layout: &wgpu::BindGroupLayout,
+) -> color_eyre::Result<model::Model> {
+    load_model_path(file_name.as_ref(), device, queue, layout)
+}
+
+pub fn load_model_path(
+    file_name: &Path,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
@@ -173,8 +187,7 @@ pub fn load_model(
                 })
                 .collect::<Vec<_>>();
 
-            let file_name_str = file_name.as_ref().display().to_string();
-
+            let file_name_str = file_name.to_str().unwrap_or("Unnamed");
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("{:?} Vertex Buffer", file_name_str)),
                 contents: bytemuck::cast_slice(&vertices),
@@ -187,7 +200,7 @@ pub fn load_model(
             });
 
             model::Mesh {
-                name: file_name_str,
+                name: file_name_str.into(),
                 vertex_buffer,
                 index_buffer,
                 num_elements: m.mesh.indices.len() as u32,
