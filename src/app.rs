@@ -1,12 +1,15 @@
 use std::fmt::Display;
 
 use color_eyre::{eyre::ContextCompat, Result};
+use dolly::prelude::{Position, YawPitch};
+use glam::Vec3;
 use pollster::FutureExt;
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::{Camera, CameraBinding},
+    input::Input,
     model::{self, DrawModel, Vertex},
     resources,
 };
@@ -76,11 +79,13 @@ pub struct AppState {
     pub frame_count: u64,
     pub total_time: f64,
     pub camera: Camera,
+    pub input: Input,
 }
 
 impl AppState {
     pub fn new(camera: Camera) -> Self {
         Self {
+            input: Input::new(),
             frame_count: 0,
             total_time: 0.,
             camera,
@@ -90,7 +95,31 @@ impl AppState {
     pub fn update(&mut self, dt: f64) {
         self.total_time += dt;
         self.frame_count += 1;
+
+        if self.input.left_mouse_pressed {
+            let sensitivity = 0.5;
+            self.camera.rig.driver_mut::<YawPitch>().rotate_yaw_pitch(
+                -sensitivity * self.input.mouse_delta.x,
+                -sensitivity * self.input.mouse_delta.y,
+            );
+        }
+
+        let move_right = f32::from(self.input.right_pressed) - f32::from(self.input.left_pressed);
+        let move_up = f32::from(self.input.q_pressed) - f32::from(self.input.e_pressed);
+        let move_fwd = f32::from(self.input.up_pressed) - f32::from(self.input.down_pressed);
+        let boost = f32::from(self.input.shift_pressed) - f32::from(self.input.ctrl_pressed);
+        let move_vec = self.camera.rig.final_transform.rotation
+            * Vec3::new(move_right, move_up, -move_fwd).clamp_length_max(1.0)
+            * 4.0f32.powf(boost);
+        self.camera
+            .rig
+            .driver_mut::<Position>()
+            .translate(move_vec * dt as f32 * 3.0);
+
         self.camera.rig.update(dt as _);
+
+        self.camera.position = self.camera.rig.final_transform.position;
+        self.camera.rotation = self.camera.rig.final_transform.rotation;
     }
 }
 
@@ -252,8 +281,12 @@ impl App {
                     },
                 ],
             });
-        let obj_model =
-            resources::load_model("cube/cube.obj", &device, &queue, &texture_bind_group_layout)?;
+        let obj_model = resources::load_model(
+            "assets/cube/cube.obj",
+            &device,
+            &queue,
+            &texture_bind_group_layout,
+        )?;
 
         let shader_module =
             device.create_shader_module(wgpu::include_wgsl!("../shaders/model.wgsl"));

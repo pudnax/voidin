@@ -1,10 +1,10 @@
 use std::num::NonZeroU64;
 
 use dolly::{
-    prelude::{Arm, Smooth, YawPitch},
+    prelude::{Position, Smooth, YawPitch},
     rig::CameraRig,
 };
-use glam::{Mat4, Vec3, Vec4};
+use glam::{Mat4, Quat, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
@@ -82,7 +82,9 @@ impl CameraBinding {
 
 pub struct Camera {
     pub rig: CameraRig,
-    aspect: f32,
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub aspect: f32,
 }
 
 impl Camera {
@@ -90,16 +92,17 @@ impl Camera {
     const ZNEAR: f32 = 0.1;
     const FOVY: f32 = std::f32::consts::PI / 2.0;
 
-    pub fn new(screen_width: u32, screen_height: u32) -> Self {
+    pub fn new(position: Vec3, screen_width: u32, screen_height: u32) -> Self {
         let rig: CameraRig = CameraRig::builder()
-            .with(YawPitch::new().yaw_degrees(45.0).pitch_degrees(-45.))
-            .with(Smooth::new_rotation(1.5))
-            .with(Arm::new(Vec3::Z * 5.))
+            .with(Position::new(position))
+            .with(YawPitch::new())
+            .with(Smooth::new_position_rotation(1.0, 1.5))
             .build();
-
         Self {
             rig,
             aspect: screen_width as f32 / screen_height as f32,
+            position,
+            rotation: Quat::IDENTITY,
         }
     }
 

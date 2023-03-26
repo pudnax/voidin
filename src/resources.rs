@@ -1,21 +1,13 @@
 use image::GenericImageView;
 use log::warn;
 use std::{
-    io::{self, BufReader, Cursor},
+    io::{BufReader, Cursor},
     num::NonZeroU32,
     path::Path,
 };
 use wgpu::util::DeviceExt;
 
-use crate::{model, utils::assets_dir};
-
-pub fn load_string_from_assets(file_name: impl AsRef<Path>) -> io::Result<String> {
-    std::fs::read_to_string(assets_dir().join(file_name))
-}
-
-pub fn load_binary_from_assets(file_name: impl AsRef<Path>) -> io::Result<Vec<u8>> {
-    std::fs::read(assets_dir().join(file_name))
-}
+use crate::model;
 
 pub fn load_texture(
     file_name: impl AsRef<Path>,
@@ -30,7 +22,7 @@ pub fn load_texture_path(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> color_eyre::Result<wgpu::Texture> {
-    let data = std::fs::read(&file_name)?;
+    let data = std::fs::read(file_name)?;
     load_texture_from_bytes(
         device,
         queue,
@@ -108,11 +100,9 @@ pub fn load_model_path(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> color_eyre::Result<model::Model> {
-    let root = assets_dir();
-    let path = root.join(&file_name);
-    let parent = path.parent().unwrap_or(&root);
+    let parent = file_name.parent().unwrap_or(Path::new("assets"));
 
-    let obj_text = std::fs::read_to_string(&path)?;
+    let obj_text = std::fs::read_to_string(file_name)?;
     let obj_cursor = Cursor::new(obj_text);
     let mut obj_reader = BufReader::new(obj_cursor);
 

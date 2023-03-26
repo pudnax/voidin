@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use color_eyre::Result;
-use dolly::prelude::YawPitch;
+use glam::vec3;
 use log::{info, warn};
 use poisson_corrode::{
     app::{App, AppState},
@@ -10,7 +10,7 @@ use poisson_corrode::{
 use wgpu::SurfaceError;
 use winit::{
     dpi::{LogicalSize, PhysicalSize},
-    event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent},
+    event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::ControlFlow,
 };
 
@@ -30,7 +30,8 @@ fn main() -> Result<()> {
         .build(&event_loop)?;
 
     let PhysicalSize { width, height } = window.inner_size();
-    let camera = Camera::new(width, height);
+
+    let camera = Camera::new(vec3(1., 3., 1.), width, height);
 
     let mut app = App::new(&window)?;
     let mut app_state = AppState::new(camera);
@@ -43,6 +44,7 @@ fn main() -> Result<()> {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
+        app_state.input.update(&event, &window);
         match event {
             Event::MainEventsCleared => {
                 let new_instant = Instant::now();
@@ -60,6 +62,21 @@ fn main() -> Result<()> {
                     accumulated_time -= FIXED_TIME_STEP;
                 }
             }
+            Event::RedrawRequested(_) => {
+                if let Err(err) = app.render(&app_state) {
+                    eprintln!("get_current_texture error: {:?}", err);
+                    match err {
+                        SurfaceError::Lost | SurfaceError::Outdated => {
+                            warn!("render: Outdated Surface");
+                            app.surface.configure(&app.device, &app.surface_config);
+                            window.request_redraw();
+                        }
+                        SurfaceError::OutOfMemory => *control_flow = ControlFlow::Exit,
+                        SurfaceError::Timeout => info!("Surface Timeout"),
+                    }
+                }
+            }
+            Event::RedrawEventsCleared => window.request_redraw(),
             Event::WindowEvent {
                 event:
                     WindowEvent::Resized(PhysicalSize { width, height })
@@ -70,6 +87,7 @@ fn main() -> Result<()> {
                 ..
             } => {
                 if width != 0 && height != 0 {
+                    app_state.camera.aspect = width as f32 / height as f32;
                     app.resize(width, height);
                 }
             }
@@ -86,48 +104,6 @@ fn main() -> Result<()> {
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
-            Event::WindowEvent { event, window_id } if window_id == window.id() => match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(key),
-                            state: ElementState::Pressed,
-                            ..
-                        },
-                    ..
-                } => {
-                    if key == VirtualKeyCode::Z {
-                        app_state
-                            .camera
-                            .rig
-                            .driver_mut::<YawPitch>()
-                            .rotate_yaw_pitch(-90., 0.0);
-                    }
-                    if key == VirtualKeyCode::X {
-                        app_state
-                            .camera
-                            .rig
-                            .driver_mut::<YawPitch>()
-                            .rotate_yaw_pitch(90., 0.0);
-                    }
-                }
-                _ => {}
-            },
-            Event::RedrawRequested(_) => {
-                if let Err(err) = app.render(&app_state) {
-                    eprintln!("get_current_texture error: {:?}", err);
-                    match err {
-                        SurfaceError::Lost | SurfaceError::Outdated => {
-                            warn!("render: Outdated Surface");
-                            app.surface.configure(&app.device, &app.surface_config);
-                            window.request_redraw();
-                        }
-                        SurfaceError::OutOfMemory => *control_flow = ControlFlow::Exit,
-                        SurfaceError::Timeout => info!("Surface Timeout"),
-                    }
-                }
-            }
-            Event::RedrawEventsCleared => window.request_redraw(),
             _ => {}
         }
     })
