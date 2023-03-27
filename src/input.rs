@@ -32,28 +32,6 @@ impl KeyboardState {
     pub fn get_down(&self, key: VirtualKeyCode) -> Option<&KeyState> {
         self.keys_down.get(&key)
     }
-
-    pub fn update(&mut self, events: &[Event<'_, ()>]) {
-        for event in events {
-            if let Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
-                ..
-            } = event
-            {
-                if let Some(vk) = input.virtual_keycode {
-                    if input.state == ElementState::Pressed {
-                        self.keys_down.entry(vk).or_insert(KeyState { ticks: 0 });
-                    } else {
-                        self.keys_down.remove(&vk);
-                    }
-                }
-            }
-        }
-
-        for ks in self.keys_down.values_mut() {
-            ks.ticks += 1;
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -70,6 +48,14 @@ impl MouseState {
     const LEFT: u32 = 0;
     const MIDDLE: u32 = 1;
     const RIGHT: u32 = 2;
+
+    pub fn refresh(&mut self) {
+        self.delta = vec2(0., 0.);
+        self.scroll = 0.;
+        self.buttons_pressed = 0;
+        self.buttons_released = 0;
+    }
+
     pub fn left_pressed(&self) -> bool {
         self.buttons_pressed & (1 << Self::LEFT) != 0
     }
