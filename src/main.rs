@@ -73,6 +73,7 @@ fn main() -> Result<()> {
                     accumulated_time -= FIXED_TIME_STEP;
                 }
             }
+            Event::RedrawEventsCleared => window.request_redraw(),
             Event::RedrawRequested(_) => {
                 if let Err(err) = app.render(&app_state) {
                     eprintln!("get_current_texture error: {:?}", err);
@@ -87,7 +88,6 @@ fn main() -> Result<()> {
                     }
                 }
             }
-            Event::RedrawEventsCleared => window.request_redraw(),
             Event::WindowEvent {
                 event:
                     WindowEvent::Resized(PhysicalSize { width, height })

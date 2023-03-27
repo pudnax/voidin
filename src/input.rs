@@ -4,8 +4,8 @@ use glam::{vec2, Vec2};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{
-        DeviceEvent, ElementState, Event, KeyboardInput, MouseScrollDelta, VirtualKeyCode,
-        WindowEvent,
+        DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta,
+        VirtualKeyCode, WindowEvent,
     },
     window::Window,
 };
@@ -204,18 +204,21 @@ impl Input {
                     mouse.screen_position = vec2(x, y);
                 }
                 WindowEvent::MouseInput { button, state, .. } => {
-                    let button_id = match button {
-                        winit::event::MouseButton::Left => 0,
-                        winit::event::MouseButton::Middle => 1,
-                        winit::event::MouseButton::Right => 2,
-                        _ => 0,
+                    let button_id = {
+                        let button = match button {
+                            MouseButton::Right => MouseState::RIGHT,
+                            MouseButton::Middle => MouseState::MIDDLE,
+                            MouseButton::Left | _ => MouseState::LEFT,
+                        };
+                        1 << button
                     };
+
                     if let ElementState::Pressed = state {
-                        mouse.buttons_held |= 1 << button_id;
-                        mouse.buttons_pressed |= 1 << button_id;
+                        mouse.buttons_held |= button_id;
+                        mouse.buttons_pressed |= button_id;
                     } else {
-                        mouse.buttons_held &= !(1 << button_id);
-                        mouse.buttons_released |= 1 << button_id;
+                        mouse.buttons_held &= !button_id;
+                        mouse.buttons_released |= button_id;
                     }
                 }
                 WindowEvent::KeyboardInput {
