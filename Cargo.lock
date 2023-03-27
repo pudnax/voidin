@@ -1214,6 +1214,7 @@ dependencies = [
  "pollster",
  "tobj",
  "wgpu",
+ "wgpu-profiler",
  "winit",
 ]
 
@@ -1933,6 +1934,15 @@ dependencies = [
  "web-sys",
  "wgpu-types",
  "winapi",
+]
+
+[[package]]
+name = "wgpu-profiler"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68bbce70988a9c21635d84c86e566f245f1fcfb5e4b95895d886f5f6399390d5"
+dependencies = [
+ "wgpu",
 ]
 
 [[package]]

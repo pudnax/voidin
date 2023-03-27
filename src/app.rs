@@ -1,10 +1,11 @@
-use std::fmt::Display;
+use std::{cell::RefCell, fmt::Display};
 
 use color_eyre::{eyre::ContextCompat, Result};
 use dolly::prelude::{Position, YawPitch};
 use glam::Vec3;
 use pollster::FutureExt;
 use wgpu::util::DeviceExt;
+use wgpu_profiler::GpuProfiler;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
@@ -146,6 +147,8 @@ pub struct App {
 
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+
+    profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
 
 impl App {
@@ -338,6 +341,7 @@ impl App {
         });
 
         Ok(Self {
+            profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
             adapter,
             instance,
             device,
@@ -372,9 +376,18 @@ impl App {
 
     pub fn update(&mut self, state: &mut AppState) {
         self.camera_binding.update(&self.queue, &mut state.camera);
+
+        if state.frame_count % 100 == 0 {
+            let mut last_profile = vec![];
+            while let Some(profiling_data) = self.profiler.borrow_mut().process_finished_frame() {
+                last_profile = profiling_data;
+            }
+            crate::utils::scopes_to_console_recursive(&last_profile, 0);
+        }
     }
 
     pub fn render(&self, _state: &AppState) -> Result<(), wgpu::SurfaceError> {
+        let mut profiler = self.profiler.borrow_mut();
         let target = self.surface.get_current_texture()?;
         let target_view = target.texture.create_view(&Default::default());
 
@@ -384,8 +397,10 @@ impl App {
                 label: Some("Command Encoder"),
             });
 
+        profiler.begin_scope("Main Render Scope ", &mut encoder, &self.device);
+
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
+            label: Some("Render Pass Descriptor"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &target_view,
                 resolve_target: None,
@@ -408,9 +423,6 @@ impl App {
                 stencil_ops: None,
             }),
         });
-        // pass.set_pipeline(&self.render_pipeline);
-        // pass.set_bind_group(0, &self.camera_binding.binding, &[]);
-        // pass.draw(0..3, 0..1);
 
         pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         pass.set_pipeline(&self.render_pipeline);
@@ -422,8 +434,13 @@ impl App {
 
         drop(pass);
 
+        profiler.end_scope(&mut encoder);
+
+        profiler.resolve_queries(&mut encoder);
+
         self.queue.submit(Some(encoder.finish()));
         target.present();
+        profiler.end_frame().unwrap();
 
         Ok(())
     }

@@ -20,6 +20,7 @@ log = "0.4.17"
 pollster = { version = "0.3.0", features = ["macro"] }
 tobj = "3.2.4"
 wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
+wgpu-profiler = "0.11.0"
 winit = "0.28.3"
 
 [build-dependencies]
