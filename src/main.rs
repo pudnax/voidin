@@ -84,7 +84,7 @@ fn main() -> Result<()> {
                             window.request_redraw();
                         }
                         SurfaceError::OutOfMemory => *control_flow = ControlFlow::Exit,
-                        SurfaceError::Timeout => info!("Surface Timeout"),
+                        SurfaceError::Timeout => warn!("Surface Timeout"),
                     }
                 }
             }

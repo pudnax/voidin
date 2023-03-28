@@ -71,7 +71,7 @@ impl CameraBinding {
         }
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue, camera: &mut Camera) {
+    pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera) {
         queue.write_buffer(
             &self.buffer,
             0,

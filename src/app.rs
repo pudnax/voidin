@@ -1,19 +1,69 @@
-use std::{cell::RefCell, fmt::Display};
+use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
-use color_eyre::{eyre::ContextCompat, Result};
-use dolly::prelude::{Position, YawPitch};
-use glam::Vec3;
+use color_eyre::{
+    eyre::{eyre, ContextCompat},
+    Result,
+};
 use pollster::FutureExt;
 use wgpu::util::DeviceExt;
 use wgpu_profiler::GpuProfiler;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    camera::{Camera, CameraBinding},
-    input::{Input, KeyboardMap},
+    camera::CameraBinding,
+    gltf::{
+        accessor_type_to_format, component_type_to_index_format, mesh_mode_to_topology,
+        stride_of_component_type,
+    },
     model::{self, DrawModel, Vertex},
     resources,
+    utils::NonZeroSized,
 };
+
+mod global_ubo;
+mod state;
+pub use state::AppState;
+
+pub struct ShaderLocation(u32);
+
+impl ShaderLocation {
+    fn new(s: gltf::Semantic) -> Option<Self> {
+        Some(match s {
+            gltf::Semantic::Positions => Self(0),
+            gltf::Semantic::Normals => Self(1),
+            _ => return None,
+        })
+    }
+}
+
+impl TryFrom<gltf::Semantic> for ShaderLocation {
+    type Error = color_eyre::Report;
+    fn try_from(v: gltf::Semantic) -> Result<Self, Self::Error> {
+        Ok(match v {
+            gltf::Semantic::Positions => Self(0),
+            gltf::Semantic::Normals => Self(1),
+            _ => return Err(eyre!("Unsupported primitive semantic")),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub enum DrawMode {
+    Normal(u32),
+    Indexed {
+        buffer: wgpu::Buffer,
+        offset: u64,
+        ty: wgpu::IndexFormat,
+        draw_count: u32,
+    },
+}
+
+#[derive(Debug)]
+pub struct GpuPrimitive {
+    pub pipeline: wgpu::RenderPipeline,
+    pub buffers: Vec<wgpu::Buffer>,
+    pub draw_mode: DrawMode,
+}
 
 struct Instance {
     position: glam::Vec3,
@@ -76,57 +126,6 @@ impl InstanceRaw {
     }
 }
 
-pub struct AppState {
-    pub frame_count: u64,
-    pub total_time: f64,
-    pub camera: Camera,
-    pub input: Input,
-    pub keyboard_map: KeyboardMap,
-}
-
-impl AppState {
-    pub fn new(camera: Camera, keyboard_map: Option<KeyboardMap>) -> Self {
-        Self {
-            input: Input::new(),
-            frame_count: 0,
-            total_time: 0.,
-            camera,
-            keyboard_map: keyboard_map.unwrap_or_default(),
-        }
-    }
-
-    pub fn update(&mut self, dt: f64) {
-        self.total_time += dt;
-        self.frame_count += 1;
-
-        if self.input.mouse_state.left_held() {
-            let sensitivity = 0.5;
-            self.camera.rig.driver_mut::<YawPitch>().rotate_yaw_pitch(
-                -sensitivity * self.input.mouse_state.delta.x,
-                -sensitivity * self.input.mouse_state.delta.y,
-            );
-        }
-
-        let moves = self.keyboard_map.map(&self.input.keyboard_state);
-        let move_vec = self.camera.rig.final_transform.rotation
-            * Vec3::new(moves["move_right"], moves["move_up"], -moves["move_fwd"])
-                .clamp_length_max(1.0)
-            * 4.0f32.powf(moves["boost"]);
-
-        self.camera
-            .rig
-            .driver_mut::<Position>()
-            .translate(move_vec * dt as f32 * 5.0);
-
-        self.camera.rig.update(dt as _);
-
-        self.camera.position = self.camera.rig.final_transform.position;
-        self.camera.rotation = self.camera.rig.final_transform.rotation;
-
-        self.input.mouse_state.refresh();
-    }
-}
-
 pub struct App {
     adapter: wgpu::Adapter,
     pub instance: wgpu::Instance,
@@ -139,6 +138,9 @@ pub struct App {
     pub limits: wgpu::Limits,
     pub features: wgpu::Features,
 
+    global_uniform_binding: global_ubo::GlobalUniformBinding,
+    global_uniform: global_ubo::Uniform,
+
     obj_model: model::Model,
 
     camera_binding: CameraBinding,
@@ -147,6 +149,10 @@ pub struct App {
 
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+
+    document: gltf::Document,
+    node_data: HashMap<usize, wgpu::BindGroup>,
+    primitive_data: HashMap<(usize, usize), GpuPrimitive>,
 
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
@@ -237,6 +243,12 @@ impl App {
         let depth_texture = Self::create_depth_texture(&device, &surface_config);
 
         let camera_binding = CameraBinding::new(&device);
+        let global_uniform_binding = global_ubo::GlobalUniformBinding::new(&device);
+        let global_uniform = global_ubo::Uniform {
+            time: 0.,
+            frame: 0,
+            resolution: [surface_config.width as f32, surface_config.height as f32],
+        };
 
         const NUM_INSTANCES_PER_ROW: u32 = 10;
         const SPACE_BETWEEN: f32 = 3.0;
@@ -300,6 +312,7 @@ impl App {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
             bind_group_layouts: &[
+                &global_uniform_binding.layout,
                 &camera_binding.bind_group_layout,
                 &texture_bind_group_layout,
             ],
@@ -340,6 +353,180 @@ impl App {
             multiview: None,
         });
 
+        let (document, buffers, _images) =
+            gltf::import("assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf")?;
+
+        let node_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Node Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: Some(glam::Mat4::NSIZE),
+                    },
+                    count: None,
+                }],
+            });
+
+        let mut node_data = HashMap::new();
+        for node in document.nodes().filter(|n| n.mesh().is_some()) {
+            let name = node.name().unwrap_or("<Unnamed>");
+            let node_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("Node Buffer: {:?}", name)),
+                contents: bytemuck::bytes_of(&node.transform().matrix()),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+            let node_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(&format!("Node Bind Group: {:?}", name)),
+                layout: &node_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: node_buffer.as_entire_binding(),
+                }],
+            });
+
+            node_data.insert(node.index(), node_bind_group);
+        }
+
+        let mut primitive_data = HashMap::new();
+        for mesh in document.meshes() {
+            let mesh_name = mesh.name().unwrap_or("<Unnamed>");
+            dbg!(mesh_name);
+            for primitive in mesh.primitives() {
+                struct VertexLayout {
+                    array_stride: u64,
+                    step_mode: wgpu::VertexStepMode,
+                }
+                let mut vertex_buffer_layouts = vec![];
+                let mut vertex_attributes = vec![];
+                let mut primitive_buffers = vec![];
+                let mut draw_count = 0;
+                for (semantic, accessor) in primitive.attributes() {
+                    let Some(buffer_view) = accessor.view() else { continue; };
+                    println!(
+                        "Buffer {:?}: №{} {:?}",
+                        buffer_view.name(),
+                        buffer_view.buffer().index(),
+                        &semantic,
+                    );
+
+                    let Some(shader_location) = ShaderLocation::new(semantic.clone()) else {
+                        println!("Skip");
+                        continue;
+                    };
+
+                    let array_stride = dbg!(buffer_view
+                        .stride()
+                        .unwrap_or(stride_of_component_type(&accessor)));
+                    dbg!(buffer_view.offset());
+                    dbg!(accessor.offset());
+                    vertex_buffer_layouts.push(VertexLayout {
+                        array_stride: array_stride as _,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                    });
+                    vertex_attributes.push([wgpu::VertexAttribute {
+                        format: accessor_type_to_format(&accessor),
+                        offset: accessor.offset() as _,
+                        shader_location: shader_location.0,
+                    }]);
+
+                    let buffer_view_data = &buffers[buffer_view.buffer().index()];
+                    let label = format!("Vertex Buffer {:?}: {:?}", mesh.name(), semantic);
+                    primitive_buffers.push(device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some(&label),
+                            contents: &buffer_view_data[buffer_view.offset()..]
+                                [..buffer_view.length()],
+                            usage: wgpu::BufferUsages::VERTEX,
+                        },
+                    ));
+
+                    draw_count = dbg!(accessor.count());
+                }
+
+                let mut vertex_buffers = vec![];
+                for (layout, attr) in std::iter::zip(vertex_buffer_layouts, &vertex_attributes) {
+                    vertex_buffers.push(wgpu::VertexBufferLayout {
+                        array_stride: layout.array_stride,
+                        step_mode: layout.step_mode,
+                        attributes: attr,
+                    });
+                }
+                let pipeline_layout =
+                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some(&format!("Render Pipeline Layout: {}", mesh_name)),
+                        bind_group_layouts: &[
+                            &global_uniform_binding.layout,
+                            &camera_binding.bind_group_layout,
+                            &node_bind_group_layout,
+                        ],
+                        push_constant_ranges: &[],
+                    });
+                let shader_module =
+                    device.create_shader_module(wgpu::include_wgsl!("../shaders/draw_mesh.wgsl"));
+                let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(&format!("Render Pipeline: {}", mesh_name)),
+                    layout: Some(&pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &shader_module,
+                        entry_point: "vs_main",
+                        buffers: &vertex_buffers,
+                    },
+                    primitive: wgpu::PrimitiveState {
+                        topology: mesh_mode_to_topology(primitive.mode()),
+                        cull_mode: Some(wgpu::Face::Back),
+                        ..Default::default()
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader_module,
+                        entry_point: "fs_main",
+                        targets: &[Some(surface_config.format.into())],
+                    }),
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: Self::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Less,
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview: None,
+                });
+
+                let draw_mode = match primitive.indices() {
+                    None => DrawMode::Normal(draw_count as _),
+                    Some(acc) => {
+                        let Some(buffer_view) = acc.view() else { continue; };
+                        let buffer = &buffers[buffer_view.buffer().index()];
+                        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                            label: Some(&format!("Index Buffer {mesh_name}")),
+                            contents: &buffer[buffer_view.offset()..][..buffer_view.length()],
+                            usage: wgpu::BufferUsages::INDEX,
+                        });
+                        DrawMode::Indexed {
+                            buffer,
+                            offset: acc.offset() as _,
+                            ty: component_type_to_index_format(acc.data_type()),
+                            draw_count: acc.count() as _,
+                        }
+                    }
+                };
+
+                let gpu_primitive = GpuPrimitive {
+                    pipeline,
+                    buffers: primitive_buffers,
+                    draw_mode,
+                };
+
+                primitive_data.insert((mesh.index(), primitive.index()), gpu_primitive);
+
+                println!();
+            }
+        }
+
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
             adapter,
@@ -347,8 +534,12 @@ impl App {
             device,
             surface,
             surface_config,
+            // TODO: reverse Z
             depth_texture,
             queue,
+
+            global_uniform_binding,
+            global_uniform,
 
             camera_binding,
 
@@ -361,6 +552,10 @@ impl App {
 
             instances,
             instance_buffer,
+
+            document,
+            node_data,
+            primitive_data,
         })
     }
 
@@ -372,10 +567,15 @@ impl App {
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
         self.depth_texture = Self::create_depth_texture(&self.device, &self.surface_config);
+        self.global_uniform.resolution = [width as f32, height as f32];
     }
 
-    pub fn update(&mut self, state: &mut AppState) {
-        self.camera_binding.update(&self.queue, &mut state.camera);
+    pub fn update(&mut self, state: &AppState) {
+        self.global_uniform.frame = state.frame_count as _;
+        self.global_uniform.time = state.total_time as _;
+        self.global_uniform_binding
+            .update(&self.queue, &self.global_uniform);
+        self.camera_binding.update(&self.queue, &state.camera);
 
         if state.frame_count % 100 == 0 {
             let mut last_profile = vec![];
@@ -383,6 +583,7 @@ impl App {
                 last_profile = profiling_data;
             }
             crate::utils::scopes_to_console_recursive(&last_profile, 0);
+            println!();
         }
     }
 
@@ -424,13 +625,35 @@ impl App {
             }),
         });
 
-        pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
-        pass.set_pipeline(&self.render_pipeline);
-        pass.draw_model_instanced(
-            &self.obj_model,
-            0..self.instances.len() as u32,
-            &self.camera_binding.binding,
-        );
+        pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
+        pass.set_bind_group(1, &self.camera_binding.binding, &[]);
+        for (&node, gpu_node) in &self.node_data {
+            pass.set_bind_group(2, &gpu_node, &[]);
+
+            let node = self.document.nodes().nth(node).unwrap();
+            let mesh = node.mesh().unwrap();
+            for primitive in mesh.primitives() {
+                let gpu_primitive = &self.primitive_data[&(mesh.index(), primitive.index())];
+
+                pass.set_pipeline(&gpu_primitive.pipeline);
+                for (i, buffer) in gpu_primitive.buffers.iter().enumerate() {
+                    pass.set_vertex_buffer(i as _, buffer.slice(..));
+                }
+
+                match &gpu_primitive.draw_mode {
+                    DrawMode::Normal(draw_count) => pass.draw(0..*draw_count, 0..1),
+                    DrawMode::Indexed {
+                        buffer,
+                        offset,
+                        ty,
+                        draw_count,
+                    } => {
+                        pass.set_index_buffer(buffer.slice(*offset..), *ty);
+                        pass.draw_indexed(0..*draw_count, 0, 0..1)
+                    }
+                }
+            }
+        }
 
         drop(pass);
 

@@ -8,19 +8,19 @@ use self::conversions::{convert_image_format, convert_sampler};
 mod conversions;
 pub use conversions::*;
 
-struct GltfTexture {
-    texture: wgpu::Texture,
-    sampler: Option<usize>,
+pub struct GltfTexture {
+    pub texture: wgpu::Texture,
+    pub sampler: Option<usize>,
 }
 
-struct Gltf {
-    document: gltf::Document,
-    buffers: Vec<gltf::buffer::Data>,
-    gpu_buffers: Vec<wgpu::Buffer>,
-    images: Vec<gltf::image::Data>,
-    gpu_textures: Vec<GltfTexture>,
-    samplers: Vec<wgpu::Sampler>,
-    default_sampler: wgpu::Sampler,
+pub struct Gltf {
+    pub document: gltf::Document,
+    pub buffers: Vec<gltf::buffer::Data>,
+    pub gpu_buffers: Vec<wgpu::Buffer>,
+    pub images: Vec<gltf::image::Data>,
+    pub gpu_textures: Vec<GltfTexture>,
+    pub samplers: Vec<wgpu::Sampler>,
+    pub default_sampler: wgpu::Sampler,
 }
 
 impl Gltf {

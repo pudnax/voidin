@@ -1,5 +1,5 @@
 use image::GenericImageView;
-use log::warn;
+use log::{info, warn};
 use std::{
     io::{BufReader, Cursor},
     num::NonZeroU32,
@@ -47,6 +47,7 @@ pub fn load_texture_from_image(
     img: &image::DynamicImage,
     label: Option<&str>,
 ) -> color_eyre::Result<wgpu::Texture> {
+    info!("Loading Texture from Image: {label:?}");
     let rgba = img.to_rgba8();
     let (width, height) = img.dimensions();
 
@@ -100,6 +101,7 @@ pub fn load_model_path(
     queue: &wgpu::Queue,
     layout: &wgpu::BindGroupLayout,
 ) -> color_eyre::Result<model::Model> {
+    info!("Loading OBJ Model: {}", file_name.display());
     let parent = file_name.parent().unwrap_or(Path::new("assets"));
 
     let obj_text = std::fs::read_to_string(file_name)?;

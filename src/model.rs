@@ -16,7 +16,7 @@ impl Vertex for ModelVertex {
     const DESC: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
         array_stride: std::mem::size_of::<ModelVertex>() as _,
         step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2, 2 => Float32x3],
+        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2],
     };
 }
 
@@ -85,8 +85,8 @@ where
     ) {
         self.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         self.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        self.set_bind_group(0, camera_bind_group, &[]);
-        self.set_bind_group(1, &material.bind_group, &[]);
+        self.set_bind_group(1, camera_bind_group, &[]);
+        self.set_bind_group(2, &material.bind_group, &[]);
         self.draw_indexed(0..mesh.num_elements, 0, instances);
     }
 
