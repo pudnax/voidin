@@ -194,7 +194,8 @@ impl Input {
                         let button = match button {
                             MouseButton::Right => MouseState::RIGHT,
                             MouseButton::Middle => MouseState::MIDDLE,
-                            MouseButton::Left | _ => MouseState::LEFT,
+                            MouseButton::Left => MouseState::LEFT,
+                            _ => MouseState::LEFT,
                         };
                         1 << button
                     };

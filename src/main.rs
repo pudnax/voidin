@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use color_eyre::Result;
 use glam::vec3;
-use log::{info, warn};
+use log::warn;
 use poisson_corrode::{
     app::{App, AppState},
     camera::Camera,
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
 
     let PhysicalSize { width, height } = window.inner_size();
 
-    let camera = Camera::new(vec3(1., 3., 1.), width, height);
+    let camera = Camera::new(vec3(2., 6., 3.), 45., 0., width, height);
     use VirtualKeyCode::*;
     let keyboard_map = KeyboardMap::new()
         .bind(W, KeyMap::new("move_fwd", 1.0))
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
                 accumulated_time += frame_time;
                 while accumulated_time >= FIXED_TIME_STEP {
                     app_state.update(FIXED_TIME_STEP);
-                    app.update(&mut app_state);
+                    app.update(&app_state);
 
                     accumulated_time -= FIXED_TIME_STEP;
                 }

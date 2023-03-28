@@ -1,28 +1,32 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display};
+use std::{cell::RefCell, fmt::Display};
 
 use color_eyre::{
     eyre::{eyre, ContextCompat},
     Result,
 };
 use pollster::FutureExt;
-use wgpu::util::DeviceExt;
-use wgpu_profiler::GpuProfiler;
+use wgpu::{util::DeviceExt, FilterMode};
+use wgpu_profiler::{scope::Scope, GpuProfiler};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::CameraBinding,
     gltf::{
         accessor_type_to_format, component_type_to_index_format, mesh_mode_to_topology,
-        stride_of_component_type,
+        stride_of_component_type, GltfModel,
     },
-    model::{self, DrawModel, Vertex},
-    resources,
     utils::NonZeroSized,
 };
 
 mod global_ubo;
 mod state;
 pub use state::AppState;
+
+struct NodeData {
+    name: String,
+    bind_group: wgpu::BindGroup,
+    mesh: usize,
+}
 
 pub struct ShaderLocation(u32);
 
@@ -65,67 +69,6 @@ pub struct GpuPrimitive {
     pub draw_mode: DrawMode,
 }
 
-struct Instance {
-    position: glam::Vec3,
-    rotation: glam::Quat,
-}
-
-impl Instance {
-    fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: (glam::Mat4::from_translation(self.position)
-                * glam::Mat4::from_quat(self.rotation))
-            .to_cols_array_2d(),
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct InstanceRaw {
-    #[allow(dead_code)]
-    model: [[f32; 4]; 4],
-}
-
-impl InstanceRaw {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
-            // We need to switch from using a step mode of Vertex to Instance
-            // This means that our shaders will only change to use the next
-            // instance when the shader starts processing a new instance
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    // While our vertex shader only uses locations 0, and 1 now, in later tutorials we'll
-                    // be using 2, 3, and 4, for Vertex. We'll start at slot 5 not conflict with them later
-                    shader_location: 5,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                // A mat4 takes up 4 vertex slots as it is technically 4 vec4s. We need to define a slot
-                // for each vec4. We don't have to do this in code though.
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 6,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    shader_location: 7,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-                wgpu::VertexAttribute {
-                    offset: mem::size_of::<[f32; 12]>() as wgpu::BufferAddress,
-                    shader_location: 8,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
-            ],
-        }
-    }
-}
-
 pub struct App {
     adapter: wgpu::Adapter,
     pub instance: wgpu::Instance,
@@ -141,24 +84,30 @@ pub struct App {
     global_uniform_binding: global_ubo::GlobalUniformBinding,
     global_uniform: global_ubo::Uniform,
 
-    obj_model: model::Model,
-
     camera_binding: CameraBinding,
 
-    render_pipeline: wgpu::RenderPipeline,
-
-    instances: Vec<Instance>,
-    instance_buffer: wgpu::Buffer,
-
-    document: gltf::Document,
-    node_data: HashMap<usize, wgpu::BindGroup>,
-    primitive_data: HashMap<(usize, usize), GpuPrimitive>,
+    node_data: Vec<NodeData>,
+    mesh_data: Vec<Vec<GpuPrimitive>>,
 
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
 
 impl App {
     const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    const _DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
+        label: Some("Gltf Default Sampler"),
+        address_mode_u: wgpu::AddressMode::Repeat,
+        address_mode_v: wgpu::AddressMode::Repeat,
+        address_mode_w: wgpu::AddressMode::Repeat,
+        mag_filter: FilterMode::Linear,
+        min_filter: FilterMode::Linear,
+        mipmap_filter: FilterMode::Linear,
+        lod_min_clamp: 0.0,
+        lod_max_clamp: std::f32::MAX,
+        compare: None,
+        anisotropy_clamp: None,
+        border_color: None,
+    };
 
     pub fn get_info(&self) -> RendererInfo {
         let info = self.adapter.get_info();
@@ -250,111 +199,9 @@ impl App {
             resolution: [surface_config.width as f32, surface_config.height as f32],
         };
 
-        const NUM_INSTANCES_PER_ROW: u32 = 10;
-        const SPACE_BETWEEN: f32 = 3.0;
-        let instances = (0..NUM_INSTANCES_PER_ROW)
-            .flat_map(|z| {
-                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                    let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                    let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-
-                    let position = glam::vec3(x, 0.0001, z);
-
-                    let rotation = glam::Quat::from_axis_angle(
-                        position.normalize(),
-                        std::f32::consts::PI / 4.,
-                    );
-
-                    Instance { position, rotation }
-                })
-            })
-            .collect::<Vec<_>>();
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("texture_bind_group_layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-        let obj_model = resources::load_model(
-            "assets/cube/cube.obj",
-            &device,
-            &queue,
-            &texture_bind_group_layout,
+        let scene = GltfModel::import(
+            "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
         )?;
-
-        let shader_module =
-            device.create_shader_module(wgpu::include_wgsl!("../shaders/model.wgsl"));
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Pipeline Layout"),
-            bind_group_layouts: &[
-                &global_uniform_binding.layout,
-                &camera_binding.bind_group_layout,
-                &texture_bind_group_layout,
-            ],
-            push_constant_ranges: &[],
-        });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader_module,
-                entry_point: "vs_main",
-                buffers: &[model::ModelVertex::DESC, InstanceRaw::desc()],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader_module,
-                entry_point: "fs_main",
-                targets: &[Some(surface_config.format.into())],
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Self::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-        });
-
-        let (document, buffers, _images) =
-            gltf::import("assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf")?;
 
         let node_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -371,15 +218,16 @@ impl App {
                 }],
             });
 
-        let mut node_data = HashMap::new();
-        for node in document.nodes().filter(|n| n.mesh().is_some()) {
+        let mut node_data = vec![];
+        for node in scene.document.nodes() {
+            let Some(mesh) = node.mesh() else { continue; };
             let name = node.name().unwrap_or("<Unnamed>");
             let node_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("Node Buffer: {:?}", name)),
                 contents: bytemuck::bytes_of(&node.transform().matrix()),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
-            let node_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some(&format!("Node Bind Group: {:?}", name)),
                 layout: &node_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
@@ -388,13 +236,17 @@ impl App {
                 }],
             });
 
-            node_data.insert(node.index(), node_bind_group);
+            node_data.push(NodeData {
+                name: name.to_string(),
+                bind_group,
+                mesh: mesh.index(),
+            });
         }
 
-        let mut primitive_data = HashMap::new();
-        for mesh in document.meshes() {
+        let mut mesh_data = vec![];
+        for mesh in scene.document.meshes() {
             let mesh_name = mesh.name().unwrap_or("<Unnamed>");
-            dbg!(mesh_name);
+            let mut primitives = vec![];
             for primitive in mesh.primitives() {
                 struct VertexLayout {
                     array_stride: u64,
@@ -406,23 +258,15 @@ impl App {
                 let mut draw_count = 0;
                 for (semantic, accessor) in primitive.attributes() {
                     let Some(buffer_view) = accessor.view() else { continue; };
-                    println!(
-                        "Buffer {:?}: №{} {:?}",
-                        buffer_view.name(),
-                        buffer_view.buffer().index(),
-                        &semantic,
-                    );
 
                     let Some(shader_location) = ShaderLocation::new(semantic.clone()) else {
                         println!("Skip");
                         continue;
                     };
 
-                    let array_stride = dbg!(buffer_view
+                    let array_stride = buffer_view
                         .stride()
-                        .unwrap_or(stride_of_component_type(&accessor)));
-                    dbg!(buffer_view.offset());
-                    dbg!(accessor.offset());
+                        .unwrap_or(stride_of_component_type(&accessor));
                     vertex_buffer_layouts.push(VertexLayout {
                         array_stride: array_stride as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -433,7 +277,7 @@ impl App {
                         shader_location: shader_location.0,
                     }]);
 
-                    let buffer_view_data = &buffers[buffer_view.buffer().index()];
+                    let buffer_view_data = &scene.buffers[buffer_view.buffer().index()];
                     let label = format!("Vertex Buffer {:?}: {:?}", mesh.name(), semantic);
                     primitive_buffers.push(device.create_buffer_init(
                         &wgpu::util::BufferInitDescriptor {
@@ -444,7 +288,7 @@ impl App {
                         },
                     ));
 
-                    draw_count = dbg!(accessor.count());
+                    draw_count = accessor.count();
                 }
 
                 let mut vertex_buffers = vec![];
@@ -500,7 +344,7 @@ impl App {
                     None => DrawMode::Normal(draw_count as _),
                     Some(acc) => {
                         let Some(buffer_view) = acc.view() else { continue; };
-                        let buffer = &buffers[buffer_view.buffer().index()];
+                        let buffer = &scene.buffers[buffer_view.buffer().index()];
                         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some(&format!("Index Buffer {mesh_name}")),
                             contents: &buffer[buffer_view.offset()..][..buffer_view.length()],
@@ -521,10 +365,9 @@ impl App {
                     draw_mode,
                 };
 
-                primitive_data.insert((mesh.index(), primitive.index()), gpu_primitive);
-
-                println!();
+                primitives.push(gpu_primitive);
             }
+            mesh_data.push(primitives);
         }
 
         Ok(Self {
@@ -543,19 +386,11 @@ impl App {
 
             camera_binding,
 
-            render_pipeline: pipeline,
-
-            obj_model,
-
             limits,
             features,
 
-            instances,
-            instance_buffer,
-
-            document,
             node_data,
-            primitive_data,
+            mesh_data,
         })
     }
 
@@ -627,27 +462,28 @@ impl App {
 
         pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
         pass.set_bind_group(1, &self.camera_binding.binding, &[]);
-        for (&node, gpu_node) in &self.node_data {
-            pass.set_bind_group(2, &gpu_node, &[]);
+        for node in &self.node_data {
+            let mut pass = Scope::start(&node.name, &mut profiler, &mut pass, &self.device);
+            pass.set_bind_group(2, &node.bind_group, &[]);
 
-            let node = self.document.nodes().nth(node).unwrap();
-            let mesh = node.mesh().unwrap();
-            for primitive in mesh.primitives() {
-                let gpu_primitive = &self.primitive_data[&(mesh.index(), primitive.index())];
-
-                pass.set_pipeline(&gpu_primitive.pipeline);
-                for (i, buffer) in gpu_primitive.buffers.iter().enumerate() {
+            for primitive in &self.mesh_data[node.mesh] {
+                pass.set_pipeline(&primitive.pipeline);
+                for (i, buffer) in primitive.buffers.iter().enumerate() {
                     pass.set_vertex_buffer(i as _, buffer.slice(..));
                 }
 
-                match &gpu_primitive.draw_mode {
-                    DrawMode::Normal(draw_count) => pass.draw(0..*draw_count, 0..1),
+                match &primitive.draw_mode {
+                    DrawMode::Normal(draw_count) => {
+                        let mut pass = pass.scope("Draw", &self.device);
+                        pass.draw(0..*draw_count, 0..1);
+                    }
                     DrawMode::Indexed {
                         buffer,
                         offset,
                         ty,
                         draw_count,
                     } => {
+                        let mut pass = pass.scope("Draw Indexed", &self.device);
                         pass.set_index_buffer(buffer.slice(*offset..), *ty);
                         pass.draw_indexed(0..*draw_count, 0, 0..1)
                     }

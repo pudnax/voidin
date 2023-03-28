@@ -92,10 +92,16 @@ impl Camera {
     const ZNEAR: f32 = 0.1;
     const FOVY: f32 = std::f32::consts::PI / 2.0;
 
-    pub fn new(position: Vec3, screen_width: u32, screen_height: u32) -> Self {
+    pub fn new(
+        position: Vec3,
+        yaw: f32,
+        pitch: f32,
+        screen_width: u32,
+        screen_height: u32,
+    ) -> Self {
         let rig: CameraRig = CameraRig::builder()
             .with(Position::new(position))
-            .with(YawPitch::new())
+            .with(YawPitch::new().yaw_degrees(yaw).pitch_degrees(pitch))
             .with(Smooth::new_position_rotation(1.0, 1.5))
             .build();
         Self {
