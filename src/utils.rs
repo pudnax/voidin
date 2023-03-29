@@ -30,14 +30,14 @@ impl Lerp for f64 {
     }
 }
 
-pub trait EitherRepeat<T: Default + Clone, I>
+pub trait UnwrapRepeat<T: Default + Clone, I>
 where
     I: Iterator<Item = T>,
 {
     fn unwrap_repeat(self) -> Either<I, Repeat<T>>;
 }
 
-impl<T: Default + Clone, I> EitherRepeat<T, I> for Option<I>
+impl<T: Default + Clone, I> UnwrapRepeat<T, I> for Option<I>
 where
     I: Iterator<Item = T>,
 {

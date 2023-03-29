@@ -9,7 +9,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     camera::CameraBinding,
     gltf::{mesh_mode_to_topology, GltfModel},
-    utils::{EitherRepeat, NonZeroSized},
+    utils::{NonZeroSized, UnwrapRepeat},
 };
 
 mod global_ubo;

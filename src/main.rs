@@ -115,6 +115,9 @@ fn main() -> Result<()> {
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
+            Event::LoopDestroyed => {
+                println!("// End from the loop. Bye bye~⏎ ");
+            }
             _ => {}
         }
     })
