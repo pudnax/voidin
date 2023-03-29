@@ -1,5 +1,12 @@
-use std::{mem::size_of, num::NonZeroU64, ops::Range, time::Duration};
+use std::{
+    iter::{self, Repeat},
+    mem::size_of,
+    num::NonZeroU64,
+    ops::Range,
+    time::Duration,
+};
 
+use itertools::Either;
 use wgpu_profiler::GpuTimerScopeResult;
 
 pub trait NonZeroSized: Sized {
@@ -20,6 +27,25 @@ impl Lerp for f32 {
 impl Lerp for f64 {
     fn lerp(self, Range { start: a, end: b }: Range<Self>) -> Self {
         a * (1. - self) + b * self
+    }
+}
+
+pub trait EitherRepeat<T: Default + Clone, I>
+where
+    I: Iterator<Item = T>,
+{
+    fn unwrap_repeat(self) -> Either<I, Repeat<T>>;
+}
+
+impl<T: Default + Clone, I> EitherRepeat<T, I> for Option<I>
+where
+    I: Iterator<Item = T>,
+{
+    fn unwrap_repeat(self) -> Either<I, Repeat<T>> {
+        match self {
+            Some(iter) => Either::Left(iter),
+            None => Either::Right(iter::repeat(T::default())),
+        }
     }
 }
 

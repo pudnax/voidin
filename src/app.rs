@@ -1,9 +1,6 @@
-use std::{cell::RefCell, fmt::Display};
+use std::{cell::RefCell, fmt::Display, iter::zip};
 
-use color_eyre::{
-    eyre::{eyre, ContextCompat},
-    Result,
-};
+use color_eyre::{eyre::ContextCompat, Result};
 use pollster::FutureExt;
 use wgpu::{util::DeviceExt, FilterMode};
 use wgpu_profiler::{scope::Scope, GpuProfiler};
@@ -11,11 +8,8 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::CameraBinding,
-    gltf::{
-        accessor_type_to_format, component_type_to_index_format, mesh_mode_to_topology,
-        stride_of_component_type, GltfModel,
-    },
-    utils::NonZeroSized,
+    gltf::{mesh_mode_to_topology, GltfModel},
+    utils::{EitherRepeat, NonZeroSized},
 };
 
 mod global_ubo;
@@ -28,36 +22,11 @@ struct NodeData {
     mesh: usize,
 }
 
-pub struct ShaderLocation(u32);
-
-impl ShaderLocation {
-    fn new(s: gltf::Semantic) -> Option<Self> {
-        Some(match s {
-            gltf::Semantic::Positions => Self(0),
-            gltf::Semantic::Normals => Self(1),
-            _ => return None,
-        })
-    }
-}
-
-impl TryFrom<gltf::Semantic> for ShaderLocation {
-    type Error = color_eyre::Report;
-    fn try_from(v: gltf::Semantic) -> Result<Self, Self::Error> {
-        Ok(match v {
-            gltf::Semantic::Positions => Self(0),
-            gltf::Semantic::Normals => Self(1),
-            _ => return Err(eyre!("Unsupported primitive semantic")),
-        })
-    }
-}
-
 #[derive(Debug)]
 pub enum DrawMode {
     Normal(u32),
     Indexed {
         buffer: wgpu::Buffer,
-        offset: u64,
-        ty: wgpu::IndexFormat,
         draw_count: u32,
     },
 }
@@ -65,7 +34,7 @@ pub enum DrawMode {
 #[derive(Debug)]
 pub struct GpuPrimitive {
     pub pipeline: wgpu::RenderPipeline,
-    pub buffers: Vec<wgpu::Buffer>,
+    pub buffers: wgpu::Buffer,
     pub draw_mode: DrawMode,
 }
 
@@ -108,50 +77,6 @@ impl App {
         anisotropy_clamp: None,
         border_color: None,
     };
-
-    pub fn get_info(&self) -> RendererInfo {
-        let info = self.adapter.get_info();
-        RendererInfo {
-            device_name: info.name,
-            device_type: self.get_device_type().to_string(),
-            vendor_name: self.get_vendor_name().to_string(),
-            backend: self.get_backend().to_string(),
-        }
-    }
-
-    fn get_vendor_name(&self) -> &str {
-        match self.adapter.get_info().vendor {
-            0x1002 => "AMD",
-            0x1010 => "ImgTec",
-            0x10DE => "NVIDIA Corporation",
-            0x13B5 => "ARM",
-            0x5143 => "Qualcomm",
-            0x8086 => "INTEL Corporation",
-            _ => "Unknown vendor",
-        }
-    }
-
-    fn get_backend(&self) -> &str {
-        match self.adapter.get_info().backend {
-            wgpu::Backend::Empty => "Empty",
-            wgpu::Backend::Vulkan => "Vulkan",
-            wgpu::Backend::Metal => "Metal",
-            wgpu::Backend::Dx12 => "Dx12",
-            wgpu::Backend::Dx11 => "Dx11",
-            wgpu::Backend::Gl => "GL",
-            wgpu::Backend::BrowserWebGpu => "Browser WGPU",
-        }
-    }
-
-    fn get_device_type(&self) -> &str {
-        match self.adapter.get_info().device_type {
-            wgpu::DeviceType::Other => "Other",
-            wgpu::DeviceType::IntegratedGpu => "Integrated GPU",
-            wgpu::DeviceType::DiscreteGpu => "Discrete GPU",
-            wgpu::DeviceType::VirtualGpu => "Virtual GPU",
-            wgpu::DeviceType::Cpu => "CPU",
-        }
-    }
 
     pub fn new(window: &Window) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -201,6 +126,8 @@ impl App {
 
         let scene = GltfModel::import(
             "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
         )?;
 
         let node_bind_group_layout =
@@ -248,57 +175,29 @@ impl App {
             let mesh_name = mesh.name().unwrap_or("<Unnamed>");
             let mut primitives = vec![];
             for primitive in mesh.primitives() {
-                struct VertexLayout {
-                    array_stride: u64,
-                    step_mode: wgpu::VertexStepMode,
-                }
-                let mut vertex_buffer_layouts = vec![];
-                let mut vertex_attributes = vec![];
-                let mut primitive_buffers = vec![];
-                let mut draw_count = 0;
-                for (semantic, accessor) in primitive.attributes() {
-                    let Some(buffer_view) = accessor.view() else { continue; };
+                let reader = primitive.reader(|buffer| Some(&scene.buffers[buffer.index()]));
 
-                    let Some(shader_location) = ShaderLocation::new(semantic.clone()) else {
-                        println!("Skip");
-                        continue;
-                    };
-
-                    let array_stride = buffer_view
-                        .stride()
-                        .unwrap_or(stride_of_component_type(&accessor));
-                    vertex_buffer_layouts.push(VertexLayout {
-                        array_stride: array_stride as _,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                    });
-                    vertex_attributes.push([wgpu::VertexAttribute {
-                        format: accessor_type_to_format(&accessor),
-                        offset: accessor.offset() as _,
-                        shader_location: shader_location.0,
-                    }]);
-
-                    let buffer_view_data = &scene.buffers[buffer_view.buffer().index()];
-                    let label = format!("Vertex Buffer {:?}: {:?}", mesh.name(), semantic);
-                    primitive_buffers.push(device.create_buffer_init(
-                        &wgpu::util::BufferInitDescriptor {
-                            label: Some(&label),
-                            contents: &buffer_view_data[buffer_view.offset()..]
-                                [..buffer_view.length()],
-                            usage: wgpu::BufferUsages::VERTEX,
-                        },
-                    ));
-
-                    draw_count = accessor.count();
+                #[repr(C)]
+                #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+                struct MeshVertex {
+                    position: [f32; 3],
+                    normal: [f32; 3],
+                    tex_coord: [f32; 2],
                 }
 
-                let mut vertex_buffers = vec![];
-                for (layout, attr) in std::iter::zip(vertex_buffer_layouts, &vertex_attributes) {
-                    vertex_buffers.push(wgpu::VertexBufferLayout {
-                        array_stride: layout.array_stride,
-                        step_mode: layout.step_mode,
-                        attributes: attr,
-                    });
-                }
+                let Some(positions) = reader.read_positions() else { continue; };
+                let normals = reader.read_normals().unwrap_repeat();
+                let tex_coords = reader.read_tex_coords(0).map(|t| t.into_f32());
+                let vertices = zip(zip(positions, normals), tex_coords.unwrap_repeat())
+                    .map(|((position, normal), tex_coord)| MeshVertex {
+                        position,
+                        normal,
+                        tex_coord,
+                    })
+                    .collect::<Vec<_>>();
+
+                let attributes =
+                    &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
                 let pipeline_layout =
                     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some(&format!("Render Pipeline Layout: {}", mesh_name)),
@@ -317,7 +216,11 @@ impl App {
                     vertex: wgpu::VertexState {
                         module: &shader_module,
                         entry_point: "vs_main",
-                        buffers: &vertex_buffers,
+                        buffers: &[wgpu::VertexBufferLayout {
+                            array_stride: std::mem::size_of::<MeshVertex>() as _,
+                            step_mode: wgpu::VertexStepMode::Vertex,
+                            attributes,
+                        }],
                     },
                     primitive: wgpu::PrimitiveState {
                         topology: mesh_mode_to_topology(primitive.mode()),
@@ -340,28 +243,31 @@ impl App {
                     multiview: None,
                 });
 
-                let draw_mode = match primitive.indices() {
-                    None => DrawMode::Normal(draw_count as _),
-                    Some(acc) => {
-                        let Some(buffer_view) = acc.view() else { continue; };
-                        let buffer = &scene.buffers[buffer_view.buffer().index()];
+                let draw_mode = match reader.read_indices() {
+                    None => DrawMode::Normal(vertices.len() as _),
+                    Some(indices) => {
+                        let data: Vec<_> = indices.into_u32().collect();
                         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                             label: Some(&format!("Index Buffer {mesh_name}")),
-                            contents: &buffer[buffer_view.offset()..][..buffer_view.length()],
+                            contents: bytemuck::cast_slice(&data),
                             usage: wgpu::BufferUsages::INDEX,
                         });
                         DrawMode::Indexed {
                             buffer,
-                            offset: acc.offset() as _,
-                            ty: component_type_to_index_format(acc.data_type()),
-                            draw_count: acc.count() as _,
+                            draw_count: data.len() as _,
                         }
                     }
                 };
 
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("Mesh Buffer: {mesh_name}")),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
                 let gpu_primitive = GpuPrimitive {
                     pipeline,
-                    buffers: primitive_buffers,
+                    buffers: buffer,
                     draw_mode,
                 };
 
@@ -392,34 +298,6 @@ impl App {
             node_data,
             mesh_data,
         })
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
-        if self.surface_config.width == width && self.surface_config.height == height {
-            return;
-        }
-        self.surface_config.width = width;
-        self.surface_config.height = height;
-        self.surface.configure(&self.device, &self.surface_config);
-        self.depth_texture = Self::create_depth_texture(&self.device, &self.surface_config);
-        self.global_uniform.resolution = [width as f32, height as f32];
-    }
-
-    pub fn update(&mut self, state: &AppState) {
-        self.global_uniform.frame = state.frame_count as _;
-        self.global_uniform.time = state.total_time as _;
-        self.global_uniform_binding
-            .update(&self.queue, &self.global_uniform);
-        self.camera_binding.update(&self.queue, &state.camera);
-
-        if state.frame_count % 100 == 0 {
-            let mut last_profile = vec![];
-            while let Some(profiling_data) = self.profiler.borrow_mut().process_finished_frame() {
-                last_profile = profiling_data;
-            }
-            crate::utils::scopes_to_console_recursive(&last_profile, 0);
-            println!();
-        }
     }
 
     pub fn render(&self, _state: &AppState) -> Result<(), wgpu::SurfaceError> {
@@ -468,23 +346,16 @@ impl App {
 
             for primitive in &self.mesh_data[node.mesh] {
                 pass.set_pipeline(&primitive.pipeline);
-                for (i, buffer) in primitive.buffers.iter().enumerate() {
-                    pass.set_vertex_buffer(i as _, buffer.slice(..));
-                }
+                pass.set_vertex_buffer(0, primitive.buffers.slice(..));
 
                 match &primitive.draw_mode {
                     DrawMode::Normal(draw_count) => {
-                        let mut pass = pass.scope("Draw", &self.device);
+                        // let mut pass = pass.scope("Draw", &self.device);
                         pass.draw(0..*draw_count, 0..1);
                     }
-                    DrawMode::Indexed {
-                        buffer,
-                        offset,
-                        ty,
-                        draw_count,
-                    } => {
-                        let mut pass = pass.scope("Draw Indexed", &self.device);
-                        pass.set_index_buffer(buffer.slice(*offset..), *ty);
+                    DrawMode::Indexed { buffer, draw_count } => {
+                        // let mut pass = pass.scope("Draw Indexed", &self.device);
+                        pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
                         pass.draw_indexed(0..*draw_count, 0, 0..1)
                     }
                 }
@@ -502,6 +373,34 @@ impl App {
         profiler.end_frame().unwrap();
 
         Ok(())
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if self.surface_config.width == width && self.surface_config.height == height {
+            return;
+        }
+        self.surface_config.width = width;
+        self.surface_config.height = height;
+        self.surface.configure(&self.device, &self.surface_config);
+        self.depth_texture = Self::create_depth_texture(&self.device, &self.surface_config);
+        self.global_uniform.resolution = [width as f32, height as f32];
+    }
+
+    pub fn update(&mut self, state: &AppState) {
+        self.global_uniform.frame = state.frame_count as _;
+        self.global_uniform.time = state.total_time as _;
+        self.global_uniform_binding
+            .update(&self.queue, &self.global_uniform);
+        self.camera_binding.update(&self.queue, &state.camera);
+
+        if state.frame_count % 100 == 0 {
+            let mut last_profile = vec![];
+            while let Some(profiling_data) = self.profiler.borrow_mut().process_finished_frame() {
+                last_profile = profiling_data;
+            }
+            crate::utils::scopes_to_console_recursive(&last_profile, 0);
+            println!();
+        }
     }
 
     fn create_depth_texture(
@@ -525,6 +424,50 @@ impl App {
         };
         let tex = device.create_texture(&desc);
         tex.create_view(&Default::default())
+    }
+
+    pub fn get_info(&self) -> RendererInfo {
+        let info = self.adapter.get_info();
+        RendererInfo {
+            device_name: info.name,
+            device_type: self.get_device_type().to_string(),
+            vendor_name: self.get_vendor_name().to_string(),
+            backend: self.get_backend().to_string(),
+        }
+    }
+
+    fn get_vendor_name(&self) -> &str {
+        match self.adapter.get_info().vendor {
+            0x1002 => "AMD",
+            0x1010 => "ImgTec",
+            0x10DE => "NVIDIA Corporation",
+            0x13B5 => "ARM",
+            0x5143 => "Qualcomm",
+            0x8086 => "INTEL Corporation",
+            _ => "Unknown vendor",
+        }
+    }
+
+    fn get_backend(&self) -> &str {
+        match self.adapter.get_info().backend {
+            wgpu::Backend::Empty => "Empty",
+            wgpu::Backend::Vulkan => "Vulkan",
+            wgpu::Backend::Metal => "Metal",
+            wgpu::Backend::Dx12 => "Dx12",
+            wgpu::Backend::Dx11 => "Dx11",
+            wgpu::Backend::Gl => "GL",
+            wgpu::Backend::BrowserWebGpu => "Browser WGPU",
+        }
+    }
+
+    fn get_device_type(&self) -> &str {
+        match self.adapter.get_info().device_type {
+            wgpu::DeviceType::Other => "Other",
+            wgpu::DeviceType::IntegratedGpu => "Integrated GPU",
+            wgpu::DeviceType::DiscreteGpu => "Discrete GPU",
+            wgpu::DeviceType::VirtualGpu => "Virtual GPU",
+            wgpu::DeviceType::Cpu => "CPU",
+        }
     }
 }
 
