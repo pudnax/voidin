@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Display, iter::zip};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::zip};
 
 use color_eyre::{eyre::ContextCompat, Result};
 use pollster::FutureExt;
@@ -16,10 +16,61 @@ mod global_ubo;
 mod state;
 pub use state::AppState;
 
-struct NodeData {
-    name: String,
-    bind_group: wgpu::BindGroup,
-    mesh: usize,
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct MeshVertex {
+    position: [f32; 3],
+    normal: [f32; 3],
+    tex_coord: [f32; 2],
+}
+
+#[derive(Eq, PartialEq, Hash, Clone)]
+struct PipelineArgs {
+    topology: wgpu::PrimitiveTopology,
+    target_format: wgpu::TextureFormat,
+}
+
+fn create_mesh_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    args: &PipelineArgs,
+    label: Option<&str>,
+) -> wgpu::RenderPipeline {
+    let attributes = &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+    let shader_module =
+        device.create_shader_module(wgpu::include_wgsl!("../shaders/draw_mesh.wgsl"));
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label,
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: &shader_module,
+            entry_point: "vs_main",
+            buffers: &[wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<MeshVertex>() as _,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes,
+            }],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: args.topology,
+            cull_mode: Some(wgpu::Face::Back),
+            ..Default::default()
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader_module,
+            entry_point: "fs_main",
+            targets: &[Some(args.target_format.into())],
+        }),
+        depth_stencil: Some(wgpu::DepthStencilState {
+            format: App::DEPTH_FORMAT,
+            depth_write_enabled: true,
+            depth_compare: wgpu::CompareFunction::Less,
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+    })
 }
 
 #[derive(Debug)]
@@ -32,10 +83,17 @@ pub enum DrawMode {
 }
 
 #[derive(Debug)]
-pub struct GpuPrimitive {
-    pub pipeline: wgpu::RenderPipeline,
-    pub buffers: wgpu::Buffer,
+struct Primitive {
+    pub buffer: wgpu::Buffer,
+    pub instances: Vec<wgpu::BindGroup>,
     pub draw_mode: DrawMode,
+}
+
+#[derive(Debug)]
+pub struct GpuPipeline {
+    name: String,
+    pub pipeline: wgpu::RenderPipeline,
+    primitives: Vec<Primitive>,
 }
 
 pub struct App {
@@ -55,8 +113,7 @@ pub struct App {
 
     camera_binding: CameraBinding,
 
-    node_data: Vec<NodeData>,
-    mesh_data: Vec<Vec<GpuPrimitive>>,
+    pipeline_data: HashMap<PipelineArgs, GpuPipeline>,
 
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
@@ -125,7 +182,8 @@ impl App {
         };
 
         let scene = GltfModel::import(
-            "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+            "assets/sponza-optimized/Sponza.gltf",
+            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
             // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
             // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
         )?;
@@ -145,7 +203,7 @@ impl App {
                 }],
             });
 
-        let mut node_data = vec![];
+        let mut primitive_instances: HashMap<_, Vec<wgpu::BindGroup>> = HashMap::new();
         for node in scene.document.nodes() {
             let Some(mesh) = node.mesh() else { continue; };
             let name = node.name().unwrap_or("<Unnamed>");
@@ -154,36 +212,39 @@ impl App {
                 contents: bytemuck::bytes_of(&node.transform().matrix()),
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some(&format!("Node Bind Group: {:?}", name)),
-                layout: &node_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: node_buffer.as_entire_binding(),
-                }],
-            });
 
-            node_data.push(NodeData {
-                name: name.to_string(),
-                bind_group,
-                mesh: mesh.index(),
-            });
+            for primitive in mesh.primitives() {
+                let pindex = primitive.index();
+                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some(&format!("Node Bind Group: {:?} {}", name, pindex)),
+                    layout: &node_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: node_buffer.as_entire_binding(),
+                    }],
+                });
+                primitive_instances
+                    .entry((mesh.index(), pindex))
+                    .or_default()
+                    .push(bind_group);
+            }
         }
 
-        let mut mesh_data = vec![];
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(&format!("Mesh Pipeline Layout")),
+            bind_group_layouts: &[
+                &global_uniform_binding.layout,
+                &camera_binding.bind_group_layout,
+                &node_bind_group_layout,
+            ],
+            push_constant_ranges: &[],
+        });
+
+        let mut pipeline_data = HashMap::new();
         for mesh in scene.document.meshes() {
             let mesh_name = mesh.name().unwrap_or("<Unnamed>");
-            let mut primitives = vec![];
             for primitive in mesh.primitives() {
                 let reader = primitive.reader(|buffer| Some(&scene.buffers[buffer.index()]));
-
-                #[repr(C)]
-                #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-                struct MeshVertex {
-                    position: [f32; 3],
-                    normal: [f32; 3],
-                    tex_coord: [f32; 2],
-                }
 
                 let Some(positions) = reader.read_positions() else { continue; };
                 let normals = reader.read_normals().unwrap_repeat();
@@ -195,53 +256,16 @@ impl App {
                         tex_coord,
                     })
                     .collect::<Vec<_>>();
-
-                let attributes =
-                    &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
-                let pipeline_layout =
-                    device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: Some(&format!("Render Pipeline Layout: {}", mesh_name)),
-                        bind_group_layouts: &[
-                            &global_uniform_binding.layout,
-                            &camera_binding.bind_group_layout,
-                            &node_bind_group_layout,
-                        ],
-                        push_constant_ranges: &[],
-                    });
-                let shader_module =
-                    device.create_shader_module(wgpu::include_wgsl!("../shaders/draw_mesh.wgsl"));
-                let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some(&format!("Render Pipeline: {}", mesh_name)),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &shader_module,
-                        entry_point: "vs_main",
-                        buffers: &[wgpu::VertexBufferLayout {
-                            array_stride: std::mem::size_of::<MeshVertex>() as _,
-                            step_mode: wgpu::VertexStepMode::Vertex,
-                            attributes,
-                        }],
-                    },
-                    primitive: wgpu::PrimitiveState {
-                        topology: mesh_mode_to_topology(primitive.mode()),
-                        cull_mode: Some(wgpu::Face::Back),
-                        ..Default::default()
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &shader_module,
-                        entry_point: "fs_main",
-                        targets: &[Some(surface_config.format.into())],
-                    }),
-                    depth_stencil: Some(wgpu::DepthStencilState {
-                        format: Self::DEPTH_FORMAT,
-                        depth_write_enabled: true,
-                        depth_compare: wgpu::CompareFunction::Less,
-                        stencil: wgpu::StencilState::default(),
-                        bias: wgpu::DepthBiasState::default(),
-                    }),
-                    multisample: wgpu::MultisampleState::default(),
-                    multiview: None,
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(&format!("Mesh Buffer: {mesh_name}")),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
                 });
+
+                let args = PipelineArgs {
+                    topology: mesh_mode_to_topology(primitive.mode()),
+                    target_format: surface_config.format,
+                };
 
                 let draw_mode = match reader.read_indices() {
                     None => DrawMode::Normal(vertices.len() as _),
@@ -259,21 +283,33 @@ impl App {
                     }
                 };
 
-                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(&format!("Mesh Buffer: {mesh_name}")),
-                    contents: bytemuck::cast_slice(&vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+                let instances = primitive_instances
+                    .remove(&(mesh.index(), primitive.index()))
+                    .unwrap_or(vec![]);
 
-                let gpu_primitive = GpuPrimitive {
-                    pipeline,
-                    buffers: buffer,
+                let gpu_primitive = Primitive {
+                    instances,
                     draw_mode,
+                    buffer,
                 };
-
-                primitives.push(gpu_primitive);
+                let pipeline_name = format!("Mesh Pipeline: {}", mesh_name);
+                pipeline_data
+                    .entry(args)
+                    .and_modify(|p: &mut GpuPipeline| p.primitives.push(gpu_primitive))
+                    .or_insert_with_key(|args| {
+                        let pipeline = create_mesh_pipeline(
+                            &device,
+                            &pipeline_layout,
+                            &args,
+                            Some(&pipeline_name),
+                        );
+                        GpuPipeline {
+                            name: pipeline_name,
+                            pipeline,
+                            primitives: vec![],
+                        }
+                    });
             }
-            mesh_data.push(primitives);
         }
 
         Ok(Self {
@@ -295,8 +331,7 @@ impl App {
             limits,
             features,
 
-            node_data,
-            mesh_data,
+            pipeline_data,
         })
     }
 
@@ -340,23 +375,29 @@ impl App {
 
         pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
         pass.set_bind_group(1, &self.camera_binding.binding, &[]);
-        for node in &self.node_data {
-            let mut pass = Scope::start(&node.name, &mut profiler, &mut pass, &self.device);
-            pass.set_bind_group(2, &node.bind_group, &[]);
 
-            for primitive in &self.mesh_data[node.mesh] {
-                pass.set_pipeline(&primitive.pipeline);
-                pass.set_vertex_buffer(0, primitive.buffers.slice(..));
+        for pipeline in self.pipeline_data.values() {
+            let mut pass = Scope::start(&pipeline.name, &mut profiler, &mut pass, &self.device);
+            pass.set_pipeline(&pipeline.pipeline);
+
+            for primitive in &pipeline.primitives {
+                pass.set_vertex_buffer(0, primitive.buffer.slice(..));
 
                 match &primitive.draw_mode {
                     DrawMode::Normal(draw_count) => {
                         // let mut pass = pass.scope("Draw", &self.device);
-                        pass.draw(0..*draw_count, 0..1);
+                        for bind_group in &primitive.instances {
+                            pass.set_bind_group(2, &bind_group, &[]);
+                            pass.draw(0..*draw_count, 0..1);
+                        }
                     }
                     DrawMode::Indexed { buffer, draw_count } => {
                         // let mut pass = pass.scope("Draw Indexed", &self.device);
                         pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
-                        pass.draw_indexed(0..*draw_count, 0, 0..1)
+                        for bind_group in &primitive.instances {
+                            pass.set_bind_group(2, &bind_group, &[]);
+                            pass.draw_indexed(0..*draw_count, 0, 0..1)
+                        }
                     }
                 }
             }

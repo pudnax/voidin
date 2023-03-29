@@ -54,11 +54,8 @@ pub fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation:
         if indentation > 0 {
             print!("{:<width$}", "|", width = 4 * indentation);
         }
-        println!(
-            "{:?} - {}",
-            Duration::from_micros(((scope.time.end - scope.time.start) * 1e6) as u64),
-            scope.label
-        );
+        let time = Duration::from_micros(((scope.time.end - scope.time.start) * 1e6) as u64);
+        println!("{time:?} - {}", scope.label);
         if !scope.nested_scopes.is_empty() {
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
         }
