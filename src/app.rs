@@ -24,23 +24,28 @@ struct MeshVertex {
     tex_coord: [f32; 2],
 }
 
-#[derive(Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 struct PipelineArgs {
     topology: wgpu::PrimitiveTopology,
     target_format: wgpu::TextureFormat,
+}
+
+impl Display for PipelineArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{{ {:?}, {:?} }}", self.topology, self.target_format)
+    }
 }
 
 fn create_mesh_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     args: &PipelineArgs,
-    label: Option<&str>,
 ) -> wgpu::RenderPipeline {
     let attributes = &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
     let shader_module =
         device.create_shader_module(wgpu::include_wgsl!("../shaders/draw_mesh.wgsl"));
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label,
+        label: Some(&format!("Pipeline: {}", args.to_string())),
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: &shader_module,
@@ -91,7 +96,6 @@ struct Primitive {
 
 #[derive(Debug)]
 pub struct GpuPipeline {
-    name: String,
     pub pipeline: wgpu::RenderPipeline,
     primitives: Vec<Primitive>,
 }
@@ -285,30 +289,25 @@ impl App {
 
                 let instances = primitive_instances
                     .remove(&(mesh.index(), primitive.index()))
-                    .unwrap_or(vec![]);
+                    .context("Invalid GLTF: Visited same primitive twice.")?;
 
                 let gpu_primitive = Primitive {
                     instances,
                     draw_mode,
                     buffer,
                 };
-                let pipeline_name = format!("Mesh Pipeline: {}", mesh_name);
+
                 pipeline_data
                     .entry(args)
-                    .and_modify(|p: &mut GpuPipeline| p.primitives.push(gpu_primitive))
                     .or_insert_with_key(|args| {
-                        let pipeline = create_mesh_pipeline(
-                            &device,
-                            &pipeline_layout,
-                            &args,
-                            Some(&pipeline_name),
-                        );
+                        let pipeline = create_mesh_pipeline(&device, &pipeline_layout, &args);
                         GpuPipeline {
-                            name: pipeline_name,
                             pipeline,
                             primitives: vec![],
                         }
-                    });
+                    })
+                    .primitives
+                    .push(gpu_primitive);
             }
         }
 
@@ -376,8 +375,8 @@ impl App {
         pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
         pass.set_bind_group(1, &self.camera_binding.binding, &[]);
 
-        for pipeline in self.pipeline_data.values() {
-            let mut pass = Scope::start(&pipeline.name, &mut profiler, &mut pass, &self.device);
+        for (args, pipeline) in &self.pipeline_data {
+            let mut pass = Scope::start(&args.to_string(), &mut profiler, &mut pass, &self.device);
             pass.set_pipeline(&pipeline.pipeline);
 
             for primitive in &pipeline.primitives {
@@ -396,7 +395,7 @@ impl App {
                         pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
                         for bind_group in &primitive.instances {
                             pass.set_bind_group(2, &bind_group, &[]);
-                            pass.draw_indexed(0..*draw_count, 0, 0..1)
+                            pass.draw_indexed(0..*draw_count, 0, 0..1);
                         }
                     }
                 }
