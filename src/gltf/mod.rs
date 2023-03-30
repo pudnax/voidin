@@ -5,13 +5,13 @@ use color_eyre::Result;
 mod conversions;
 pub use conversions::*;
 
-pub struct GltfModel {
+pub struct GltfDocument {
     pub document: gltf::Document,
     pub buffers: Vec<gltf::buffer::Data>,
     pub images: Vec<gltf::image::Data>,
 }
 
-impl GltfModel {
+impl GltfDocument {
     pub fn import(path: impl AsRef<Path>) -> Result<Self> {
         let (document, buffers, images) = gltf::import(path)?;
         Ok(Self {
@@ -21,7 +21,7 @@ impl GltfModel {
         })
     }
 
-    fn _data_of_accessor<'a>(&'a self, accessor: &gltf::Accessor<'a>) -> Option<&'a [u8]> {
+    pub fn data_of_accessor<'a>(&'a self, accessor: &gltf::Accessor<'a>) -> Option<&'a [u8]> {
         let buffer_view = accessor.view()?;
         let buffer = buffer_view.buffer();
         let buffer_data = &self.buffers[buffer.index()];

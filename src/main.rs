@@ -6,6 +6,7 @@ use log::warn;
 use poisson_corrode::{
     app::{App, AppState},
     camera::Camera,
+    gltf::GltfDocument,
     input::{KeyMap, KeyboardMap},
 };
 use wgpu::SurfaceError;
@@ -48,6 +49,15 @@ fn main() -> Result<()> {
     let mut app = App::new(&window)?;
     let info = app.get_info();
     println!("{info}");
+
+    let scene = GltfDocument::import(
+        "assets/sponza-optimized/Sponza.gltf",
+        // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+        // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+        // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+        // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+    )?;
+    app.add_gltf_model(scene)?;
 
     let mut current_instant = Instant::now();
     let mut accumulated_time = 0.;

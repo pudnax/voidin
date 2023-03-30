@@ -49,12 +49,25 @@ const LIGHT_COLOR = vec3<f32>(1.0, 1.0, 1.0);
 const AMBIENT_COLOR = vec3<f32>(0.1, 0.1, 0.1);
 
 @fragment
-fn fs_main(vout: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main_cutoff(vout: VertexOutput) -> @location(0) vec4<f32> {
     let material_texture = textureSample(base_color_texture, material_sampler, vout.tex_coords);
 
     if material_texture.a < material.alpha_cutoff {
         discard;
     }
+
+    let nor = normalize(vout.normal);
+    let light_dir = normalize(LIGHT_DIR);
+    let diff = max(dot(nor, light_dir), 0.0);
+    let base_color = material_texture.rgb * material.base_color_factor;
+    let surface_color = (base_color * AMBIENT_COLOR) + (base_color * diff);
+
+    return vec4(surface_color, material_texture.a);
+}
+
+@fragment
+fn fs_main(vout: VertexOutput) -> @location(0) vec4<f32> {
+    let material_texture = textureSample(base_color_texture, material_sampler, vout.tex_coords);
 
     let nor = normalize(vout.normal);
     let light_dir = normalize(LIGHT_DIR);

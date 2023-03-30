@@ -1,13 +1,13 @@
 use std::mem::size_of;
 
+use color_eyre::{eyre::eyre, eyre::ContextCompat, Result};
 use gltf::{
-    accessor::{
-        DataType,
-        Dimensions::{Mat2, Mat3, Mat4, Scalar, Vec2, Vec3, Vec4},
-    },
+    accessor::{DataType, Dimensions},
+    image::Format,
     texture::{MagFilter, MinFilter},
 };
-use wgpu::{FilterMode, PrimitiveTopology, TextureFormat, VertexFormat::*};
+use image::{buffer::ConvertBuffer, ImageBuffer};
+use wgpu::{FilterMode, PrimitiveTopology, TextureFormat};
 
 pub fn component_type_to_index_format(ty: gltf::accessor::DataType) -> wgpu::IndexFormat {
     match ty {
@@ -28,15 +28,15 @@ pub fn size_of_component_type(ty: gltf::accessor::DataType) -> usize {
     }
 }
 
-pub fn component_count_of_type(dims: gltf::accessor::Dimensions) -> usize {
+pub fn component_count_of_type(dims: Dimensions) -> usize {
     match dims {
-        Scalar => 1,
-        Vec2 => 2,
-        Vec3 => 3,
-        Vec4 => 4,
-        Mat2 => 4,
-        Mat3 => 12,
-        Mat4 => 16,
+        Dimensions::Scalar => 1,
+        Dimensions::Vec2 => 2,
+        Dimensions::Vec3 => 3,
+        Dimensions::Vec4 => 4,
+        Dimensions::Mat2 => 4,
+        Dimensions::Mat3 => 12,
+        Dimensions::Mat4 => 16,
     }
 }
 
@@ -46,34 +46,35 @@ pub fn stride_of_component_type(accessor: &gltf::accessor::Accessor) -> usize {
 
 pub fn accessor_type_to_format(accessor: &gltf::accessor::Accessor) -> wgpu::VertexFormat {
     use gltf::accessor::DataType::*;
+    use wgpu::VertexFormat::*;
     let normalized = accessor.normalized();
     let dims = accessor.dimensions();
     let ty = accessor.data_type();
     match (normalized, dims, ty) {
-        (false, Vec2, U8) => Uint8x2,
-        (false, Vec4, U8) => Uint8x4,
-        (false, Vec2, I8) => Sint8x2,
-        (false, Vec4, I8) => Sint8x4,
-        (true, Vec2, U8) => Unorm8x2,
-        (true, Vec4, U8) => Unorm8x4,
-        (true, Vec2, I8) => Snorm8x2,
-        (true, Vec4, I8) => Snorm8x4,
-        (false, Vec2, U16) => Uint16x2,
-        (false, Vec4, U16) => Uint16x4,
-        (false, Vec2, I16) => Sint16x2,
-        (false, Vec4, I16) => Sint16x4,
-        (true, Vec2, U16) => Unorm16x2,
-        (true, Vec4, U16) => Unorm16x4,
-        (true, Vec2, I16) => Snorm16x2,
-        (true, Vec4, I16) => Snorm16x4,
-        (_, Scalar, F32) => Float32,
-        (_, Vec2, F32) => Float32x2,
-        (_, Vec3, F32) => Float32x3,
-        (_, Vec4, F32) => Float32x4,
-        (_, Scalar, U32) => Uint32,
-        (_, Vec2, U32) => Uint32x2,
-        (_, Vec3, U32) => Uint32x3,
-        (_, Vec4, U32) => Uint32x4,
+        (false, Dimensions::Vec2, U8) => Uint8x2,
+        (false, Dimensions::Vec4, U8) => Uint8x4,
+        (false, Dimensions::Vec2, I8) => Sint8x2,
+        (false, Dimensions::Vec4, I8) => Sint8x4,
+        (true, Dimensions::Vec2, U8) => Unorm8x2,
+        (true, Dimensions::Vec4, U8) => Unorm8x4,
+        (true, Dimensions::Vec2, I8) => Snorm8x2,
+        (true, Dimensions::Vec4, I8) => Snorm8x4,
+        (false, Dimensions::Vec2, U16) => Uint16x2,
+        (false, Dimensions::Vec4, U16) => Uint16x4,
+        (false, Dimensions::Vec2, I16) => Sint16x2,
+        (false, Dimensions::Vec4, I16) => Sint16x4,
+        (true, Dimensions::Vec2, U16) => Unorm16x2,
+        (true, Dimensions::Vec4, U16) => Unorm16x4,
+        (true, Dimensions::Vec2, I16) => Snorm16x2,
+        (true, Dimensions::Vec4, I16) => Snorm16x4,
+        (_, Dimensions::Scalar, F32) => Float32,
+        (_, Dimensions::Vec2, F32) => Float32x2,
+        (_, Dimensions::Vec3, F32) => Float32x3,
+        (_, Dimensions::Vec4, F32) => Float32x4,
+        (_, Dimensions::Scalar, U32) => Uint32,
+        (_, Dimensions::Vec2, U32) => Uint32x2,
+        (_, Dimensions::Vec3, U32) => Uint32x3,
+        (_, Dimensions::Vec4, U32) => Uint32x4,
         _ => panic!("Unsupported vertex format!"),
     }
 }
@@ -147,34 +148,49 @@ pub fn wrappping_to_address_mode(mode: gltf::texture::WrappingMode) -> wgpu::Add
     }
 }
 
-// pub fn convert_dynamic_image(
-//     image: image::DynamicImage,
-//     srgb: bool,
-// ) -> (Vec<u8>, wgpu::TextureFormat) {
-//     use wgpu::TextureFormat::*;
-//     match image {
-//         image::DynamicImage::ImageLuma8(i) => (i.into_raw(), R8Unorm),
-//         image::DynamicImage::ImageLumaA8(i) => (
-//             ConvertBuffer::<ImageBuffer<Luma<u8>, Vec<u8>>>::convert(&i).into_raw(),
-//             R8Unorm,
-//         ),
-//         image::DynamicImage::ImageRgb8(i) => (
-//             ConvertBuffer::<ImageBuffer<Rgba<u8>, Vec<u8>>>::convert(&i).into_raw(),
-//             if srgb { Rgba8UnormSrgb } else { Rgba8Unorm },
-//         ),
-//         image::DynamicImage::ImageRgba8(i) => {
-//             (i.into_raw(), if srgb { Rgba8UnormSrgb } else { Rgba8Unorm })
-//         }
-//         image::DynamicImage::ImageBgr8(i) => (
-//             ConvertBuffer::<ImageBuffer<Bgra<u8>, Vec<u8>>>::convert(&i).into_raw(),
-//             if srgb { Bgra8UnormSrgb } else { Bgra8Unorm },
-//         ),
-//         image::DynamicImage::ImageBgra8(i) => {
-//             (i.into_raw(), if srgb { Bgra8UnormSrgb } else { Bgra8Unorm })
-//         }
-//         i => (
-//             i.into_rgba8().into_raw(),
-//             if srgb { Rgba8UnormSrgb } else { Rgba8Unorm },
-//         ),
-//     }
-// }
+pub fn convert_to_rgba(
+    image: &gltf::image::Data,
+) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> {
+    let (width, height) = (image.width, image.height);
+    let buf = image.pixels.as_slice();
+    let format = image.format;
+    let image_image = match format {
+        Format::R8 => ImageBuffer::<image::Luma<u8>, _>::from_raw(width, height, buf)
+            .map(|image| image.convert()),
+        Format::R8G8 => ImageBuffer::<image::LumaA<u8>, _>::from_raw(width, height, buf)
+            .map(|image| image.convert()),
+        Format::R8G8B8 => ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, buf)
+            .map(|image| image.convert()),
+        Format::R8G8B8A8 => ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, buf)
+            .map(|image| image.convert()),
+        Format::R16 => {
+            ImageBuffer::<image::Luma<u16>, _>::from_raw(width, height, bytemuck::cast_slice(buf))
+                .map(|image| image.convert())
+        }
+        Format::R16G16 => {
+            ImageBuffer::<image::LumaA<u16>, _>::from_raw(width, height, bytemuck::cast_slice(buf))
+                .map(|image| image.convert())
+        }
+        Format::R16G16B16 => {
+            ImageBuffer::<image::Rgb<u16>, _>::from_raw(width, height, bytemuck::cast_slice(buf))
+                .map(|image| image.convert())
+        }
+        Format::R16G16B16A16 => {
+            ImageBuffer::<image::Rgba<u16>, _>::from_raw(width, height, bytemuck::cast_slice(buf))
+                .map(|image| image.convert())
+        }
+        Format::R32G32B32FLOAT => {
+            ImageBuffer::<image::Rgb<f32>, _>::from_raw(width, height, bytemuck::cast_slice(buf))
+                .map(|image| image.convert())
+        }
+        Format::R32G32B32A32FLOAT => {
+            ImageBuffer::<image::Rgba<f32>, _>::from_raw(width, height, bytemuck::cast_slice(buf))
+                .map(|image| image.convert())
+        }
+    };
+    image_image.context(eyre!(
+        "Failed to convert {format:?} image with size ({}, {}) to RGBA8",
+        width,
+        height
+    ))
+}
