@@ -94,7 +94,7 @@ impl Blitter {
             depth_stencil_attachment: None,
         });
 
-        render_pass.set_pipeline(&pipeline);
+        render_pass.set_pipeline(pipeline);
         render_pass.set_bind_group(0, &texture_bind_group, &[]);
         render_pass.draw(0..3, 0..1);
     }
@@ -159,7 +159,7 @@ impl Blitter {
                     })],
                     depth_stencil_attachment: None,
                 });
-                rpass.set_pipeline(&pipeline);
+                rpass.set_pipeline(pipeline);
                 rpass.set_bind_group(0, &bind_group, &[]);
                 rpass.draw(0..3, 0..1);
             }
@@ -175,12 +175,12 @@ impl Blitter {
             label: Some("Blit Pipeline"),
             layout: None,
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: shader,
                 entry_point: "vs_main",
                 buffers: &[],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: shader,
                 entry_point: "fs_main",
                 targets: &[Some(format.into())],
             }),
