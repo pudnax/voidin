@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::zip};
+use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32};
 
 use color_eyre::{eyre::ContextCompat, Result};
-use glam::{vec4, Vec4};
+use glam::vec4;
 use pollster::FutureExt;
 use wgpu::{util::DeviceExt, FilterMode};
 use wgpu_profiler::{scope::Scope, GpuProfiler};
@@ -10,31 +10,48 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     camera::CameraBinding,
     gltf::{convert_sampler, mesh_mode_to_topology, GltfDocument},
-    utils::{NonZeroSized, UnwrapRepeat},
+    utils::{create_solid_color_texture, NonZeroSized, UnwrapRepeat},
 };
 
+pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
+    label: Some("Gltf Default Sampler"),
+    address_mode_u: wgpu::AddressMode::Repeat,
+    address_mode_v: wgpu::AddressMode::Repeat,
+    address_mode_w: wgpu::AddressMode::Repeat,
+    mag_filter: FilterMode::Linear,
+    min_filter: FilterMode::Linear,
+    mipmap_filter: FilterMode::Linear,
+    lod_min_clamp: 0.0,
+    lod_max_clamp: std::f32::MAX,
+    compare: None,
+    anisotropy_clamp: None,
+    border_color: None,
+};
+
+mod blitter;
 mod global_ubo;
 mod state;
+use blitter::Blitter;
 pub use state::AppState;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct MeshVertex {
-    position: [f32; 3],
-    normal: [f32; 3],
-    tex_coord: [f32; 2],
+pub struct MeshVertex {
+    pub position: [f32; 3],
+    pub normal: [f32; 3],
+    pub tex_coord: [f32; 2],
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
-struct PipelineArgs {
-    topology: wgpu::PrimitiveTopology,
-    target_format: wgpu::TextureFormat,
-    cull_mode: Option<wgpu::Face>,
-    blend: Option<wgpu::BlendState>,
+pub struct PipelineArgs {
+    pub topology: wgpu::PrimitiveTopology,
+    pub target_format: wgpu::TextureFormat,
+    pub cull_mode: Option<wgpu::Face>,
+    pub blend: Option<wgpu::BlendState>,
 }
 
 impl PipelineArgs {
-    fn new(
+    pub fn new(
         topology: wgpu::PrimitiveTopology,
         target_format: wgpu::TextureFormat,
         double_sided: bool,
@@ -72,42 +89,16 @@ impl Display for PipelineArgs {
     }
 }
 
-/// Creates WGPU texture with color in range [0., 1.]
-fn create_solid_color_texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    color: Vec4,
-) -> wgpu::Texture {
-    let color = color * 255.;
-
-    device.create_texture_with_data(
-        queue,
-        &wgpu::TextureDescriptor {
-            label: Some(&format!("Solid Texture {:?}", color.to_array())),
-            size: wgpu::Extent3d {
-                width: 1,
-                height: 1,
-                depth_or_array_layers: 1,
-            },
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING,
-            mip_level_count: 1,
-            sample_count: 1,
-            view_formats: &[],
-        },
-        bytemuck::bytes_of(&color),
-    )
-}
-
-fn create_mesh_pipeline(
+pub fn create_mesh_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::PipelineLayout,
     args: &PipelineArgs,
 ) -> wgpu::RenderPipeline {
     let attributes = &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
-    let shader_module =
-        device.create_shader_module(wgpu::include_wgsl!("../shaders/draw_mesh.wgsl"));
+    let shader_module = device.create_shader_module(wgpu::include_wgsl!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/shaders/blit.wgsl"
+    )));
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(&format!("Pipeline: {}", args)),
         layout: Some(layout),
@@ -160,7 +151,7 @@ pub enum DrawMode {
 }
 
 #[derive(Debug)]
-struct Primitive {
+pub struct Primitive {
     pub buffer: wgpu::Buffer,
     pub instances: Vec<wgpu::BindGroup>,
     pub draw_mode: DrawMode,
@@ -169,7 +160,7 @@ struct Primitive {
 #[derive(Debug)]
 pub struct GpuPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    primitives: HashMap<Option<usize>, Vec<Primitive>>,
+    pub primitives: HashMap<Option<usize>, Vec<Primitive>>,
 }
 
 pub struct App {
@@ -199,25 +190,13 @@ pub struct App {
     default_sampler: wgpu::Sampler,
     opaque_white_texture: wgpu::Texture,
 
+    blitter: Blitter,
+
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
 
 impl App {
     const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-    const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
-        label: Some("Gltf Default Sampler"),
-        address_mode_u: wgpu::AddressMode::Repeat,
-        address_mode_v: wgpu::AddressMode::Repeat,
-        address_mode_w: wgpu::AddressMode::Repeat,
-        mag_filter: FilterMode::Linear,
-        min_filter: FilterMode::Linear,
-        mipmap_filter: FilterMode::Linear,
-        lod_min_clamp: 0.0,
-        lod_max_clamp: std::f32::MAX,
-        compare: None,
-        anisotropy_clamp: None,
-        border_color: None,
-    };
 
     pub fn new(window: &Window) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -267,7 +246,7 @@ impl App {
 
         let opaque_white_texture =
             create_solid_color_texture(&device, &queue, vec4(1., 1., 1., 1.));
-        let default_sampler = device.create_sampler(&Self::DEFAULT_SAMPLER_DESC);
+        let default_sampler = device.create_sampler(&DEFAULT_SAMPLER_DESC);
 
         let node_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -330,12 +309,13 @@ impl App {
 
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
+            blitter: Blitter::new(&device),
             adapter,
             instance,
             device,
+            // TODO: miltisample
             surface,
             surface_config,
-            // TODO: reverse Z
             depth_texture,
             queue,
 
@@ -355,7 +335,6 @@ impl App {
 
             pipeline_layout,
             pipeline_data: HashMap::new(),
-            // TODO: mipmaps
             material_data: HashMap::new(),
         })
     }
@@ -491,26 +470,48 @@ impl App {
                     let image = &gltf.images[tex.source().index()];
                     let (width, height) = (image.width, image.height);
                     let image = crate::gltf::convert_to_rgba(image)?;
+                    let mip_level_count = width.max(height).ilog2() + 1;
+                    let size = wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    };
 
                     let desc = wgpu::TextureDescriptor {
                         label: None,
-                        size: wgpu::Extent3d {
-                            width,
-                            height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
+                        size,
+                        mip_level_count,
                         sample_count: 1,
                         dimension: wgpu::TextureDimension::D2,
                         format: wgpu::TextureFormat::Rgba8Unorm,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_DST
+                            | wgpu::TextureUsages::RENDER_ATTACHMENT,
 
                         view_formats: &[],
                     };
-                    let texture =
-                        self.device
-                            .create_texture_with_data(&self.queue, &desc, image.as_raw());
+                    let texture = self.device.create_texture(&desc);
+                    self.queue.write_texture(
+                        wgpu::ImageCopyTextureBase {
+                            texture: &texture,
+                            mip_level: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                            aspect: wgpu::TextureAspect::All,
+                        },
+                        image.as_raw(),
+                        wgpu::ImageDataLayout {
+                            offset: 0,
+                            bytes_per_row: NonZeroU32::new(width * 4),
+                            rows_per_image: None,
+                        },
+                        size,
+                    );
                     let texture_view = texture.create_view(&Default::default());
+
+                    let mut encoder = self.device.create_command_encoder(&Default::default());
+                    self.blitter
+                        .generate_mipmaps(&self.device, &mut encoder, &texture);
+                    self.queue.submit(Some(encoder.finish()));
 
                     self.device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: None,

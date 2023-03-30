@@ -7,6 +7,8 @@ use std::{
 };
 
 use either::Either;
+use glam::Vec4;
+use wgpu::util::DeviceExt;
 use wgpu_profiler::GpuTimerScopeResult;
 
 pub trait NonZeroSized: Sized {
@@ -60,4 +62,32 @@ pub fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation:
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
         }
     }
+}
+
+/// Creates WGPU texture with color in range [0., 1.]
+pub fn create_solid_color_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    color: Vec4,
+) -> wgpu::Texture {
+    let color = color * 255.;
+
+    device.create_texture_with_data(
+        queue,
+        &wgpu::TextureDescriptor {
+            label: Some(&format!("Solid Texture {:?}", color.to_array())),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            mip_level_count: 1,
+            sample_count: 1,
+            view_formats: &[],
+        },
+        bytemuck::bytes_of(&color),
+    )
 }
