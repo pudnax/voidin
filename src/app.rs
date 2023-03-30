@@ -315,9 +315,7 @@ impl App {
 
         let mut material_data = HashMap::new();
         for material in scene.document.materials() {
-            // dbg!(&material);
             let pbr = material.pbr_metallic_roughness();
-            // TODO: make [1, 1, 1, 1] for default material
             let mut color = pbr.base_color_factor();
             color[3] = material.alpha_cutoff().unwrap_or(0.5);
 
@@ -326,120 +324,149 @@ impl App {
                 contents: bytemuck::bytes_of(&color),
                 usage: wgpu::BufferUsages::UNIFORM,
             });
-            // TODO: insert default material
-            let t = pbr.base_color_texture().map(|t| t.texture()).unwrap();
-            let sampler = convert_sampler(&device, t.sampler());
-            let image = &scene.images[t.source().index()];
-            let (width, height) = (image.width, image.height);
-            let buf = image.pixels.as_slice();
-            let format = dbg!(image.format);
-            let image_image: ImageBuffer<image::Rgba<u8>, _> = match format {
-                gltf::image::Format::R8 => {
-                    ImageBuffer::<image::Luma<u8>, _>::from_raw(width, height, buf)
+            let bind_group = match pbr.base_color_texture().map(|t| t.texture()) {
+                Some(tex) => {
+                    let sampler = convert_sampler(&device, tex.sampler());
+                    let image = &scene.images[tex.source().index()];
+                    let (width, height) = (image.width, image.height);
+                    let buf = image.pixels.as_slice();
+                    let format = image.format;
+                    let image_image: ImageBuffer<image::Rgba<u8>, _> = match format {
+                        gltf::image::Format::R8 => {
+                            ImageBuffer::<image::Luma<u8>, _>::from_raw(width, height, buf)
+                                .unwrap()
+                                .convert()
+                        }
+                        gltf::image::Format::R8G8 => {
+                            ImageBuffer::<image::LumaA<u8>, _>::from_raw(width, height, buf)
+                                .unwrap()
+                                .convert()
+                        }
+                        gltf::image::Format::R8G8B8 => {
+                            ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, buf)
+                                .unwrap()
+                                .convert()
+                        }
+                        gltf::image::Format::R8G8B8A8 => {
+                            ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, buf)
+                                .unwrap()
+                                .convert()
+                        }
+                        gltf::image::Format::R16 => ImageBuffer::<image::Luma<u16>, _>::from_raw(
+                            width,
+                            height,
+                            bytemuck::cast_slice(buf),
+                        )
                         .unwrap()
-                        .convert()
+                        .convert(),
+                        gltf::image::Format::R16G16 => {
+                            ImageBuffer::<image::LumaA<u16>, _>::from_raw(
+                                width,
+                                height,
+                                bytemuck::cast_slice(buf),
+                            )
+                            .unwrap()
+                            .convert()
+                        }
+                        gltf::image::Format::R16G16B16 => {
+                            ImageBuffer::<image::Rgb<u16>, _>::from_raw(
+                                width,
+                                height,
+                                bytemuck::cast_slice(buf),
+                            )
+                            .unwrap()
+                            .convert()
+                        }
+                        gltf::image::Format::R16G16B16A16 => {
+                            ImageBuffer::<image::Rgba<u16>, _>::from_raw(
+                                width,
+                                height,
+                                bytemuck::cast_slice(buf),
+                            )
+                            .unwrap()
+                            .convert()
+                        }
+                        gltf::image::Format::R32G32B32FLOAT => {
+                            ImageBuffer::<image::Rgb<f32>, _>::from_raw(
+                                width,
+                                height,
+                                bytemuck::cast_slice(buf),
+                            )
+                            .unwrap()
+                            .convert()
+                        }
+                        gltf::image::Format::R32G32B32A32FLOAT => {
+                            ImageBuffer::<image::Rgba<f32>, _>::from_raw(
+                                width,
+                                height,
+                                bytemuck::cast_slice(buf),
+                            )
+                            .unwrap()
+                            .convert()
+                        }
+                    };
+
+                    let desc = wgpu::TextureDescriptor {
+                        label: None,
+                        size: wgpu::Extent3d {
+                            width,
+                            height,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+
+                        view_formats: &[],
+                    };
+                    let texture =
+                        device.create_texture_with_data(&queue, &desc, image_image.as_raw());
+                    let texture_view = texture.create_view(&Default::default());
+
+                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: None,
+                        layout: &material_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                // TODO: Stick to always sRGB format... or not
+                                resource: wgpu::BindingResource::TextureView(&texture_view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::Sampler(&sampler),
+                            },
+                        ],
+                    })
                 }
-                gltf::image::Format::R8G8 => {
-                    ImageBuffer::<image::LumaA<u8>, _>::from_raw(width, height, buf)
-                        .unwrap()
-                        .convert()
-                }
-                gltf::image::Format::R8G8B8 => {
-                    ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, buf)
-                        .unwrap()
-                        .convert()
-                }
-                gltf::image::Format::R8G8B8A8 => {
-                    ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, buf)
-                        .unwrap()
-                        .convert()
-                }
-                gltf::image::Format::R16 => ImageBuffer::<image::Luma<u16>, _>::from_raw(
-                    width,
-                    height,
-                    bytemuck::cast_slice(buf),
-                )
-                .unwrap()
-                .convert(),
-                gltf::image::Format::R16G16 => ImageBuffer::<image::LumaA<u16>, _>::from_raw(
-                    width,
-                    height,
-                    bytemuck::cast_slice(buf),
-                )
-                .unwrap()
-                .convert(),
-                gltf::image::Format::R16G16B16 => ImageBuffer::<image::Rgb<u16>, _>::from_raw(
-                    width,
-                    height,
-                    bytemuck::cast_slice(buf),
-                )
-                .unwrap()
-                .convert(),
-                gltf::image::Format::R16G16B16A16 => ImageBuffer::<image::Rgba<u16>, _>::from_raw(
-                    width,
-                    height,
-                    bytemuck::cast_slice(buf),
-                )
-                .unwrap()
-                .convert(),
-                gltf::image::Format::R32G32B32FLOAT => ImageBuffer::<image::Rgb<f32>, _>::from_raw(
-                    width,
-                    height,
-                    bytemuck::cast_slice(buf),
-                )
-                .unwrap()
-                .convert(),
-                gltf::image::Format::R32G32B32A32FLOAT => {
-                    ImageBuffer::<image::Rgba<f32>, _>::from_raw(
-                        width,
-                        height,
-                        bytemuck::cast_slice(buf),
-                    )
-                    .unwrap()
-                    .convert()
+                None => {
+                    let texture_view = opaque_white_texture.create_view(&Default::default());
+                    device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: None,
+                        layout: &material_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: buffer.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::TextureView(&texture_view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::Sampler(&default_sampler),
+                            },
+                        ],
+                    })
                 }
             };
-
-            let texture = device.create_texture_with_data(
-                &queue,
-                &wgpu::TextureDescriptor {
-                    label: None,
-                    size: wgpu::Extent3d {
-                        width,
-                        height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
-
-                    view_formats: &[],
-                },
-                image_image.as_raw(),
-            );
-            let texture_view = texture.create_view(&Default::default());
-
-            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &material_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: buffer.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        // TODO: Stick to always sRGB format... or not
-                        resource: wgpu::BindingResource::TextureView(&texture_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                ],
-            });
 
             material_data.insert(material.index().unwrap(), bind_group);
         }
@@ -449,7 +476,6 @@ impl App {
         for node in scene.document.nodes() {
             let Some(mesh) = node.mesh() else { continue; };
             let name = node.name().unwrap_or("<Unnamed>");
-            println!("\tNode: {name}, Mesh {}", mesh.index());
             let node_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("Node Buffer: {:?}", name)),
                 contents: bytemuck::bytes_of(&node.transform().matrix()),
@@ -472,7 +498,6 @@ impl App {
                     .push(bind_group);
             }
         }
-        dbg!(primitive_instances.keys().collect::<Vec<_>>());
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("Mesh Pipeline Layout")),
@@ -581,6 +606,7 @@ impl App {
             features,
 
             pipeline_data,
+            // TODO: mipmaps
             material_data,
         })
     }
