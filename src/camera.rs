@@ -88,8 +88,7 @@ pub struct Camera {
 }
 
 impl Camera {
-    const ZFAR: f32 = 100.;
-    const ZNEAR: f32 = 0.1;
+    const ZNEAR: f32 = 0.001;
     const FOVY: f32 = std::f32::consts::PI / 2.0;
 
     pub fn new(
@@ -115,7 +114,7 @@ impl Camera {
     pub fn build_projection_view_matrix(&self) -> (Mat4, Mat4) {
         let tr = self.rig.final_transform;
         let view = Mat4::look_at_rh(tr.position, tr.position + tr.forward(), tr.up());
-        let proj = Mat4::perspective_rh(Self::FOVY, self.aspect, Self::ZNEAR, Self::ZFAR);
+        let proj = Mat4::perspective_infinite_reverse_rh(Self::FOVY, self.aspect, Self::ZNEAR);
         (proj, view)
     }
 

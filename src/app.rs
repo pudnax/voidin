@@ -141,7 +141,7 @@ fn create_mesh_pipeline(
         depth_stencil: Some(wgpu::DepthStencilState {
             format: App::DEPTH_FORMAT,
             depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::Less,
+            depth_compare: wgpu::CompareFunction::GreaterEqual,
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
@@ -391,7 +391,7 @@ impl App {
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.depth_texture,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
+                    load: wgpu::LoadOp::Clear(0.0),
                     store: true,
                 }),
                 stencil_ops: None,
