@@ -27,7 +27,7 @@ impl AppState {
 
     pub fn update(&mut self, dt: f64) {
         self.total_time += dt;
-        self.frame_count += 1;
+        self.frame_count = self.frame_count.wrapping_add(1);
 
         if self.input.mouse_state.left_held() {
             let sensitivity = 0.5;

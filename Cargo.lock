@@ -523,6 +523,7 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e4afd9ad95555081e109fe1d21f2a30c691b5f0919c67dfa690a2e1eb6bd51c"
 dependencies = [
+ "bytemuck",
  "rand",
 ]
 
@@ -746,15 +747,6 @@ dependencies = [
  "io-lifetimes",
  "rustix",
  "windows-sys",
-]
-
-[[package]]
-name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
 ]
 
 [[package]]
@@ -1219,13 +1211,13 @@ dependencies = [
  "bytemuck",
  "color-eyre",
  "dolly",
+ "either",
  "env_logger",
  "fs_extra",
  "glam",
  "glob",
  "gltf",
  "image",
- "itertools",
  "log",
  "pollster",
  "tobj",

@@ -1,6 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::zip};
 
 use color_eyre::{eyre::ContextCompat, Result};
+use glam::{vec4, Vec4};
+use image::{buffer::ConvertBuffer, ImageBuffer};
 use pollster::FutureExt;
 use wgpu::{util::DeviceExt, FilterMode};
 use wgpu_profiler::{scope::Scope, GpuProfiler};
@@ -8,7 +10,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::CameraBinding,
-    gltf::{mesh_mode_to_topology, GltfModel},
+    gltf::{convert_sampler, mesh_mode_to_topology, GltfModel},
     utils::{NonZeroSized, UnwrapRepeat},
 };
 
@@ -28,12 +30,71 @@ struct MeshVertex {
 struct PipelineArgs {
     topology: wgpu::PrimitiveTopology,
     target_format: wgpu::TextureFormat,
+    cull_mode: Option<wgpu::Face>,
+    blend: Option<wgpu::BlendState>,
+}
+
+impl PipelineArgs {
+    fn new(
+        topology: wgpu::PrimitiveTopology,
+        target_format: wgpu::TextureFormat,
+        double_sided: bool,
+        alpha_mode: gltf::material::AlphaMode,
+    ) -> Self {
+        let cull_mode = (!double_sided).then(|| wgpu::Face::Back);
+        let blend = (alpha_mode == gltf::material::AlphaMode::Blend).then(|| wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::SrcAlpha,
+                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+        });
+        Self {
+            topology,
+            target_format,
+            cull_mode,
+            blend,
+        }
+    }
 }
 
 impl Display for PipelineArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{{ {:?}, {:?} }}", self.topology, self.target_format)
     }
+}
+
+/// Creates WGPU texture with color in range [0., 1.]
+fn create_solid_color_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    color: Vec4,
+) -> wgpu::Texture {
+    let color = color * 255.;
+
+    device.create_texture_with_data(
+        &queue,
+        &wgpu::TextureDescriptor {
+            label: Some(&format!("Solid Texture {:?}", color.to_array())),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            mip_level_count: 1,
+            sample_count: 1,
+            view_formats: &[],
+        },
+        bytemuck::bytes_of(&color),
+    )
 }
 
 fn create_mesh_pipeline(
@@ -64,7 +125,11 @@ fn create_mesh_pipeline(
         fragment: Some(wgpu::FragmentState {
             module: &shader_module,
             entry_point: "fs_main",
-            targets: &[Some(args.target_format.into())],
+            targets: &[Some(wgpu::ColorTargetState {
+                format: args.target_format,
+                blend: args.blend,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
         }),
         depth_stencil: Some(wgpu::DepthStencilState {
             format: App::DEPTH_FORMAT,
@@ -97,7 +162,7 @@ struct Primitive {
 #[derive(Debug)]
 pub struct GpuPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    primitives: Vec<Primitive>,
+    primitives: HashMap<Option<usize>, Vec<Primitive>>,
 }
 
 pub struct App {
@@ -118,13 +183,17 @@ pub struct App {
     camera_binding: CameraBinding,
 
     pipeline_data: HashMap<PipelineArgs, GpuPipeline>,
+    material_data: HashMap<usize, wgpu::BindGroup>,
+
+    default_sampler: wgpu::Sampler,
+    opaque_white_texture: wgpu::Texture,
 
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
 
 impl App {
     const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-    const _DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
+    const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
         label: Some("Gltf Default Sampler"),
         address_mode_u: wgpu::AddressMode::Repeat,
         address_mode_v: wgpu::AddressMode::Repeat,
@@ -185,6 +254,10 @@ impl App {
             resolution: [surface_config.width as f32, surface_config.height as f32],
         };
 
+        let opaque_white_texture =
+            create_solid_color_texture(&device, &queue, vec4(1., 1., 1., 1.));
+        let default_sampler = device.create_sampler(&Self::DEFAULT_SAMPLER_DESC);
+
         let scene = GltfModel::import(
             "assets/sponza-optimized/Sponza.gltf",
             // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
@@ -207,10 +280,176 @@ impl App {
                 }],
             });
 
-        let mut primitive_instances: HashMap<_, Vec<wgpu::BindGroup>> = HashMap::new();
+        let material_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Material Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: Some(glam::Vec4::NSIZE),
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let mut material_data = HashMap::new();
+        for material in scene.document.materials() {
+            // dbg!(&material);
+            let pbr = material.pbr_metallic_roughness();
+            // TODO: make [1, 1, 1, 1] for default material
+            let mut color = pbr.base_color_factor();
+            color[3] = material.alpha_cutoff().unwrap_or(0.5);
+
+            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(&format!("Material Color: {:?}", material.index())),
+                contents: bytemuck::bytes_of(&color),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            // TODO: insert default material
+            let t = pbr.base_color_texture().map(|t| t.texture()).unwrap();
+            let sampler = convert_sampler(&device, t.sampler());
+            let image = &scene.images[t.source().index()];
+            let (width, height) = (image.width, image.height);
+            let buf = image.pixels.as_slice();
+            let format = dbg!(image.format);
+            let image_image: ImageBuffer<image::Rgba<u8>, _> = match format {
+                gltf::image::Format::R8 => {
+                    ImageBuffer::<image::Luma<u8>, _>::from_raw(width, height, buf)
+                        .unwrap()
+                        .convert()
+                }
+                gltf::image::Format::R8G8 => {
+                    ImageBuffer::<image::LumaA<u8>, _>::from_raw(width, height, buf)
+                        .unwrap()
+                        .convert()
+                }
+                gltf::image::Format::R8G8B8 => {
+                    ImageBuffer::<image::Rgb<u8>, _>::from_raw(width, height, buf)
+                        .unwrap()
+                        .convert()
+                }
+                gltf::image::Format::R8G8B8A8 => {
+                    ImageBuffer::<image::Rgba<u8>, _>::from_raw(width, height, buf)
+                        .unwrap()
+                        .convert()
+                }
+                gltf::image::Format::R16 => ImageBuffer::<image::Luma<u16>, _>::from_raw(
+                    width,
+                    height,
+                    bytemuck::cast_slice(buf),
+                )
+                .unwrap()
+                .convert(),
+                gltf::image::Format::R16G16 => ImageBuffer::<image::LumaA<u16>, _>::from_raw(
+                    width,
+                    height,
+                    bytemuck::cast_slice(buf),
+                )
+                .unwrap()
+                .convert(),
+                gltf::image::Format::R16G16B16 => ImageBuffer::<image::Rgb<u16>, _>::from_raw(
+                    width,
+                    height,
+                    bytemuck::cast_slice(buf),
+                )
+                .unwrap()
+                .convert(),
+                gltf::image::Format::R16G16B16A16 => ImageBuffer::<image::Rgba<u16>, _>::from_raw(
+                    width,
+                    height,
+                    bytemuck::cast_slice(buf),
+                )
+                .unwrap()
+                .convert(),
+                gltf::image::Format::R32G32B32FLOAT => ImageBuffer::<image::Rgb<f32>, _>::from_raw(
+                    width,
+                    height,
+                    bytemuck::cast_slice(buf),
+                )
+                .unwrap()
+                .convert(),
+                gltf::image::Format::R32G32B32A32FLOAT => {
+                    ImageBuffer::<image::Rgba<f32>, _>::from_raw(
+                        width,
+                        height,
+                        bytemuck::cast_slice(buf),
+                    )
+                    .unwrap()
+                    .convert()
+                }
+            };
+
+            let texture = device.create_texture_with_data(
+                &queue,
+                &wgpu::TextureDescriptor {
+                    label: None,
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING,
+
+                    view_formats: &[],
+                },
+                image_image.as_raw(),
+            );
+            let texture_view = texture.create_view(&Default::default());
+
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &material_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        // TODO: Stick to always sRGB format... or not
+                        resource: wgpu::BindingResource::TextureView(&texture_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&sampler),
+                    },
+                ],
+            });
+
+            material_data.insert(material.index().unwrap(), bind_group);
+        }
+
+        println!("Iterating on node/mesh");
+        let mut primitive_instances: HashMap<_, Vec<_>> = HashMap::new();
         for node in scene.document.nodes() {
             let Some(mesh) = node.mesh() else { continue; };
             let name = node.name().unwrap_or("<Unnamed>");
+            println!("\tNode: {name}, Mesh {}", mesh.index());
             let node_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(&format!("Node Buffer: {:?}", name)),
                 contents: bytemuck::bytes_of(&node.transform().matrix()),
@@ -233,6 +472,7 @@ impl App {
                     .push(bind_group);
             }
         }
+        dbg!(primitive_instances.keys().collect::<Vec<_>>());
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(&format!("Mesh Pipeline Layout")),
@@ -240,10 +480,12 @@ impl App {
                 &global_uniform_binding.layout,
                 &camera_binding.bind_group_layout,
                 &node_bind_group_layout,
+                &material_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
 
+        println!("Iterating on primitives");
         let mut pipeline_data = HashMap::new();
         for mesh in scene.document.meshes() {
             let mesh_name = mesh.name().unwrap_or("<Unnamed>");
@@ -266,10 +508,14 @@ impl App {
                     usage: wgpu::BufferUsages::VERTEX,
                 });
 
-                let args = PipelineArgs {
-                    topology: mesh_mode_to_topology(primitive.mode()),
-                    target_format: surface_config.format,
-                };
+                let material = primitive.material();
+
+                let args = PipelineArgs::new(
+                    mesh_mode_to_topology(primitive.mode()),
+                    surface_config.format,
+                    material.double_sided(),
+                    material.alpha_mode(),
+                );
 
                 let draw_mode = match reader.read_indices() {
                     None => DrawMode::Normal(vertices.len() as _),
@@ -297,16 +543,17 @@ impl App {
                     buffer,
                 };
 
-                pipeline_data
-                    .entry(args)
-                    .or_insert_with_key(|args| {
-                        let pipeline = create_mesh_pipeline(&device, &pipeline_layout, &args);
-                        GpuPipeline {
-                            pipeline,
-                            primitives: vec![],
-                        }
-                    })
+                let primitive = pipeline_data.entry(args).or_insert_with_key(|args| {
+                    let pipeline = create_mesh_pipeline(&device, &pipeline_layout, &args);
+                    GpuPipeline {
+                        pipeline,
+                        primitives: HashMap::new(),
+                    }
+                });
+                primitive
                     .primitives
+                    .entry(material.index())
+                    .or_insert(vec![])
                     .push(gpu_primitive);
             }
         }
@@ -322,6 +569,9 @@ impl App {
             depth_texture,
             queue,
 
+            default_sampler,
+            opaque_white_texture,
+
             global_uniform_binding,
             global_uniform,
 
@@ -331,6 +581,7 @@ impl App {
             features,
 
             pipeline_data,
+            material_data,
         })
     }
 
@@ -379,23 +630,26 @@ impl App {
             let mut pass = Scope::start(&args.to_string(), &mut profiler, &mut pass, &self.device);
             pass.set_pipeline(&pipeline.pipeline);
 
-            for primitive in &pipeline.primitives {
-                pass.set_vertex_buffer(0, primitive.buffer.slice(..));
+            for (material, primitives) in &pipeline.primitives {
+                pass.set_bind_group(3, &self.material_data[&material.unwrap()], &[]);
+                for primitive in primitives {
+                    pass.set_vertex_buffer(0, primitive.buffer.slice(..));
 
-                match &primitive.draw_mode {
-                    DrawMode::Normal(draw_count) => {
-                        // let mut pass = pass.scope("Draw", &self.device);
-                        for bind_group in &primitive.instances {
-                            pass.set_bind_group(2, &bind_group, &[]);
-                            pass.draw(0..*draw_count, 0..1);
+                    match &primitive.draw_mode {
+                        DrawMode::Normal(draw_count) => {
+                            // let mut pass = pass.scope("Draw", &self.device);
+                            for bind_group in &primitive.instances {
+                                pass.set_bind_group(2, &bind_group, &[]);
+                                pass.draw(0..*draw_count, 0..1);
+                            }
                         }
-                    }
-                    DrawMode::Indexed { buffer, draw_count } => {
-                        // let mut pass = pass.scope("Draw Indexed", &self.device);
-                        pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
-                        for bind_group in &primitive.instances {
-                            pass.set_bind_group(2, &bind_group, &[]);
-                            pass.draw_indexed(0..*draw_count, 0, 0..1);
+                        DrawMode::Indexed { buffer, draw_count } => {
+                            // let mut pass = pass.scope("Draw Indexed", &self.device);
+                            pass.set_index_buffer(buffer.slice(..), wgpu::IndexFormat::Uint32);
+                            for bind_group in &primitive.instances {
+                                pass.set_bind_group(2, &bind_group, &[]);
+                                pass.draw_indexed(0..*draw_count, 0, 0..1);
+                            }
                         }
                     }
                 }

@@ -5,7 +5,6 @@ use gltf::{
         DataType,
         Dimensions::{Mat2, Mat3, Mat4, Scalar, Vec2, Vec3, Vec4},
     },
-    image,
     texture::{MagFilter, MinFilter},
 };
 use wgpu::{FilterMode, PrimitiveTopology, TextureFormat, VertexFormat::*};
@@ -108,18 +107,18 @@ pub fn convert_sampler(device: &wgpu::Device, sampler: gltf::texture::Sampler) -
     })
 }
 
-pub fn convert_image_format(format: image::Format) -> TextureFormat {
+pub fn convert_image_format(format: gltf::image::Format) -> TextureFormat {
     // TODO: Don't know fitting format for RGB variants
     match format {
-        image::Format::R8 => TextureFormat::R8Unorm,
-        image::Format::R8G8 => TextureFormat::Rg8Unorm,
-        image::Format::R8G8B8 => TextureFormat::Rgba8Unorm,
-        image::Format::R8G8B8A8 => TextureFormat::Rgba8Unorm,
-        image::Format::R16 => TextureFormat::R16Unorm,
-        image::Format::R16G16 => TextureFormat::Rg16Unorm,
-        image::Format::R16G16B16 => TextureFormat::Rgba16Unorm,
-        image::Format::R16G16B16A16 => TextureFormat::Rgba16Unorm,
-        image::Format::R32G32B32FLOAT | image::Format::R32G32B32A32FLOAT => {
+        gltf::image::Format::R8 => TextureFormat::R8Unorm,
+        gltf::image::Format::R8G8 => TextureFormat::Rg8Unorm,
+        gltf::image::Format::R8G8B8 => TextureFormat::Rgba8Unorm,
+        gltf::image::Format::R8G8B8A8 => TextureFormat::Rgba8Unorm,
+        gltf::image::Format::R16 => TextureFormat::R16Unorm,
+        gltf::image::Format::R16G16 => TextureFormat::Rg16Unorm,
+        gltf::image::Format::R16G16B16 => TextureFormat::Rgba16Unorm,
+        gltf::image::Format::R16G16B16A16 => TextureFormat::Rgba16Unorm,
+        gltf::image::Format::R32G32B32FLOAT | gltf::image::Format::R32G32B32A32FLOAT => {
             TextureFormat::Rgba32Float
         }
     }
@@ -147,3 +146,35 @@ pub fn wrappping_to_address_mode(mode: gltf::texture::WrappingMode) -> wgpu::Add
         WrappingMode::Repeat => Repeat,
     }
 }
+
+// pub fn convert_dynamic_image(
+//     image: image::DynamicImage,
+//     srgb: bool,
+// ) -> (Vec<u8>, wgpu::TextureFormat) {
+//     use wgpu::TextureFormat::*;
+//     match image {
+//         image::DynamicImage::ImageLuma8(i) => (i.into_raw(), R8Unorm),
+//         image::DynamicImage::ImageLumaA8(i) => (
+//             ConvertBuffer::<ImageBuffer<Luma<u8>, Vec<u8>>>::convert(&i).into_raw(),
+//             R8Unorm,
+//         ),
+//         image::DynamicImage::ImageRgb8(i) => (
+//             ConvertBuffer::<ImageBuffer<Rgba<u8>, Vec<u8>>>::convert(&i).into_raw(),
+//             if srgb { Rgba8UnormSrgb } else { Rgba8Unorm },
+//         ),
+//         image::DynamicImage::ImageRgba8(i) => {
+//             (i.into_raw(), if srgb { Rgba8UnormSrgb } else { Rgba8Unorm })
+//         }
+//         image::DynamicImage::ImageBgr8(i) => (
+//             ConvertBuffer::<ImageBuffer<Bgra<u8>, Vec<u8>>>::convert(&i).into_raw(),
+//             if srgb { Bgra8UnormSrgb } else { Bgra8Unorm },
+//         ),
+//         image::DynamicImage::ImageBgra8(i) => {
+//             (i.into_raw(), if srgb { Bgra8UnormSrgb } else { Bgra8Unorm })
+//         }
+//         i => (
+//             i.into_rgba8().into_raw(),
+//             if srgb { Rgba8UnormSrgb } else { Rgba8Unorm },
+//         ),
+//     }
+// }

@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use itertools::Either;
+use either::Either;
 use wgpu_profiler::GpuTimerScopeResult;
 
 pub trait NonZeroSized: Sized {
