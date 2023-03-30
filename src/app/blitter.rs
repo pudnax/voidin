@@ -12,7 +12,7 @@ pub struct Blitter {
 impl Blitter {
     pub fn new(device: &wgpu::Device) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
+            label: Some("Blit Shader"),
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/shaders/blit.wgsl"

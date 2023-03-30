@@ -1,4 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32};
+use std::{
+    borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32,
+};
 
 use color_eyre::{eyre::ContextCompat, Result};
 use glam::vec4;
@@ -95,10 +97,13 @@ pub fn create_mesh_pipeline(
     args: &PipelineArgs,
 ) -> wgpu::RenderPipeline {
     let attributes = &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
-    let shader_module = device.create_shader_module(wgpu::include_wgsl!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/shaders/blit.wgsl"
-    )));
+    let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Mesh Shader"),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/draw_mesh.wgsl"
+        )))),
+    });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(&format!("Pipeline: {}", args)),
         layout: Some(layout),
@@ -136,7 +141,10 @@ pub fn create_mesh_pipeline(
             stencil: wgpu::StencilState::default(),
             bias: wgpu::DepthBiasState::default(),
         }),
-        multisample: wgpu::MultisampleState::default(),
+        multisample: wgpu::MultisampleState {
+            count: App::SAMPLE_COUNT,
+            ..Default::default()
+        },
         multiview: None,
     })
 }
@@ -170,6 +178,7 @@ pub struct App {
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
     depth_texture: wgpu::TextureView,
+    multisampled_framebuffer: wgpu::TextureView,
     queue: wgpu::Queue,
 
     pub limits: wgpu::Limits,
@@ -197,6 +206,7 @@ pub struct App {
 
 impl App {
     const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    const SAMPLE_COUNT: u32 = 4;
 
     pub fn new(window: &Window) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -235,6 +245,8 @@ impl App {
             .context("Surface in not supported")?;
         surface.configure(&device, &surface_config);
         let depth_texture = Self::create_depth_texture(&device, &surface_config);
+        let multisampled_framebuffer =
+            Self::create_multisampled_framebuffer(&device, &surface_config);
 
         let camera_binding = CameraBinding::new(&device);
         let global_uniform_binding = global_ubo::GlobalUniformBinding::new(&device);
@@ -313,10 +325,10 @@ impl App {
             adapter,
             instance,
             device,
-            // TODO: miltisample
             surface,
             surface_config,
             depth_texture,
+            multisampled_framebuffer,
             queue,
 
             default_sampler,
@@ -347,7 +359,7 @@ impl App {
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Command Encoder"),
+                label: Some("Main Render Encoder"),
             });
 
         profiler.begin_scope("Main Render Scope ", &mut encoder, &self.device);
@@ -355,8 +367,8 @@ impl App {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass Descriptor"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &target_view,
-                resolve_target: None,
+                view: &self.multisampled_framebuffer,
+                resolve_target: Some(&target_view),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: 0.13,
@@ -364,7 +376,7 @@ impl App {
                         b: 0.13,
                         a: 1.0,
                     }),
-                    store: true,
+                    store: false,
                 },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -431,6 +443,8 @@ impl App {
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
         self.depth_texture = Self::create_depth_texture(&self.device, &self.surface_config);
+        self.multisampled_framebuffer =
+            Self::create_multisampled_framebuffer(&self.device, &self.surface_config);
         self.global_uniform.resolution = [width as f32, height as f32];
     }
 
@@ -681,10 +695,33 @@ impl App {
             label: Some("Depth Texture"),
             size,
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: Self::SAMPLE_COUNT,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let tex = device.create_texture(&desc);
+        tex.create_view(&Default::default())
+    }
+
+    fn create_multisampled_framebuffer(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> wgpu::TextureView {
+        let size = wgpu::Extent3d {
+            width: config.width,
+            height: config.height,
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some("Multisampled Texture"),
+            size,
+            mip_level_count: 1,
+            sample_count: Self::SAMPLE_COUNT,
+            dimension: wgpu::TextureDimension::D2,
+            format: config.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         };
         let tex = device.create_texture(&desc);

@@ -4,22 +4,10 @@ struct VertexOutput {
 };
 
 @vertex
-fn vs_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
-    var result: VertexOutput;
-    let x = i32(vertex_index) / 2;
-    let y = i32(vertex_index) & 1;
-    let tc = vec2<f32>(
-        f32(x) * 2.0,
-        f32(y) * 2.0
-    );
-    result.position = vec4<f32>(
-        tc.x * 2.0 - 1.0,
-        1.0 - tc.y * 2.0,
-        0.0,
-        1.0
-    );
-    result.tex_coords = tc;
-    return result;
+fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
+    let uv = vec2(f32(vertex_idx & 2u), f32((vertex_idx << 1u) & 2u));
+    let pos = vec4(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 0.0, 1.0);
+    return VertexOutput(pos, uv);
 }
 
 @group(0) @binding(0) var tex: texture_2d<f32>;
