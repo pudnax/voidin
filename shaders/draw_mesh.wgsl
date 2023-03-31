@@ -33,20 +33,36 @@ struct VertexOutput {
 	@builtin(position) pos: vec4<f32>,
 	@location(0) normal: vec3<f32>,
 	@location(1) tex_coords: vec2<f32>,
+	@location(2) light_vec: vec3<f32>,
+	@location(3) view_vec: vec3<f32>,
 }
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
-    let pos = camera.proj * camera.view * model * vec4(in.pos, 1.0);
-    let normal = normalize((camera.view * model * vec4(in.normal, 0.0)).xyz);
-    let tex_coords = in.tex_coords;
+    let LIGHT_POS = vec3(150., 200.5, 150.);
 
-    return VertexOutput(pos, normal, tex_coords);
+    let vpos = camera.proj * camera.view * model * vec4(in.pos, 1.0);
+    let pos = camera.view * model * vec4(in.pos, 1.0);
+    let normal = normalize((model * vec4(in.normal, 0.0)).xyz);
+    let tex_coords = in.tex_coords;
+    var light_vec = LIGHT_POS - pos.xyz;
+    // light_vec = (model * vec4(light_vec, 1.0)).rgb;
+    var view_vec = camera.position - pos.xyz;
+    view_vec = (model * vec4(view_vec, 1.0)).rgb;
+
+    return VertexOutput(vpos, normal, tex_coords, light_vec, view_vec);
 }
 
-const LIGHT_DIR = vec3<f32>(0.25, 0.5, 1.0);
-const LIGHT_COLOR = vec3<f32>(1.0, 1.0, 1.0);
-const AMBIENT_COLOR = vec3<f32>(0.1, 0.1, 0.1);
+fn shade(nor: vec3<f32>, light_dir: vec3<f32>, view: vec3<f32>, material_texture: vec4<f32>) -> vec3<f32> {
+    let refl = reflect(light_dir, nor);
+    let spec = pow(max(dot(refl, view), 0.0), 16.0) * vec3(0.15);
+
+    let shade = dot(nor, light_dir);
+    let diff = mix(max(shade, 0.0), shade * 0.5 + 0.5, 0.25) * material.base_color_factor;
+    let surface_color = material_texture.rgb * diff;
+
+    return surface_color;
+}
 
 @fragment
 fn fs_main_cutoff(vout: VertexOutput) -> @location(0) vec4<f32> {
@@ -57,10 +73,11 @@ fn fs_main_cutoff(vout: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     let nor = normalize(vout.normal);
-    let light_dir = normalize(LIGHT_DIR);
-    let diff = max(dot(nor, light_dir), 0.0);
-    let base_color = material_texture.rgb * material.base_color_factor;
-    let surface_color = (base_color * AMBIENT_COLOR) + (base_color * diff);
+    let light_dir = normalize(vout.light_vec);
+    // let light_dir = normalize(vec3(0.25, 0.5, .25));
+    let view = normalize(vout.view_vec);
+
+    let surface_color = shade(nor, light_dir, view, material_texture);
 
     return vec4(surface_color, material_texture.a);
 }
@@ -70,10 +87,11 @@ fn fs_main(vout: VertexOutput) -> @location(0) vec4<f32> {
     let material_texture = textureSample(base_color_texture, material_sampler, vout.tex_coords);
 
     let nor = normalize(vout.normal);
-    let light_dir = normalize(LIGHT_DIR);
-    let diff = max(dot(nor, light_dir), 0.0);
-    let base_color = material_texture.rgb * material.base_color_factor;
-    let surface_color = (base_color * AMBIENT_COLOR) + (base_color * diff);
+    let light_dir = normalize(vout.light_vec);
+    // let light_dir = normalize(vec3(0.25, 0.5, .25));
+    let view = normalize(vout.view_vec);
+
+    let surface_color = shade(nor, light_dir, view, material_texture);
 
     return vec4(surface_color, material_texture.a);
 }
