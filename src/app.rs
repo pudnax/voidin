@@ -202,15 +202,22 @@ pub struct App {
     blitter: Blitter,
 
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
+    file_watcher: FileWatcher,
+
+    pipeline_arena: slotmap::SlotMap<PipelineHandle, GpuPipeline>,
 }
+
+slotmap::new_key_type! { struct PipelineHandle; }
+
+type FileWatcher = notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>;
 
 impl App {
     const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     const SAMPLE_COUNT: u32 = 4;
 
-    pub fn new(window: &Window) -> Result<Self> {
+    pub fn new(window: &Window, file_watcher: FileWatcher) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::VULKAN,
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
         });
 
@@ -321,6 +328,8 @@ impl App {
 
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
+            file_watcher,
+
             blitter: Blitter::new(&device),
             adapter,
             instance,
@@ -348,6 +357,8 @@ impl App {
             pipeline_layout,
             pipeline_data: HashMap::new(),
             material_data: HashMap::new(),
+
+            pipeline_arena: slotmap::SlotMap::with_key(),
         })
     }
 

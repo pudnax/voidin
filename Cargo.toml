@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 bytemuck = { version = "1.13.1", features = ["derive", "nightly_stdsimd"] }
 color-eyre = "0.6.2"
+crossbeam-channel = "0.5.7"
 dolly = "0.4.1"
 either = "1.8.1"
 env_logger = "0.10.0"
@@ -18,7 +19,16 @@ image = { version = "0.24.5", default-features = false, features = [
 	"png",
 ] }
 log = "0.4.17"
+naga = { version = "0.11.0", features = [
+	"spv-out",
+	"wgsl-in",
+	"validate",
+	"span",
+] }
+notify = "5.1.0"
+notify-debouncer-mini = "0.2.1"
 pollster = { version = "0.3.0", features = ["macro"] }
+slotmap = "1.0.6"
 tobj = "3.2.4"
 wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
 wgpu-profiler = "0.11.0"
