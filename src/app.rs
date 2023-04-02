@@ -1,5 +1,6 @@
 use std::{
-    borrow::Cow, cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32,
+    cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32, path::Path,
+    sync::Arc,
 };
 
 use color_eyre::{eyre::ContextCompat, Result};
@@ -12,7 +13,9 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     camera::CameraBinding,
     gltf::{convert_sampler, mesh_mode_to_topology, GltfDocument},
+    pipeline::{self, Arena},
     utils::{create_solid_color_texture, NonZeroSized, UnwrapRepeat},
+    watcher::{SpirvBytes, Watcher},
 };
 
 pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
@@ -44,7 +47,7 @@ pub struct MeshVertex {
     pub tex_coord: [f32; 2],
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct PipelineArgs {
     pub topology: wgpu::PrimitiveTopology,
     pub target_format: wgpu::TextureFormat,
@@ -91,62 +94,43 @@ impl Display for PipelineArgs {
     }
 }
 
-pub fn create_mesh_pipeline(
-    device: &wgpu::Device,
-    layout: &wgpu::PipelineLayout,
-    args: &PipelineArgs,
-) -> wgpu::RenderPipeline {
-    let attributes = &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
-    let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("Mesh Shader"),
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/shaders/draw_mesh.wgsl"
-        )))),
-    });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some(&format!("Pipeline: {}", args)),
-        layout: Some(layout),
-        vertex: wgpu::VertexState {
-            module: &shader_module,
-            entry_point: "vs_main",
-            buffers: &[wgpu::VertexBufferLayout {
-                array_stride: std::mem::size_of::<MeshVertex>() as _,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes,
-            }],
-        },
-        primitive: wgpu::PrimitiveState {
-            topology: args.topology,
-            cull_mode: args.cull_mode,
-            ..Default::default()
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: &shader_module,
-            entry_point: if args.cull_mode.is_some() {
-                "fs_main"
-            } else {
-                "fs_main_cutoff"
+impl From<&PipelineArgs> for pipeline::RenderPipelineDescriptor {
+    fn from(args: &PipelineArgs) -> Self {
+        let attributes = [
+            wgpu::VertexFormat::Float32x3,
+            wgpu::VertexFormat::Float32x3,
+            wgpu::VertexFormat::Float32x2,
+        ];
+        let fragment_entry_point = if args.cull_mode.is_some() {
+            "fs_main"
+        } else {
+            "fs_main_cutoff"
+        };
+        Self {
+            fragment: Some(pipeline::FragmentState {
+                entry_point: fragment_entry_point.into(),
+                targets: vec![Some(wgpu::ColorTargetState {
+                    format: args.target_format,
+                    blend: args.blend,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: args.topology,
+                cull_mode: args.cull_mode,
+                ..Default::default()
             },
-            targets: &[Some(wgpu::ColorTargetState {
-                format: args.target_format,
-                blend: args.blend,
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        depth_stencil: Some(wgpu::DepthStencilState {
-            format: App::DEPTH_FORMAT,
-            depth_write_enabled: true,
-            depth_compare: wgpu::CompareFunction::GreaterEqual,
-            stencil: wgpu::StencilState::default(),
-            bias: wgpu::DepthBiasState::default(),
-        }),
-        multisample: wgpu::MultisampleState {
-            count: App::SAMPLE_COUNT,
+            vertex: pipeline::VertexState {
+                buffers: vec![crate::pipeline::VertexBufferLayout::from_vertex_formats(
+                    wgpu::VertexStepMode::Vertex,
+                    attributes,
+                )],
+                ..Default::default()
+            },
+            // TODO: layout
             ..Default::default()
-        },
-        multiview: None,
-    })
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -167,7 +151,7 @@ pub struct Primitive {
 
 #[derive(Debug)]
 pub struct GpuPipeline {
-    pub pipeline: wgpu::RenderPipeline,
+    pub pipeline: pipeline::RenderHandle,
     pub primitives: HashMap<Option<usize>, Vec<Primitive>>,
 }
 
@@ -189,10 +173,9 @@ pub struct App {
 
     camera_binding: CameraBinding,
 
-    node_bind_group_layout: wgpu::BindGroupLayout,
-    material_bind_group_layout: wgpu::BindGroupLayout,
+    node_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    material_bind_group_layout: Arc<wgpu::BindGroupLayout>,
 
-    pipeline_layout: wgpu::PipelineLayout,
     pipeline_data: HashMap<PipelineArgs, GpuPipeline>,
     material_data: HashMap<Option<usize>, wgpu::BindGroup>,
 
@@ -202,20 +185,15 @@ pub struct App {
     blitter: Blitter,
 
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
-    file_watcher: FileWatcher,
 
-    pipeline_arena: slotmap::SlotMap<PipelineHandle, GpuPipeline>,
+    pipeline_arena: Arena,
 }
 
-slotmap::new_key_type! { struct PipelineHandle; }
-
-type FileWatcher = notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>;
-
 impl App {
-    const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-    const SAMPLE_COUNT: u32 = 4;
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    pub const SAMPLE_COUNT: u32 = 4;
 
-    pub fn new(window: &Window, file_watcher: FileWatcher) -> Result<Self> {
+    pub fn new(window: &Window, file_watcher: Watcher) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
             dx12_shader_compiler: wgpu::Dx12Compiler::Fxc,
@@ -233,7 +211,8 @@ impl App {
             .context("Failed to create Adapter")?;
 
         let limits = adapter.limits();
-        let features = adapter.features();
+        let mut features = adapter.features();
+        features.remove(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS); // |= wgpu::Features::MAPPABLE_PRIMARY_BUFFERS;
 
         let (device, queue) = adapter
             .request_device(
@@ -267,8 +246,8 @@ impl App {
             create_solid_color_texture(&device, &queue, vec4(1., 1., 1., 1.));
         let default_sampler = device.create_sampler(&DEFAULT_SAMPLER_DESC);
 
-        let node_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let node_bind_group_layout = Arc::new(device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
                 label: Some("Node Bind Group Layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -280,10 +259,11 @@ impl App {
                     },
                     count: None,
                 }],
-            });
+            },
+        ));
 
-        let material_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let material_bind_group_layout = Arc::new(device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
                 label: Some("Material Bind Group Layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -313,22 +293,11 @@ impl App {
                         count: None,
                     },
                 ],
-            });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Mesh Pipeline Layout"),
-            bind_group_layouts: &[
-                &global_uniform_binding.layout,
-                &camera_binding.bind_group_layout,
-                &node_bind_group_layout,
-                &material_bind_group_layout,
-            ],
-            push_constant_ranges: &[],
-        });
+            },
+        ));
 
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
-            file_watcher,
 
             blitter: Blitter::new(&device),
             adapter,
@@ -354,11 +323,10 @@ impl App {
             node_bind_group_layout,
             material_bind_group_layout,
 
-            pipeline_layout,
             pipeline_data: HashMap::new(),
             material_data: HashMap::new(),
 
-            pipeline_arena: slotmap::SlotMap::with_key(),
+            pipeline_arena: Arena::new(file_watcher),
         })
     }
 
@@ -405,7 +373,7 @@ impl App {
 
         for (args, pipeline) in &self.pipeline_data {
             let mut pass = Scope::start(&args.to_string(), &mut profiler, &mut pass, &self.device);
-            pass.set_pipeline(&pipeline.pipeline);
+            pass.set_pipeline(self.pipeline_arena.get_pipeline(pipeline.pipeline));
 
             for (material, primitives) in &pipeline.primitives {
                 pass.set_bind_group(3, &self.material_data[material], &[]);
@@ -466,7 +434,7 @@ impl App {
             .update(&self.queue, &self.global_uniform);
         self.camera_binding.update(&self.queue, &state.camera);
 
-        if state.frame_count % 100 == 0 {
+        if state.frame_count % 500 == 0 {
             let mut last_profile = vec![];
             while let Some(profiling_data) = self.profiler.borrow_mut().process_finished_frame() {
                 last_profile = profiling_data;
@@ -676,9 +644,33 @@ impl App {
                 };
 
                 let primitive = self.pipeline_data.entry(args).or_insert_with_key(|args| {
-                    let pipeline = create_mesh_pipeline(&self.device, &self.pipeline_layout, args);
+                    let path = Path::new(concat!(
+                        env!("CARGO_MANIFEST_DIR"),
+                        "/shaders/draw_mesh.wgsl"
+                    ));
+                    let shader_str = std::fs::read_to_string(path).unwrap();
+                    let module = self
+                        .device
+                        .create_shader_module(wgpu::ShaderModuleDescriptor {
+                            label: Some("Mesh Shader"),
+                            source: wgpu::ShaderSource::Wgsl(shader_str.into()),
+                        });
+                    let mut desc = pipeline::RenderPipelineDescriptor::from(args);
+                    // TODO: WHAT?!
+                    desc.layout = vec![
+                        self.global_uniform_binding.layout.clone(),
+                        self.camera_binding.bind_group_layout.clone(),
+                        self.node_bind_group_layout.clone(),
+                        self.material_bind_group_layout.clone(),
+                    ];
+                    let handle = self.pipeline_arena.process_render_pipeline(
+                        &self.device,
+                        path.into(),
+                        &module,
+                        desc,
+                    );
                     GpuPipeline {
-                        pipeline,
+                        pipeline: handle,
                         primitives: HashMap::new(),
                     }
                 });
@@ -691,6 +683,17 @@ impl App {
         }
 
         Ok(())
+    }
+
+    pub fn handle_events(&mut self, path: std::path::PathBuf, module: SpirvBytes) {
+        let module = self
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: path.to_str(),
+                source: wgpu::ShaderSource::SpirV(module.into()),
+            });
+        self.pipeline_arena
+            .reload_pipelines(&self.device, &path, &module);
     }
 
     fn create_depth_texture(

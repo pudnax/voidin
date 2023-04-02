@@ -1,12 +1,12 @@
 use crate::utils::NonZeroSized;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 pub struct GlobalUniformBinding {
     pub binding: wgpu::BindGroup,
-    pub layout: wgpu::BindGroupLayout,
+    pub layout: Arc<wgpu::BindGroupLayout>,
     buffer: wgpu::Buffer,
 }
 
@@ -44,7 +44,7 @@ impl GlobalUniformBinding {
         Self {
             binding: uniform,
             buffer,
-            layout,
+            layout: Arc::new(layout),
         }
     }
 

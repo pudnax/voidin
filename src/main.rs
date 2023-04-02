@@ -1,17 +1,14 @@
-use std::{
-    path::Path,
-    time::{Duration, Instant},
-};
+use std::time::Instant;
 
 use color_eyre::Result;
 use glam::vec3;
 use log::warn;
-use notify_debouncer_mini::{DebounceEventResult, DebouncedEventKind};
 use poisson_corrode::{
     app::{App, AppState},
     camera::Camera,
     gltf::GltfDocument,
     input::{KeyMap, KeyboardMap},
+    watcher::Watcher,
 };
 use wgpu::SurfaceError;
 use winit::{
@@ -26,14 +23,20 @@ const MAX_FRAME_TIME: f64 = 15. * FIXED_TIME_STEP; // 0.25;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
-    env_logger::init();
+    env_logger::builder()
+        .filter(Some("wgpu_core"), log::LevelFilter::Warn)
+        .filter(Some("wgpu_hal"), log::LevelFilter::Warn)
+        .filter(Some("naga"), log::LevelFilter::Error)
+        .filter(Some("mangohud"), log::LevelFilter::Error)
+        .filter(Some("winit"), log::LevelFilter::Error)
+        .init();
 
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
     let window = winit::window::WindowBuilder::new()
         .with_title("Poisson Corrode")
         .with_inner_size(LogicalSize::new(1280, 1024))
-        // .with_resizable(false)
-        // .with_decorations(false)
+        .with_resizable(false)
+        .with_decorations(false)
         .build(&event_loop)?;
 
     let PhysicalSize { width, height } = window.inner_size();
@@ -51,28 +54,7 @@ fn main() -> Result<()> {
         .bind(LControl, KeyMap::new("boost", -1.0));
     let mut app_state = AppState::new(camera, Some(keyboard_map));
 
-    let proxy = event_loop.create_proxy();
-    let mut watcher = notify_debouncer_mini::new_debouncer(
-        Duration::from_millis(100),
-        None,
-        move |res: DebounceEventResult| match res {
-            Ok(events) => {
-                if let Some(event) = events
-                    .into_iter()
-                    .filter(|e| e.kind == DebouncedEventKind::Any)
-                    .next()
-                {
-                    proxy
-                        .send_event(event.path)
-                        .expect("Event loop has been closed.");
-                }
-            }
-            Err(errors) => errors.iter().for_each(|e| println!("Error {:?}", e)),
-        },
-    )?;
-    watcher
-        .watcher()
-        .watch(Path::new("shaders"), notify::RecursiveMode::Recursive)?;
+    let watcher = Watcher::new(&event_loop)?;
 
     let mut app = App::new(&window, watcher)?;
     let info = app.get_info();
@@ -153,11 +135,11 @@ fn main() -> Result<()> {
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
+            Event::UserEvent((path, module)) => {
+                app.handle_events(path, module);
+            }
             Event::LoopDestroyed => {
                 println!("// End from the loop. Bye bye~⏎ ");
-            }
-            Event::UserEvent(event) => {
-                dbg!(event);
             }
             _ => {}
         }

@@ -1,4 +1,4 @@
-use std::num::NonZeroU64;
+use std::{num::NonZeroU64, sync::Arc};
 
 use dolly::{
     prelude::{Position, Smooth, YawPitch},
@@ -30,7 +30,7 @@ impl Default for CameraUniform {
 pub struct CameraBinding {
     pub buffer: wgpu::Buffer,
     pub binding: wgpu::BindGroup,
-    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub bind_group_layout: Arc<wgpu::BindGroupLayout>,
 }
 
 impl CameraBinding {
@@ -67,7 +67,7 @@ impl CameraBinding {
         Self {
             buffer,
             binding,
-            bind_group_layout,
+            bind_group_layout: Arc::new(bind_group_layout),
         }
     }
 

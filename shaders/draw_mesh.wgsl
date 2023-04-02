@@ -39,7 +39,7 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
-    let LIGHT_POS = vec3(150., 200.5, 150.);
+    let LIGHT_POS = vec3(15., 10.5, 15.);
 
     let vpos = camera.proj * camera.view * model * vec4(in.pos, 1.0);
     let pos = camera.view * model * vec4(in.pos, 1.0);
@@ -55,11 +55,11 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 fn shade(nor: vec3<f32>, light_dir: vec3<f32>, view: vec3<f32>, material_texture: vec4<f32>) -> vec3<f32> {
     let refl = reflect(light_dir, nor);
-    let spec = pow(max(dot(refl, view), 0.0), 16.0) * vec3(0.15);
+    let spec = pow(max(dot(refl, view), 0.0), 16.0) * vec3(0.015);
 
     let shade = dot(nor, light_dir);
     let diff = mix(max(shade, 0.0), shade * 0.5 + 0.5, 0.25) * material.base_color_factor;
-    let surface_color = material_texture.rgb * diff;
+    var surface_color = material_texture.rgb * diff + spec;
 
     return surface_color;
 }
@@ -74,7 +74,6 @@ fn fs_main_cutoff(vout: VertexOutput) -> @location(0) vec4<f32> {
 
     let nor = normalize(vout.normal);
     let light_dir = normalize(vout.light_vec);
-    // let light_dir = normalize(vec3(0.25, 0.5, .25));
     let view = normalize(vout.view_vec);
 
     let surface_color = shade(nor, light_dir, view, material_texture);
@@ -88,7 +87,6 @@ fn fs_main(vout: VertexOutput) -> @location(0) vec4<f32> {
 
     let nor = normalize(vout.normal);
     let light_dir = normalize(vout.light_vec);
-    // let light_dir = normalize(vec3(0.25, 0.5, .25));
     let view = normalize(vout.view_vec);
 
     let surface_color = shade(nor, light_dir, view, material_texture);
