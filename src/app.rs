@@ -1,20 +1,21 @@
 use std::{
     cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32, path::Path,
-    sync::Arc,
 };
 
 use color_eyre::{eyre::ContextCompat, Result};
 use glam::vec4;
+use indexmap::IndexMap;
 use pollster::FutureExt;
 use wgpu::{util::DeviceExt, FilterMode};
 use wgpu_profiler::{scope::Scope, GpuProfiler};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
+    bind_group_layout::{self, WrappedBindGroupLayout},
     camera::CameraBinding,
     gltf::{convert_sampler, mesh_mode_to_topology, GltfDocument},
     pipeline::{self, Arena},
-    utils::{create_solid_color_texture, NonZeroSized, UnwrapRepeat},
+    utils::{self, create_solid_color_texture, NonZeroSized, UnwrapRepeat},
     watcher::{SpirvBytes, Watcher},
 };
 
@@ -82,42 +83,37 @@ impl PipelineArgs {
             blend,
         }
     }
-}
 
-impl Display for PipelineArgs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{{ {:?}, {:?}, {:?}, {:?} }}",
-            self.topology, self.target_format, self.cull_mode, self.blend
-        )
-    }
-}
-
-impl From<&PipelineArgs> for pipeline::RenderPipelineDescriptor {
-    fn from(args: &PipelineArgs) -> Self {
+    fn to_desc(&self, app: &App) -> pipeline::RenderPipelineDescriptor {
+        let layout = vec![
+            app.global_uniform_binding.layout.clone(),
+            app.camera_binding.bind_group_layout.clone(),
+            app.node_bind_group_layout.clone(),
+            app.material_bind_group_layout.clone(),
+        ];
         let attributes = [
             wgpu::VertexFormat::Float32x3,
             wgpu::VertexFormat::Float32x3,
             wgpu::VertexFormat::Float32x2,
         ];
-        let fragment_entry_point = if args.cull_mode.is_some() {
+        let fragment_entry_point = if self.cull_mode.is_some() {
             "fs_main"
         } else {
             "fs_main_cutoff"
         };
-        Self {
+        pipeline::RenderPipelineDescriptor {
+            label: Some(self.to_string().into()),
             fragment: Some(pipeline::FragmentState {
                 entry_point: fragment_entry_point.into(),
                 targets: vec![Some(wgpu::ColorTargetState {
-                    format: args.target_format,
-                    blend: args.blend,
+                    format: self.target_format,
+                    blend: self.blend,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
             primitive: wgpu::PrimitiveState {
-                topology: args.topology,
-                cull_mode: args.cull_mode,
+                topology: self.topology,
+                cull_mode: self.cull_mode,
                 ..Default::default()
             },
             vertex: pipeline::VertexState {
@@ -127,9 +123,19 @@ impl From<&PipelineArgs> for pipeline::RenderPipelineDescriptor {
                 )],
                 ..Default::default()
             },
-            // TODO: layout
+            layout,
             ..Default::default()
         }
+    }
+}
+
+impl Display for PipelineArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{{ {:?}, {:?}, {:?}, {:?} }}",
+            self.topology, self.target_format, self.cull_mode, self.blend
+        )
     }
 }
 
@@ -173,10 +179,10 @@ pub struct App {
 
     camera_binding: CameraBinding,
 
-    node_bind_group_layout: Arc<wgpu::BindGroupLayout>,
-    material_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    node_bind_group_layout: bind_group_layout::BindGroupLayout,
+    material_bind_group_layout: bind_group_layout::BindGroupLayout,
 
-    pipeline_data: HashMap<PipelineArgs, GpuPipeline>,
+    primitive_data: IndexMap<pipeline::RenderHandle, HashMap<Option<usize>, Vec<Primitive>>>,
     material_data: HashMap<Option<usize>, wgpu::BindGroup>,
 
     default_sampler: wgpu::Sampler,
@@ -246,8 +252,8 @@ impl App {
             create_solid_color_texture(&device, &queue, vec4(1., 1., 1., 1.));
         let default_sampler = device.create_sampler(&DEFAULT_SAMPLER_DESC);
 
-        let node_bind_group_layout = Arc::new(device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        let node_bind_group_layout =
+            device.create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Node Bind Group Layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -259,11 +265,10 @@ impl App {
                     },
                     count: None,
                 }],
-            },
-        ));
+            });
 
-        let material_bind_group_layout = Arc::new(device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
+        let material_bind_group_layout =
+            device.create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Material Bind Group Layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -293,8 +298,7 @@ impl App {
                         count: None,
                     },
                 ],
-            },
-        ));
+            });
 
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
@@ -323,7 +327,7 @@ impl App {
             node_bind_group_layout,
             material_bind_group_layout,
 
-            pipeline_data: HashMap::new(),
+            primitive_data: IndexMap::new(),
             material_data: HashMap::new(),
 
             pipeline_arena: Arena::new(file_watcher),
@@ -371,11 +375,12 @@ impl App {
         pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
         pass.set_bind_group(1, &self.camera_binding.binding, &[]);
 
-        for (args, pipeline) in &self.pipeline_data {
-            let mut pass = Scope::start(&args.to_string(), &mut profiler, &mut pass, &self.device);
-            pass.set_pipeline(self.pipeline_arena.get_pipeline(pipeline.pipeline));
+        for (&pipeline, primitives) in &self.primitive_data {
+            let name = self.pipeline_arena.get_descriptor(pipeline).name();
+            let mut pass = Scope::start(name, &mut profiler, &mut pass, &self.device);
+            pass.set_pipeline(self.pipeline_arena.get_pipeline(pipeline));
 
-            for (material, primitives) in &pipeline.primitives {
+            for (material, primitives) in primitives {
                 pass.set_bind_group(3, &self.material_data[material], &[]);
                 for primitive in primitives {
                     pass.set_vertex_buffer(0, primitive.buffer.slice(..));
@@ -434,12 +439,12 @@ impl App {
             .update(&self.queue, &self.global_uniform);
         self.camera_binding.update(&self.queue, &state.camera);
 
-        if state.frame_count % 500 == 0 {
+        if state.frame_count % 100 == 0 {
             let mut last_profile = vec![];
             while let Some(profiling_data) = self.profiler.borrow_mut().process_finished_frame() {
                 last_profile = profiling_data;
             }
-            crate::utils::scopes_to_console_recursive(&last_profile, 0);
+            utils::scopes_to_console_recursive(&last_profile, 0);
             println!();
         }
     }
@@ -643,44 +648,36 @@ impl App {
                     buffer,
                 };
 
-                let primitive = self.pipeline_data.entry(args).or_insert_with_key(|args| {
-                    let path = Path::new(concat!(
-                        env!("CARGO_MANIFEST_DIR"),
-                        "/shaders/draw_mesh.wgsl"
-                    ));
-                    let shader_str = std::fs::read_to_string(path).unwrap();
-                    let module = self
-                        .device
-                        .create_shader_module(wgpu::ShaderModuleDescriptor {
-                            label: Some("Mesh Shader"),
-                            source: wgpu::ShaderSource::Wgsl(shader_str.into()),
-                        });
-                    let mut desc = pipeline::RenderPipelineDescriptor::from(args);
-                    // TODO: WHAT?!
-                    desc.layout = vec![
-                        self.global_uniform_binding.layout.clone(),
-                        self.camera_binding.bind_group_layout.clone(),
-                        self.node_bind_group_layout.clone(),
-                        self.material_bind_group_layout.clone(),
-                    ];
-                    let handle = self.pipeline_arena.process_render_pipeline(
-                        &self.device,
-                        path.into(),
-                        &module,
-                        desc,
-                    );
-                    GpuPipeline {
-                        pipeline: handle,
-                        primitives: HashMap::new(),
-                    }
-                });
-                primitive
-                    .primitives
+                let path = Path::new(concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/shaders/draw_mesh.wgsl"
+                ));
+                let module = utils::create_shader_module_with_path(&self.device, path);
+                let pipeline = self.pipeline_arena.process_render_pipeline(
+                    &self.device,
+                    path,
+                    &module,
+                    args.to_desc(self),
+                );
+                let primitives = self.primitive_data.entry(pipeline).or_default();
+                primitives
                     .entry(material.index())
-                    .or_insert(vec![])
+                    .or_default()
                     .push(gpu_primitive);
             }
         }
+
+        // Hack transparency ordering
+        self.primitive_data.sort_by(|&l, _, &r, _| {
+            use std::cmp::Ordering::*;
+            let l_desc = self.pipeline_arena.get_descriptor(l);
+            let r_desc = self.pipeline_arena.get_descriptor(r);
+            match (l_desc.primitive.cull_mode, r_desc.primitive.cull_mode) {
+                (None, Some(_)) => Less,
+                (Some(_), None) => Greater,
+                _ => Equal,
+            }
+        });
 
         Ok(())
     }

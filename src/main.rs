@@ -26,9 +26,9 @@ fn main() -> Result<()> {
     env_logger::builder()
         .filter(Some("wgpu_core"), log::LevelFilter::Warn)
         .filter(Some("wgpu_hal"), log::LevelFilter::Warn)
+        .filter(Some("mangohud"), log::LevelFilter::Warn)
+        .filter(Some("winit"), log::LevelFilter::Warn)
         .filter(Some("naga"), log::LevelFilter::Error)
-        .filter(Some("mangohud"), log::LevelFilter::Error)
-        .filter(Some("winit"), log::LevelFilter::Error)
         .init();
 
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();

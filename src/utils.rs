@@ -3,6 +3,7 @@ use std::{
     mem::size_of,
     num::NonZeroU64,
     ops::Range,
+    path::Path,
     time::Duration,
 };
 
@@ -12,7 +13,12 @@ use wgpu::util::DeviceExt;
 use wgpu_profiler::GpuTimerScopeResult;
 
 pub trait NonZeroSized: Sized {
-    const NSIZE: NonZeroU64 = unsafe { NonZeroU64::new_unchecked(size_of::<Self>() as _) };
+    const NSIZE: NonZeroU64 = {
+        if std::mem::size_of::<Self>() == 0 {
+            panic!("type is zero-sized");
+        }
+        unsafe { NonZeroU64::new_unchecked(size_of::<Self>() as _) }
+    };
 }
 impl<T> NonZeroSized for T where T: Sized {}
 
@@ -90,4 +96,15 @@ pub fn create_solid_color_texture(
         },
         bytemuck::bytes_of(&color),
     )
+}
+
+pub fn create_shader_module_with_path(
+    device: &wgpu::Device,
+    path: impl AsRef<Path>,
+) -> wgpu::ShaderModule {
+    let shader_str = std::fs::read_to_string(path.as_ref()).unwrap();
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: path.as_ref().file_name().and_then(|name| name.to_str()),
+        source: wgpu::ShaderSource::Wgsl(shader_str.into()),
+    })
 }

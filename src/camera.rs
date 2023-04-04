@@ -1,4 +1,4 @@
-use std::{num::NonZeroU64, sync::Arc};
+use std::num::NonZeroU64;
 
 use dolly::{
     prelude::{Position, Smooth, YawPitch},
@@ -6,6 +6,8 @@ use dolly::{
 };
 use glam::{Mat4, Quat, Vec3, Vec4};
 use wgpu::util::DeviceExt;
+
+use crate::bind_group_layout::{self, WrappedBindGroupLayout};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -30,7 +32,7 @@ impl Default for CameraUniform {
 pub struct CameraBinding {
     pub buffer: wgpu::Buffer,
     pub binding: wgpu::BindGroup,
-    pub bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    pub bind_group_layout: bind_group_layout::BindGroupLayout,
 }
 
 impl CameraBinding {
@@ -54,7 +56,7 @@ impl CameraBinding {
             contents: bytemuck::bytes_of(&CameraUniform::default()),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
-        let bind_group_layout = device.create_bind_group_layout(&Self::DESC);
+        let bind_group_layout = device.create_bind_group_layout_wrap(&Self::DESC);
         let binding = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Camera Bind Group"),
             layout: &bind_group_layout,
@@ -67,7 +69,7 @@ impl CameraBinding {
         Self {
             buffer,
             binding,
-            bind_group_layout: Arc::new(bind_group_layout),
+            bind_group_layout,
         }
     }
 

@@ -61,7 +61,9 @@ fn get_options() -> spv::Options {
         // translation to handle the storage support for formats.
         spv::Capability::StorageImageExtendedFormats,
         spv::Capability::MultiView,
-        //TODO: fill out the rest
+        // TODO: fill out the rest
+        spv::Capability::ImageBasic,
+        spv::Capability::ImageReadWrite,
     ];
 
     let mut flags = spv::WriterFlags::empty();

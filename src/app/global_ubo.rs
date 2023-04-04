@@ -1,12 +1,15 @@
-use crate::utils::NonZeroSized;
-use std::{sync::Arc, time::Duration};
+use crate::{
+    bind_group_layout::{self, WrappedBindGroupLayout},
+    utils::NonZeroSized,
+};
+use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 pub struct GlobalUniformBinding {
     pub binding: wgpu::BindGroup,
-    pub layout: Arc<wgpu::BindGroupLayout>,
+    pub layout: bind_group_layout::BindGroupLayout,
     buffer: wgpu::Buffer,
 }
 
@@ -32,7 +35,7 @@ impl GlobalUniformBinding {
             contents: bytemuck::bytes_of(&Uniform::default()),
         });
 
-        let layout = device.create_bind_group_layout(&Self::DESC);
+        let layout = device.create_bind_group_layout_wrap(&Self::DESC);
         let uniform = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Global Uniform Bind Group"),
             layout: &layout,
@@ -44,7 +47,7 @@ impl GlobalUniformBinding {
         Self {
             binding: uniform,
             buffer,
-            layout: Arc::new(layout),
+            layout,
         }
     }
 
