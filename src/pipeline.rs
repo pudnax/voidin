@@ -1,6 +1,6 @@
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     num::NonZeroU32,
     path::{Path, PathBuf},
 };
@@ -23,7 +23,7 @@ slotmap::new_key_type! {
 pub struct Arena {
     render: RenderArena,
     compute: ComputeArena,
-    path_mapping: HashMap<PathBuf, Vec<Either<RenderHandle, ComputeHandle>>>,
+    path_mapping: HashMap<PathBuf, HashSet<Either<RenderHandle, ComputeHandle>>>,
     file_watcher: Watcher,
 }
 
@@ -171,7 +171,7 @@ impl Arena {
         self.path_mapping
             .entry(path)
             .or_default()
-            .push(Either::Left(handle));
+            .insert(Either::Left(handle));
         Ok(handle)
     }
 
@@ -197,7 +197,7 @@ impl Arena {
         self.path_mapping
             .entry(path)
             .or_default()
-            .push(Either::Right(handle));
+            .insert(Either::Right(handle));
         Ok(handle)
     }
 
