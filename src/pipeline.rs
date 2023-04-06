@@ -13,7 +13,7 @@ use wgpu::{
     PushConstantRange, VertexAttribute, VertexFormat, VertexStepMode,
 };
 
-use crate::{app::App, bind_group_layout, view_target, watcher::Watcher};
+use crate::{app::App, bind_group_layout, utils::DeviceShaderExt, view_target, watcher::Watcher};
 
 slotmap::new_key_type! {
     pub struct RenderHandle;
@@ -165,7 +165,7 @@ impl Arena {
         descriptor: RenderPipelineDescriptor,
     ) -> Result<RenderHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = crate::utils::create_shader_module_from_path(device, &path)?;
+        let module = device.create_shader_with_compiler(&path)?;
         let handle = self.process_render_pipeline(device, &module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
@@ -191,7 +191,7 @@ impl Arena {
         descriptor: ComputePipelineDescriptor,
     ) -> Result<ComputeHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = crate::utils::create_shader_module_from_path(device, &path)?;
+        let module = device.create_shader_with_compiler(&path)?;
         let handle = self.process_compute_pipeline(device, &module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping

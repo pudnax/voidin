@@ -33,6 +33,8 @@ naga = { version = "0.11.0", features = [
 	"validate",
 	"span",
 ] }
+once_cell = "1.17.1"
+parking_lot = "0.12.1"
 
 [profile.dev.package."*"]
 opt-level = 1

@@ -1310,6 +1310,8 @@ dependencies = [
  "naga",
  "notify",
  "notify-debouncer-mini",
+ "once_cell",
+ "parking_lot",
  "pollster",
  "slotmap",
  "tobj",

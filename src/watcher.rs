@@ -8,8 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::shader_compiler::CompilerError;
-use crate::shader_compiler::ShaderCompiler;
+use crate::{shader_compiler::CompilerError, SHADER_COMPILER};
 
 pub type SpirvBytes = Vec<u32>;
 
@@ -44,7 +43,6 @@ fn watch_callback(
     event_loop: &EventLoop<(PathBuf, SpirvBytes)>,
 ) -> impl FnMut(notify_debouncer_mini::DebounceEventResult) {
     let proxy = event_loop.create_proxy();
-    let mut shader_compiler = ShaderCompiler::new();
     move |event| match event {
         Ok(events) => {
             if let Some(path) = events
@@ -58,7 +56,7 @@ fn watch_callback(
                     Some(OsStr::new("wgsl")),
                     "TODO: Support glsl shaders."
                 );
-                match shader_compiler.create_shader_module(&path) {
+                match SHADER_COMPILER.lock().create_shader_module(&path) {
                     Ok(module) => {
                         log::info!(
                             "Shader successfully compiled: {}",

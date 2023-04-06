@@ -33,7 +33,7 @@ impl ViewTarget {
 
     pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
         let mut desc = wgpu::TextureDescriptor {
-            label: Some("Target Texture"),
+            label: Some("Target Texture A"),
             size: wgpu::Extent3d {
                 width,
                 height,
@@ -47,7 +47,7 @@ impl ViewTarget {
             view_formats: &[Self::FORMAT, Self::FORMAT.add_srgb_suffix()],
         };
         let a = device.create_texture(&desc);
-        desc.label = Some("Target Texture Other");
+        desc.label = Some("Target Texture B");
         let b = device.create_texture(&desc);
         Self {
             main_texture: AtomicU8::new(0),
@@ -59,11 +59,8 @@ impl ViewTarget {
     }
 
     pub fn get_color_attachment(&self, color: Color) -> RenderPassColorAttachment {
-        let view = (self.main_texture.load(Ordering::Relaxed) == 0)
-            .then_some(&self.aview)
-            .unwrap_or(&self.bview);
         RenderPassColorAttachment {
-            view,
+            view: self.main_view(),
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(color),
@@ -108,14 +105,18 @@ impl ViewTarget {
         }
     }
 
-    pub fn tick(&self) {
-        self.main_texture.fetch_xor(1, Ordering::Relaxed);
-    }
-
     pub fn post_process_write(&self) -> PostProcessWrite {
-        PostProcessWrite {
-            source: self.main_view(),
-            destination: self.main_view_other(),
+        let old_target = self.main_texture.fetch_xor(1, Ordering::Relaxed);
+        if old_target == 0 {
+            PostProcessWrite {
+                source: &self.aview,
+                destination: &self.bview,
+            }
+        } else {
+            PostProcessWrite {
+                source: &self.bview,
+                destination: &self.aview,
+            }
         }
     }
 }

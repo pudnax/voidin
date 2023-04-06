@@ -8,3 +8,10 @@ pub mod shader_compiler;
 pub mod utils;
 pub mod view_target;
 pub mod watcher;
+
+use shader_compiler::ShaderCompiler;
+
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
+pub static SHADER_COMPILER: Lazy<Mutex<ShaderCompiler>> =
+    Lazy::new(|| Mutex::new(ShaderCompiler::default()));

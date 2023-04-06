@@ -382,7 +382,6 @@ impl App {
         let mut profiler = self.profiler.borrow_mut();
         let target = self.surface.get_current_texture()?;
         let target_view = target.texture.create_view(&Default::default());
-        self.view_target.tick();
 
         let mut encoder = self
             .device
@@ -446,46 +445,47 @@ impl App {
 
         drop(pass);
 
-        let post_process_target = self.view_target.post_process_write();
-        let tex_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Post: Texture Bind Group"),
-            layout: &self
-                .pipeline_arena
-                .get_descriptor(self.postprocess_pipeline)
-                .layout[1],
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&post_process_target.source),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.default_sampler),
-                },
-            ],
-        });
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Post Process Pass"),
-            color_attachments: &[Some(post_process_target.get_color_attachment(
-                wgpu::Color {
-                    r: 0.,
-                    g: 0.,
-                    b: 0.,
-                    a: 0.0,
-                },
-            ))],
-            depth_stencil_attachment: None,
-        });
-        pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
-        pass.set_bind_group(1, &tex_bind_group, &[]);
-        pass.set_pipeline(self.pipeline_arena.get_pipeline(self.postprocess_pipeline));
-        pass.draw(0..3, 0..1);
-        drop(pass);
+        {
+            let post_process_target = self.view_target.post_process_write();
+            let tex_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Post: Texture Bind Group"),
+                layout: &self
+                    .pipeline_arena
+                    .get_descriptor(self.postprocess_pipeline)
+                    .layout[1],
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&post_process_target.source),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.default_sampler),
+                    },
+                ],
+            });
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Post Process Pass"),
+                color_attachments: &[Some(post_process_target.get_color_attachment(
+                    wgpu::Color {
+                        r: 0.,
+                        g: 0.,
+                        b: 0.,
+                        a: 0.0,
+                    },
+                ))],
+                depth_stencil_attachment: None,
+            });
+            pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
+            pass.set_bind_group(1, &tex_bind_group, &[]);
+            pass.set_pipeline(self.pipeline_arena.get_pipeline(self.postprocess_pipeline));
+            pass.draw(0..3, 0..1);
+        }
 
         self.blitter.blit_to_texture(
             &self.device,
             &mut encoder,
-            &post_process_target.destination,
+            &self.view_target.main_view(),
             &target_view,
             self.surface_config.format,
         );

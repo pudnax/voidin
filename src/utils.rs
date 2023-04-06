@@ -6,11 +6,12 @@ use std::{
     time::Duration,
 };
 
-use color_eyre::eyre::{eyre, Context};
 use either::Either;
 use glam::Vec4;
 use wgpu::util::DeviceExt;
 use wgpu_profiler::GpuTimerScopeResult;
+
+use crate::SHADER_COMPILER;
 
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = {
@@ -98,16 +99,26 @@ pub fn create_solid_color_texture(
     )
 }
 
-pub fn create_shader_module_from_path(
-    device: &wgpu::Device,
-    path: impl AsRef<Path>,
-) -> color_eyre::Result<wgpu::ShaderModule> {
-    let shader_str = std::fs::read_to_string(path.as_ref())
-        .with_context(|| eyre!("Failed to open file: {}", path.as_ref().display()))?;
-    Ok(device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: path.as_ref().file_name().and_then(|name| name.to_str()),
-        source: wgpu::ShaderSource::Wgsl(shader_str.into()),
-    }))
+pub trait DeviceShaderExt {
+    fn create_shader_with_compiler(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> color_eyre::Result<wgpu::ShaderModule>;
+}
+
+impl DeviceShaderExt for wgpu::Device {
+    fn create_shader_with_compiler(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> color_eyre::Result<wgpu::ShaderModule> {
+        let bytes = SHADER_COMPILER.lock().create_shader_module(path.as_ref())?;
+
+        let module = self.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: path.as_ref().to_str(),
+            source: wgpu::ShaderSource::SpirV(bytes.into()),
+        });
+        Ok(module)
+    }
 }
 
 pub trait FormatConversions {

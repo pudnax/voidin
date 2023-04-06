@@ -19,7 +19,8 @@ impl ShaderCompiler {
     }
 
     pub fn create_shader_module(&mut self, path: &Path) -> Result<Vec<u32>, CompilerError> {
-        let source = std::fs::read_to_string(path)?;
+        let source = std::fs::read_to_string(path)
+            .map_err(|err| CompilerError::Read((err, path.display().to_string())))?;
         let module = self
             .parser
             .parse(&source)
@@ -99,19 +100,13 @@ fn get_options() -> spv::Options {
 }
 
 pub enum CompilerError {
-    Read(std::io::Error),
+    Read((std::io::Error, String)),
     Compile {
         error: wgsl::ParseError,
         source: String,
     },
     Validate(naga::WithSpan<ValidationError>),
     WriteSpirv(spv::Error),
-}
-
-impl From<std::io::Error> for CompilerError {
-    fn from(e: std::io::Error) -> Self {
-        Self::Read(e)
-    }
 }
 
 impl From<naga::WithSpan<ValidationError>> for CompilerError {
@@ -129,7 +124,7 @@ impl From<spv::Error> for CompilerError {
 impl std::fmt::Display for CompilerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Read(err) => write!(f, "{}", err),
+            Self::Read((err, path)) => write!(f, "{} with path: {}", err, path),
             Self::WriteSpirv(err) => write!(f, "{}", err),
             Self::Validate(err) => write!(f, "{}", err),
             Self::Compile { error, source } => {
@@ -143,7 +138,7 @@ impl std::fmt::Display for CompilerError {
 impl std::fmt::Debug for CompilerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Read(err) => write!(f, "{}", err),
+            Self::Read((err, path)) => write!(f, "{} with path: {path}", err),
             Self::WriteSpirv(err) => write!(f, "{}", err),
             Self::Validate(err) => write!(f, "{}", err),
             Self::Compile { error, source } => write!(f, "{}", error.emit_to_string(source)),
@@ -154,7 +149,7 @@ impl std::fmt::Debug for CompilerError {
 impl std::error::Error for CompilerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match *self {
-            Self::Read(ref e) => Some(e),
+            Self::Read((ref e, _)) => Some(e),
             Self::Compile { error: ref e, .. } => Some(e),
             Self::Validate(ref e) => Some(e),
             Self::WriteSpirv(ref e) => Some(e),
