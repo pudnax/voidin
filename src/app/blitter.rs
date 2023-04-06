@@ -53,26 +53,26 @@ impl Blitter {
         }
     }
 
-    pub fn _blit_to_texture(
+    pub fn blit_to_texture(
         &self,
         device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
-        src_texture: &wgpu::Texture,
+        src_texture: &wgpu::TextureView,
         dst_texture: &wgpu::TextureView,
+        dst_format: wgpu::TextureFormat,
     ) {
         let mut pipelines = self.pipelines.borrow_mut();
         let pipeline = pipelines
-            .entry(src_texture.format())
+            .entry(dst_format)
             .or_insert_with_key(|&format| Self::create_pipeline(device, &self.shader, format));
 
-        let src_texture_view = src_texture.create_view(&Default::default());
         let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&src_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&src_texture),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,

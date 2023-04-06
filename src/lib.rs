@@ -6,4 +6,5 @@ pub mod input;
 pub mod pipeline;
 pub mod shader_compiler;
 pub mod utils;
+pub mod view_target;
 pub mod watcher;

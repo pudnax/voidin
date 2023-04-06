@@ -6,39 +6,33 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytemuck = { version = "1.13.1", features = ["derive", "nightly_stdsimd"] }
-color-eyre = "0.6.2"
-crossbeam-channel = "0.5.7"
-dolly = "0.4.1"
-either = "1.8.1"
+log = "0.4.17"
 env_logger = "0.10.0"
+color-eyre = "0.6.2"
+either = "1.8.1"
+bytemuck = { version = "1.13.1", features = ["derive", "nightly_stdsimd"] }
+dolly = "0.4.1"
 glam = { version = "0.23.0", features = ["core-simd", "rand", "bytemuck"] }
 gltf = "1.1.0"
+tobj = "3.2.4"
 image = { version = "0.24.5", default-features = false, features = [
 	"jpeg",
 	"png",
 ] }
+notify = "5.1.0"
+notify-debouncer-mini = "0.2.1"
+slotmap = "1.0.6"
 indexmap = "1.9.3"
-log = "0.4.17"
+pollster = { version = "0.3.0", features = ["macro"] }
+wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
+wgpu-profiler = "0.11.0"
+winit = "0.28.3"
 naga = { version = "0.11.0", features = [
 	"spv-out",
 	"wgsl-in",
 	"validate",
 	"span",
 ] }
-notify = "5.1.0"
-notify-debouncer-mini = "0.2.1"
-pollster = { version = "0.3.0", features = ["macro"] }
-slotmap = "1.0.6"
-tobj = "3.2.4"
-wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
-wgpu-profiler = "0.11.0"
-winit = "0.28.3"
-
-[build-dependencies]
-anyhow = "1.0"
-fs_extra = "1.3"
-glob = "0.3"
 
 [profile.dev.package."*"]
 opt-level = 1

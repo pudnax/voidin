@@ -24,11 +24,11 @@ const MAX_FRAME_TIME: f64 = 15. * FIXED_TIME_STEP; // 0.25;
 fn main() -> Result<()> {
     color_eyre::install()?;
     env_logger::builder()
-        .filter(Some("wgpu_core"), log::LevelFilter::Warn)
-        .filter(Some("wgpu_hal"), log::LevelFilter::Warn)
-        .filter(Some("mangohud"), log::LevelFilter::Warn)
-        .filter(Some("winit"), log::LevelFilter::Warn)
-        .filter(Some("naga"), log::LevelFilter::Error)
+        .filter_module("wgpu_core", log::LevelFilter::Warn)
+        .filter_module("wgpu_hal", log::LevelFilter::Warn)
+        .filter_module("mangohud", log::LevelFilter::Warn)
+        .filter_module("winit", log::LevelFilter::Warn)
+        .filter_module("naga", log::LevelFilter::Error)
         .init();
 
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();

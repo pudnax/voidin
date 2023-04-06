@@ -1,10 +1,11 @@
 use std::{
     borrow::Cow,
-    collections::{hash_map::Entry, HashMap},
+    collections::HashMap,
     num::NonZeroU32,
     path::{Path, PathBuf},
 };
 
+use color_eyre::Result;
 use either::Either;
 use slotmap::{SecondaryMap, SlotMap};
 use wgpu::{
@@ -12,7 +13,7 @@ use wgpu::{
     PushConstantRange, VertexAttribute, VertexFormat, VertexStepMode,
 };
 
-use crate::{app::App, bind_group_layout, watcher::Watcher};
+use crate::{app::App, bind_group_layout, view_target, watcher::Watcher};
 
 slotmap::new_key_type! {
     pub struct RenderHandle;
@@ -39,16 +40,12 @@ impl RenderArena {
         module: &wgpu::ShaderModule,
         descriptor: RenderPipelineDescriptor,
     ) -> RenderHandle {
-        match self.cached.entry(descriptor.clone()) {
-            Entry::Occupied(entry) => *entry.get(),
-            Entry::Vacant(entry) => {
-                let pipeline = entry.key().process(device, module);
-                let handle = self.pipelines.insert(pipeline);
-                self.descriptors.insert(handle, descriptor);
-                entry.insert(handle);
-                handle
-            }
-        }
+        *self.cached.entry(descriptor).or_insert_with_key(|args| {
+            let pipeline = args.process(device, module);
+            let handle = self.pipelines.insert(pipeline);
+            self.descriptors.insert(handle, args.clone());
+            handle
+        })
     }
 
     fn reload_pipeline(
@@ -75,16 +72,12 @@ impl ComputeArena {
         module: &wgpu::ShaderModule,
         descriptor: ComputePipelineDescriptor,
     ) -> ComputeHandle {
-        match self.cached.entry(descriptor.clone()) {
-            Entry::Occupied(entry) => *entry.get(),
-            Entry::Vacant(entry) => {
-                let pipeline = entry.key().process(device, module);
-                let handle = self.pipelines.insert(pipeline);
-                self.descriptors.insert(handle, descriptor);
-                entry.insert(handle);
-                handle
-            }
-        }
+        *self.cached.entry(descriptor).or_insert_with_key(|args| {
+            let pipeline = args.process(device, module);
+            let handle = self.pipelines.insert(pipeline);
+            self.descriptors.insert(handle, args.clone());
+            handle
+        })
     }
 
     fn reload_pipeline(
@@ -156,30 +149,39 @@ impl Arena {
         handle.get_descriptor(self)
     }
 
+    pub fn process_render_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        module: &wgpu::ShaderModule,
+        descriptor: RenderPipelineDescriptor,
+    ) -> RenderHandle {
+        self.render.process_pipeline(device, module, descriptor)
+    }
+
     pub fn process_render_pipeline_from_path(
         &mut self,
         device: &wgpu::Device,
         path: impl AsRef<Path>,
         descriptor: RenderPipelineDescriptor,
-    ) -> RenderHandle {
-        let module = crate::utils::create_shader_module_with_path(device, path.as_ref());
-        self.process_render_pipeline(device, path.as_ref(), &module, descriptor)
-    }
-
-    pub fn process_render_pipeline(
-        &mut self,
-        device: &wgpu::Device,
-        path: &Path,
-        module: &wgpu::ShaderModule,
-        descriptor: RenderPipelineDescriptor,
-    ) -> RenderHandle {
-        self.file_watcher.watch_file(path).unwrap();
-        let handle = self.render.process_pipeline(device, module, descriptor);
+    ) -> Result<RenderHandle> {
+        let path = path.as_ref().canonicalize()?;
+        let module = crate::utils::create_shader_module_from_path(device, &path)?;
+        let handle = self.process_render_pipeline(device, &module, descriptor);
+        self.file_watcher.watch_file(&path)?;
         self.path_mapping
-            .entry(path.to_path_buf())
+            .entry(path)
             .or_default()
             .push(Either::Left(handle));
-        handle
+        Ok(handle)
+    }
+
+    pub fn process_compute_pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        module: &wgpu::ShaderModule,
+        descriptor: ComputePipelineDescriptor,
+    ) -> ComputeHandle {
+        self.compute.process_pipeline(device, module, descriptor)
     }
 
     pub fn process_compute_pipeline_from_path(
@@ -187,25 +189,16 @@ impl Arena {
         device: &wgpu::Device,
         path: impl AsRef<Path>,
         descriptor: ComputePipelineDescriptor,
-    ) -> ComputeHandle {
-        let module = crate::utils::create_shader_module_with_path(device, path.as_ref());
-        self.process_compute_pipeline(device, path.as_ref(), &module, descriptor)
-    }
-
-    pub fn process_compute_pipeline(
-        &mut self,
-        device: &wgpu::Device,
-        path: &Path,
-        module: &wgpu::ShaderModule,
-        descriptor: ComputePipelineDescriptor,
-    ) -> ComputeHandle {
-        self.file_watcher.watch_file(path).unwrap();
-        let handle = self.compute.process_pipeline(device, module, descriptor);
+    ) -> Result<ComputeHandle> {
+        let path = path.as_ref().canonicalize()?;
+        let module = crate::utils::create_shader_module_from_path(device, &path)?;
+        let handle = self.process_compute_pipeline(device, &module, descriptor);
+        self.file_watcher.watch_file(&path)?;
         self.path_mapping
-            .entry(path.to_path_buf())
+            .entry(path)
             .or_default()
             .push(Either::Right(handle));
-        handle
+        Ok(handle)
     }
 
     pub fn reload_pipelines(
@@ -230,10 +223,10 @@ pub struct RenderPipelineDescriptor {
     pub layout: Vec<bind_group_layout::BindGroupLayout>,
     pub push_constant_ranges: Vec<PushConstantRange>,
     pub vertex: VertexState,
+    pub fragment: Option<FragmentState>,
     pub primitive: PrimitiveState,
     pub depth_stencil: Option<DepthStencilState>,
     pub multisample: MultisampleState,
-    pub fragment: Option<FragmentState>,
     pub multiview: Option<NonZeroU32>,
 }
 
@@ -376,7 +369,7 @@ impl Default for FragmentState {
     fn default() -> Self {
         Self {
             entry_point: "fs_main".into(),
-            targets: vec![Some(wgpu::TextureFormat::Bgra8UnormSrgb.into())],
+            targets: vec![Some(view_target::ViewTarget::FORMAT.into())],
         }
     }
 }

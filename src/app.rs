@@ -16,6 +16,7 @@ use crate::{
     gltf::{convert_sampler, mesh_mode_to_topology, GltfDocument},
     pipeline::{self, Arena},
     utils::{self, create_solid_color_texture, NonZeroSized, UnwrapRepeat},
+    view_target,
     watcher::{SpirvBytes, Watcher},
 };
 
@@ -168,7 +169,7 @@ pub struct App {
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
     depth_texture: wgpu::TextureView,
-    multisampled_framebuffer: wgpu::TextureView,
+    view_target: view_target::ViewTarget,
     queue: wgpu::Queue,
 
     pub limits: wgpu::Limits,
@@ -185,6 +186,8 @@ pub struct App {
     primitive_data: IndexMap<pipeline::RenderHandle, HashMap<Option<usize>, Vec<Primitive>>>,
     material_data: HashMap<Option<usize>, wgpu::BindGroup>,
 
+    postprocess_pipeline: pipeline::RenderHandle,
+
     default_sampler: wgpu::Sampler,
     opaque_white_texture: wgpu::Texture,
 
@@ -197,7 +200,7 @@ pub struct App {
 
 impl App {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-    pub const SAMPLE_COUNT: u32 = 4;
+    pub const SAMPLE_COUNT: u32 = 1;
 
     pub fn new(window: &Window, file_watcher: Watcher) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -237,8 +240,10 @@ impl App {
             .context("Surface in not supported")?;
         surface.configure(&device, &surface_config);
         let depth_texture = Self::create_depth_texture(&device, &surface_config);
-        let multisampled_framebuffer =
-            Self::create_multisampled_framebuffer(&device, &surface_config);
+
+        let view_target = view_target::ViewTarget::new(&device, width, height);
+
+        let mut pipeline_arena = Arena::new(file_watcher);
 
         let camera_binding = CameraBinding::new(&device);
         let global_uniform_binding = global_ubo::GlobalUniformBinding::new(&device);
@@ -300,17 +305,54 @@ impl App {
                 ],
             });
 
+        let path = "shaders/postprocess.wgsl";
+        let postprocess_bind_group_layout =
+            device.create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Post Process Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
+                            | wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
+                            | wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+        let postprocess_desc = pipeline::RenderPipelineDescriptor {
+            label: Some("Post Process Pipeline".into()),
+            layout: vec![
+                global_uniform_binding.layout.clone(),
+                postprocess_bind_group_layout,
+            ],
+            depth_stencil: None,
+            ..Default::default()
+        };
+        let postprocess_pipeline =
+            pipeline_arena.process_render_pipeline_from_path(&device, path, postprocess_desc)?;
+
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
-
             blitter: Blitter::new(&device),
+
             adapter,
             instance,
             device,
             surface,
             surface_config,
             depth_texture,
-            multisampled_framebuffer,
+            view_target,
             queue,
 
             default_sampler,
@@ -327,10 +369,12 @@ impl App {
             node_bind_group_layout,
             material_bind_group_layout,
 
+            postprocess_pipeline,
+
             primitive_data: IndexMap::new(),
             material_data: HashMap::new(),
 
-            pipeline_arena: Arena::new(file_watcher),
+            pipeline_arena,
         })
     }
 
@@ -338,6 +382,7 @@ impl App {
         let mut profiler = self.profiler.borrow_mut();
         let target = self.surface.get_current_texture()?;
         let target_view = target.texture.create_view(&Default::default());
+        self.view_target.tick();
 
         let mut encoder = self
             .device
@@ -348,20 +393,13 @@ impl App {
         profiler.begin_scope("Main Render Scope ", &mut encoder, &self.device);
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass Descriptor"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.multisampled_framebuffer,
-                resolve_target: Some(&target_view),
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.13,
-                        g: 0.13,
-                        b: 0.13,
-                        a: 1.0,
-                    }),
-                    store: false,
-                },
-            })],
+            label: Some("Render Pass"),
+            color_attachments: &[Some(self.view_target.get_color_attachment(wgpu::Color {
+                r: 0.13,
+                g: 0.13,
+                b: 0.13,
+                a: 0.0,
+            }))],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.depth_texture,
                 depth_ops: Some(wgpu::Operations {
@@ -408,12 +446,56 @@ impl App {
 
         drop(pass);
 
-        profiler.end_scope(&mut encoder);
+        let post_process_target = self.view_target.post_process_write();
+        let tex_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Post: Texture Bind Group"),
+            layout: &self
+                .pipeline_arena
+                .get_descriptor(self.postprocess_pipeline)
+                .layout[1],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&post_process_target.source),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.default_sampler),
+                },
+            ],
+        });
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Post Process Pass"),
+            color_attachments: &[Some(post_process_target.get_color_attachment(
+                wgpu::Color {
+                    r: 0.,
+                    g: 0.,
+                    b: 0.,
+                    a: 0.0,
+                },
+            ))],
+            depth_stencil_attachment: None,
+        });
+        pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
+        pass.set_bind_group(1, &tex_bind_group, &[]);
+        pass.set_pipeline(self.pipeline_arena.get_pipeline(self.postprocess_pipeline));
+        pass.draw(0..3, 0..1);
+        drop(pass);
 
+        self.blitter.blit_to_texture(
+            &self.device,
+            &mut encoder,
+            &post_process_target.destination,
+            &target_view,
+            self.surface_config.format,
+        );
+
+        profiler.end_scope(&mut encoder);
         profiler.resolve_queries(&mut encoder);
 
         self.queue.submit(Some(encoder.finish()));
         target.present();
+
         profiler.end_frame().ok();
 
         Ok(())
@@ -427,8 +509,7 @@ impl App {
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
         self.depth_texture = Self::create_depth_texture(&self.device, &self.surface_config);
-        self.multisampled_framebuffer =
-            Self::create_multisampled_framebuffer(&self.device, &self.surface_config);
+        self.view_target = view_target::ViewTarget::new(&self.device, width, height);
         self.global_uniform.resolution = [width as f32, height as f32];
     }
 
@@ -615,7 +696,7 @@ impl App {
 
                 let args = PipelineArgs::new(
                     mesh_mode_to_topology(primitive.mode()),
-                    self.surface_config.format,
+                    self.view_target.format(),
                     material.double_sided(),
                     material.alpha_mode(),
                 );
@@ -652,13 +733,11 @@ impl App {
                     env!("CARGO_MANIFEST_DIR"),
                     "/shaders/draw_mesh.wgsl"
                 ));
-                let module = utils::create_shader_module_with_path(&self.device, path);
-                let pipeline = self.pipeline_arena.process_render_pipeline(
+                let pipeline = self.pipeline_arena.process_render_pipeline_from_path(
                     &self.device,
                     path,
-                    &module,
                     args.to_desc(self),
-                );
+                )?;
                 let primitives = self.primitive_data.entry(pipeline).or_default();
                 primitives
                     .entry(material.index())
@@ -710,29 +789,6 @@ impl App {
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let tex = device.create_texture(&desc);
-        tex.create_view(&Default::default())
-    }
-
-    fn create_multisampled_framebuffer(
-        device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-    ) -> wgpu::TextureView {
-        let size = wgpu::Extent3d {
-            width: config.width,
-            height: config.height,
-            depth_or_array_layers: 1,
-        };
-        let desc = wgpu::TextureDescriptor {
-            label: Some("Multisampled Texture"),
-            size,
-            mip_level_count: 1,
-            sample_count: Self::SAMPLE_COUNT,
-            dimension: wgpu::TextureDimension::D2,
-            format: config.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         };
         let tex = device.create_texture(&desc);
