@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 use notify_debouncer_mini::DebouncedEventKind;
-use winit::event_loop::EventLoop;
+use winit::event_loop::EventLoopProxy;
 
 use std::{
     ffi::OsStr,
@@ -21,11 +21,11 @@ pub struct Watcher {
 }
 
 impl Watcher {
-    pub fn new(event_loop: &EventLoop<(PathBuf, SpirvBytes)>) -> Result<Self> {
+    pub fn new(proxy: EventLoopProxy<(PathBuf, SpirvBytes)>) -> Result<Self> {
         let watcher = notify_debouncer_mini::new_debouncer(
             Duration::from_millis(100),
             None,
-            watch_callback(event_loop),
+            watch_callback(proxy),
         )?;
 
         Ok(Self { watcher })
@@ -40,9 +40,8 @@ impl Watcher {
 }
 
 fn watch_callback(
-    event_loop: &EventLoop<(PathBuf, SpirvBytes)>,
+    proxy: EventLoopProxy<(PathBuf, SpirvBytes)>,
 ) -> impl FnMut(notify_debouncer_mini::DebounceEventResult) {
-    let proxy = event_loop.create_proxy();
     move |event| match event {
         Ok(events) => {
             if let Some(path) = events

@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell, collections::HashMap, fmt::Display, iter::zip, num::NonZeroU32, path::Path,
+    sync::Arc,
 };
 
 use color_eyre::{eyre::ContextCompat, Result};
@@ -14,10 +15,11 @@ use crate::{
     bind_group_layout::{self, WrappedBindGroupLayout},
     camera::CameraBinding,
     gltf::{convert_sampler, mesh_mode_to_topology, GltfDocument},
-    pipeline::{self, Arena},
+    pipeline::{self, Arena, Handle},
     utils::{self, create_solid_color_texture, NonZeroSized, UnwrapRepeat},
     view_target,
     watcher::{SpirvBytes, Watcher},
+    Pass,
 };
 
 pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
@@ -37,6 +39,7 @@ pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::
 
 mod blitter;
 mod global_ubo;
+mod postprocess_pass;
 mod state;
 use blitter::Blitter;
 pub use state::AppState;
@@ -165,7 +168,7 @@ pub struct GpuPipeline {
 pub struct App {
     adapter: wgpu::Adapter,
     pub instance: wgpu::Instance,
-    pub device: wgpu::Device,
+    pub device: Arc<wgpu::Device>,
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
     depth_texture: wgpu::TextureView,
@@ -186,7 +189,7 @@ pub struct App {
     primitive_data: IndexMap<pipeline::RenderHandle, HashMap<Option<usize>, Vec<Primitive>>>,
     material_data: HashMap<Option<usize>, wgpu::BindGroup>,
 
-    postprocess_pipeline: pipeline::RenderHandle,
+    postprocess_pipeline: postprocess_pass::PostProcessPipeline,
 
     default_sampler: wgpu::Sampler,
     opaque_white_texture: wgpu::Texture,
@@ -221,7 +224,7 @@ impl App {
 
         let limits = adapter.limits();
         let mut features = adapter.features();
-        features.remove(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS); // |= wgpu::Features::MAPPABLE_PRIMARY_BUFFERS;
+        features.remove(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS);
 
         let (device, queue) = adapter
             .request_device(
@@ -233,6 +236,7 @@ impl App {
                 None,
             )
             .block_on()?;
+        let device = Arc::new(device);
 
         let PhysicalSize { width, height } = window.inner_size();
         let surface_config = surface
@@ -243,7 +247,7 @@ impl App {
 
         let view_target = view_target::ViewTarget::new(&device, width, height);
 
-        let mut pipeline_arena = Arena::new(file_watcher);
+        let mut pipeline_arena = Arena::new(device.clone(), file_watcher);
 
         let camera_binding = CameraBinding::new(&device);
         let global_uniform_binding = global_ubo::GlobalUniformBinding::new(&device);
@@ -306,41 +310,11 @@ impl App {
             });
 
         let path = "shaders/postprocess.wgsl";
-        let postprocess_bind_group_layout =
-            device.create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Post Process Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
-                            | wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
-                            | wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-        let postprocess_desc = pipeline::RenderPipelineDescriptor {
-            label: Some("Post Process Pipeline".into()),
-            layout: vec![
-                global_uniform_binding.layout.clone(),
-                postprocess_bind_group_layout,
-            ],
-            depth_stencil: None,
-            ..Default::default()
-        };
-        let postprocess_pipeline =
-            pipeline_arena.process_render_pipeline_from_path(&device, path, postprocess_desc)?;
+        let postprocess_pipeline = postprocess_pass::PostProcessPipeline::new(
+            &mut pipeline_arena,
+            global_uniform_binding.layout.clone(),
+            path,
+        )?;
 
         Ok(Self {
             profiler: RefCell::new(GpuProfiler::new(4, queue.get_timestamp_period(), features)),
@@ -413,9 +387,9 @@ impl App {
         pass.set_bind_group(1, &self.camera_binding.binding, &[]);
 
         for (&pipeline, primitives) in &self.primitive_data {
-            let name = self.pipeline_arena.get_descriptor(pipeline).name();
+            let name = self.get_pipeline_desc(pipeline).name();
             let mut pass = Scope::start(name, &mut profiler, &mut pass, &self.device);
-            pass.set_pipeline(self.pipeline_arena.get_pipeline(pipeline));
+            pass.set_pipeline(self.get_pipeline(pipeline));
 
             for (material, primitives) in primitives {
                 pass.set_bind_group(3, &self.material_data[material], &[]);
@@ -445,46 +419,17 @@ impl App {
 
         drop(pass);
 
-        {
-            let post_process_target = self.view_target.post_process_write();
-            let tex_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Post: Texture Bind Group"),
-                layout: &self
-                    .pipeline_arena
-                    .get_descriptor(self.postprocess_pipeline)
-                    .layout[1],
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&post_process_target.source),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&self.default_sampler),
-                    },
-                ],
-            });
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Post Process Pass"),
-                color_attachments: &[Some(post_process_target.get_color_attachment(
-                    wgpu::Color {
-                        r: 0.,
-                        g: 0.,
-                        b: 0.,
-                        a: 0.0,
-                    },
-                ))],
-                depth_stencil_attachment: None,
-            });
-            pass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
-            pass.set_bind_group(1, &tex_bind_group, &[]);
-            pass.set_pipeline(self.pipeline_arena.get_pipeline(self.postprocess_pipeline));
-            pass.draw(0..3, 0..1);
-        }
+        let resource = postprocess_pass::PostProcessResource {
+            arena: &self.pipeline_arena,
+            global_binding: &self.global_uniform_binding.binding,
+            sampler: &self.default_sampler,
+        };
+        self.postprocess_pipeline
+            .record(&mut encoder, &self.view_target, resource);
 
         self.blitter.blit_to_texture(
-            &self.device,
             &mut encoder,
+            &self.device,
             &self.view_target.main_view(),
             &target_view,
             self.surface_config.format,
@@ -589,7 +534,7 @@ impl App {
 
                     let mut encoder = self.device.create_command_encoder(&Default::default());
                     self.blitter
-                        .generate_mipmaps(&self.device, &mut encoder, &texture);
+                        .generate_mipmaps(&mut encoder, &self.device, &texture);
                     self.queue.submit(Some(encoder.finish()));
 
                     self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -733,11 +678,9 @@ impl App {
                     env!("CARGO_MANIFEST_DIR"),
                     "/shaders/draw_mesh.wgsl"
                 ));
-                let pipeline = self.pipeline_arena.process_render_pipeline_from_path(
-                    &self.device,
-                    path,
-                    args.to_desc(self),
-                )?;
+                let pipeline = self
+                    .pipeline_arena
+                    .process_render_pipeline_from_path(path, args.to_desc(self))?;
                 let primitives = self.primitive_data.entry(pipeline).or_default();
                 primitives
                     .entry(material.index())
@@ -768,8 +711,15 @@ impl App {
                 label: path.to_str(),
                 source: wgpu::ShaderSource::SpirV(module.into()),
             });
-        self.pipeline_arena
-            .reload_pipelines(&self.device, &path, &module);
+        self.pipeline_arena.reload_pipelines(&path, &module);
+    }
+
+    fn get_pipeline<H: Handle>(&self, handle: H) -> &H::Pipeline {
+        self.pipeline_arena.get_pipeline(handle)
+    }
+
+    fn get_pipeline_desc<H: Handle>(&self, handle: H) -> &H::Descriptor {
+        self.pipeline_arena.get_descriptor(handle)
     }
 
     fn create_depth_texture(

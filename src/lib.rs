@@ -13,5 +13,18 @@ use shader_compiler::ShaderCompiler;
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use view_target::ViewTarget;
+
 pub static SHADER_COMPILER: Lazy<Mutex<ShaderCompiler>> =
     Lazy::new(|| Mutex::new(ShaderCompiler::default()));
+
+pub trait Pass {
+    type Resoutces<'a>;
+
+    fn record<'a>(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view_target: &ViewTarget,
+        resources: Self::Resoutces<'a>,
+    );
+}

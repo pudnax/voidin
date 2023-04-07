@@ -54,7 +54,7 @@ fn main() -> Result<()> {
         .bind(LControl, KeyMap::new("boost", -1.0));
     let mut app_state = AppState::new(camera, Some(keyboard_map));
 
-    let watcher = Watcher::new(&event_loop)?;
+    let watcher = Watcher::new(event_loop.create_proxy())?;
 
     let mut app = App::new(&window, watcher)?;
     let info = app.get_info();

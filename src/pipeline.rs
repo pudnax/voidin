@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     num::NonZeroU32,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use color_eyre::Result;
@@ -25,6 +26,7 @@ pub struct Arena {
     compute: ComputeArena,
     path_mapping: HashMap<PathBuf, HashSet<Either<RenderHandle, ComputeHandle>>>,
     file_watcher: Watcher,
+    pub device: Arc<wgpu::Device>,
 }
 
 struct RenderArena {
@@ -124,7 +126,7 @@ impl Handle for ComputeHandle {
 }
 
 impl Arena {
-    pub fn new(file_watcher: Watcher) -> Self {
+    pub fn new(device: Arc<wgpu::Device>, file_watcher: Watcher) -> Self {
         Self {
             render: RenderArena {
                 pipelines: SlotMap::with_key(),
@@ -138,6 +140,7 @@ impl Arena {
             },
             path_mapping: HashMap::new(),
             file_watcher,
+            device,
         }
     }
 
@@ -151,22 +154,21 @@ impl Arena {
 
     pub fn process_render_pipeline(
         &mut self,
-        device: &wgpu::Device,
         module: &wgpu::ShaderModule,
         descriptor: RenderPipelineDescriptor,
     ) -> RenderHandle {
-        self.render.process_pipeline(device, module, descriptor)
+        self.render
+            .process_pipeline(&self.device, module, descriptor)
     }
 
     pub fn process_render_pipeline_from_path(
         &mut self,
-        device: &wgpu::Device,
         path: impl AsRef<Path>,
         descriptor: RenderPipelineDescriptor,
     ) -> Result<RenderHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = device.create_shader_with_compiler(&path)?;
-        let handle = self.process_render_pipeline(device, &module, descriptor);
+        let module = self.device.create_shader_with_compiler(&path)?;
+        let handle = self.process_render_pipeline(&module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
             .entry(path)
@@ -177,22 +179,21 @@ impl Arena {
 
     pub fn process_compute_pipeline(
         &mut self,
-        device: &wgpu::Device,
         module: &wgpu::ShaderModule,
         descriptor: ComputePipelineDescriptor,
     ) -> ComputeHandle {
-        self.compute.process_pipeline(device, module, descriptor)
+        self.compute
+            .process_pipeline(&self.device, module, descriptor)
     }
 
     pub fn process_compute_pipeline_from_path(
         &mut self,
-        device: &wgpu::Device,
         path: impl AsRef<Path>,
         descriptor: ComputePipelineDescriptor,
     ) -> Result<ComputeHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = device.create_shader_with_compiler(&path)?;
-        let handle = self.process_compute_pipeline(device, &module, descriptor);
+        let module = self.device.create_shader_with_compiler(&path)?;
+        let handle = self.process_compute_pipeline(&module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
             .entry(path)
@@ -201,16 +202,13 @@ impl Arena {
         Ok(handle)
     }
 
-    pub fn reload_pipelines(
-        &mut self,
-        device: &wgpu::Device,
-        path: &Path,
-        module: &wgpu::ShaderModule,
-    ) {
+    pub fn reload_pipelines(&mut self, path: &Path, module: &wgpu::ShaderModule) {
         for handle in &self.path_mapping[path] {
             match handle {
-                Either::Left(handle) => self.render.reload_pipeline(device, module, *handle),
-                Either::Right(handle) => self.compute.reload_pipeline(device, module, *handle),
+                Either::Left(handle) => self.render.reload_pipeline(&self.device, module, *handle),
+                Either::Right(handle) => {
+                    self.compute.reload_pipeline(&self.device, module, *handle)
+                }
             }
         }
     }

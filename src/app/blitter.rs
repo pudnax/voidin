@@ -55,8 +55,8 @@ impl Blitter {
 
     pub fn blit_to_texture(
         &self,
-        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
+        device: &wgpu::Device,
         src_texture: &wgpu::TextureView,
         dst_texture: &wgpu::TextureView,
         dst_format: wgpu::TextureFormat,
@@ -101,8 +101,8 @@ impl Blitter {
 
     pub fn generate_mipmaps(
         &self,
-        device: &wgpu::Device,
         encoder: &mut wgpu::CommandEncoder,
+        device: &wgpu::Device,
         texture: &wgpu::Texture,
     ) {
         let mut pipelines = self.pipelines.borrow_mut();
