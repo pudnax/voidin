@@ -5,7 +5,7 @@ use wgpu::{
     Device, Queue,
 };
 
-pub struct ResizingBuffer<T> {
+pub struct ResizableBuffer<T> {
     label: Cow<'static, str>,
     buffer: Buffer,
     usages: BufferUsages,
@@ -14,7 +14,7 @@ pub struct ResizingBuffer<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T> std::ops::Deref for ResizingBuffer<T> {
+impl<T> std::ops::Deref for ResizableBuffer<T> {
     type Target = Buffer;
 
     fn deref(&self) -> &Self::Target {
@@ -22,9 +22,10 @@ impl<T> std::ops::Deref for ResizingBuffer<T> {
     }
 }
 
-impl<T: bytemuck::Pod> ResizingBuffer<T> {
-    pub fn new(device: &Device, usages: BufferUsages, label: Cow<'static, str>) -> Self {
+impl<T: bytemuck::Pod> ResizableBuffer<T> {
+    pub fn new(device: &Device, usages: BufferUsages, label: Option<Cow<'static, str>>) -> Self {
         let default_cap = 32;
+        let label = label.unwrap_or("Resizable Buffer".into());
         let buffer = device.create_buffer(&BufferDescriptor {
             label: Some(&label),
             size: (size_of::<T>() * default_cap) as u64,
@@ -48,9 +49,10 @@ impl<T: bytemuck::Pod> ResizingBuffer<T> {
     pub fn new_with_data(
         device: &Device,
         usages: BufferUsages,
-        label: Cow<'static, str>,
+        label: Option<Cow<'static, str>>,
         data: &[T],
     ) -> Self {
+        let label = label.unwrap_or("Resizable Buffer".into());
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&label),
             contents: bytemuck::cast_slice(data),
@@ -68,11 +70,16 @@ impl<T: bytemuck::Pod> ResizingBuffer<T> {
         }
     }
 
-    pub fn extend(&mut self, device: &Device, queue: &Queue, values: &[T]) {
+    pub fn push(&mut self, device: &Device, queue: &Queue, values: &[T]) -> bool {
         let new_len = self.len() + values.len();
+        let mut was_reallocated = false;
 
         if new_len >= self.cap {
-            let new_cap = new_len.next_power_of_two();
+            let max_buffer_size = device.limits().max_buffer_size;
+            let new_cap = new_len
+                .checked_next_power_of_two()
+                .unwrap_or(new_len)
+                .min(max_buffer_size as usize / size_of::<T>());
             let new_buf = device.create_buffer(&BufferDescriptor {
                 label: Some(&self.label),
                 size: (size_of::<T>() * new_cap) as u64,
@@ -89,6 +96,7 @@ impl<T: bytemuck::Pod> ResizingBuffer<T> {
 
             self.cap = new_cap;
             self.buffer = new_buf;
+            was_reallocated = true;
         }
 
         queue.write_buffer(
@@ -97,6 +105,17 @@ impl<T: bytemuck::Pod> ResizingBuffer<T> {
             bytemuck::cast_slice(values),
         );
         self.len = new_len;
+        was_reallocated
+    }
+
+    pub fn write(&mut self, queue: &Queue, offset: u64, value: T) {
+        assert!(size_of::<T>() as u64 + offset <= self.size_bytes());
+        queue.write_buffer(&self.buffer, offset, bytemuck::bytes_of(&value));
+    }
+
+    pub fn write_slice(&mut self, queue: &Queue, offset: u64, values: &[T]) {
+        assert!((values.len() * size_of::<T>()) as u64 + offset <= self.size_bytes());
+        queue.write_buffer(&self.buffer, offset, bytemuck::cast_slice(values));
     }
 
     pub fn usages(&self) -> BufferUsages {

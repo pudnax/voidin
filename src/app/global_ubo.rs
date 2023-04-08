@@ -1,11 +1,10 @@
-use crate::{
-    bind_group_layout::{self, WrappedBindGroupLayout},
-    utils::NonZeroSized,
-};
+use crate::utils::NonZeroSized;
 use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
+
+use super::bind_group_layout::{self, WrappedBindGroupLayout};
 
 pub struct GlobalUniformBinding {
     pub binding: wgpu::BindGroup,

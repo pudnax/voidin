@@ -14,7 +14,9 @@ use wgpu::{
     PushConstantRange, VertexAttribute, VertexFormat, VertexStepMode,
 };
 
-use crate::{app::App, bind_group_layout, utils::DeviceShaderExt, view_target, watcher::Watcher};
+use crate::{app::App, utils::DeviceShaderExt, watcher::Watcher};
+
+use super::{bind_group_layout, view_target};
 
 slotmap::new_key_type! {
     pub struct RenderHandle;

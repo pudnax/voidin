@@ -12,15 +12,26 @@ use wgpu_profiler::{scope::Scope, GpuProfiler};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    bind_group_layout::{self, WrappedBindGroupLayout},
     camera::CameraBinding,
     gltf::{convert_sampler, mesh_mode_to_topology, GltfDocument},
-    pipeline::{self, Arena, Handle},
     utils::{self, create_solid_color_texture, NonZeroSized, UnwrapRepeat},
-    view_target,
     watcher::{SpirvBytes, Watcher},
     Pass,
 };
+
+pub mod bind_group_layout;
+mod blitter;
+mod global_ubo;
+mod pipeline;
+mod postprocess_pass;
+mod state;
+mod view_target;
+use blitter::Blitter;
+pub use state::AppState;
+
+use bind_group_layout::WrappedBindGroupLayout;
+pub use pipeline::{Arena, Handle};
+pub(crate) use view_target::ViewTarget;
 
 pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
     label: Some("Gltf Default Sampler"),
@@ -36,13 +47,6 @@ pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::
     anisotropy_clamp: None,
     border_color: None,
 };
-
-mod blitter;
-mod global_ubo;
-mod postprocess_pass;
-mod state;
-use blitter::Blitter;
-pub use state::AppState;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -121,7 +125,7 @@ impl PipelineArgs {
                 ..Default::default()
             },
             vertex: pipeline::VertexState {
-                buffers: vec![crate::pipeline::VertexBufferLayout::from_vertex_formats(
+                buffers: vec![pipeline::VertexBufferLayout::from_vertex_formats(
                     wgpu::VertexStepMode::Vertex,
                     attributes,
                 )],

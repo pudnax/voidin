@@ -7,6 +7,7 @@ use std::{
 };
 
 mod buffer;
+pub use buffer::ResizableBuffer;
 
 use either::Either;
 use glam::Vec4;

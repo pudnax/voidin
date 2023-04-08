@@ -7,7 +7,7 @@ use dolly::{
 use glam::{Mat4, Quat, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
-use crate::bind_group_layout::{self, WrappedBindGroupLayout};
+use crate::app::bind_group_layout::{self, WrappedBindGroupLayout};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]

@@ -2,11 +2,12 @@ use color_eyre::Result;
 use std::path::Path;
 use wgpu::CommandEncoder;
 
-use crate::{
+use crate::Pass;
+
+use super::{
     bind_group_layout::{BindGroupLayout, WrappedBindGroupLayout},
     pipeline::{Arena, RenderHandle, RenderPipelineDescriptor},
-    view_target::ViewTarget,
-    Pass,
+    ViewTarget,
 };
 
 pub struct PostProcessPipeline {
