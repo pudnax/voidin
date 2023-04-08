@@ -72,7 +72,7 @@ impl Blitter {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&src_texture),
+                    resource: wgpu::BindingResource::TextureView(src_texture),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,

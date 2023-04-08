@@ -430,7 +430,7 @@ impl App {
         self.blitter.blit_to_texture(
             &mut encoder,
             &self.device,
-            &self.view_target.main_view(),
+            self.view_target.main_view(),
             &target_view,
             self.surface_config.format,
         );
@@ -494,12 +494,12 @@ impl App {
                     let image = &gltf.images[tex.source().index()];
                     let (width, height) = (image.width, image.height);
                     let image = crate::gltf::convert_to_rgba(image)?;
-                    let mip_level_count = width.max(height).ilog2() + 1;
                     let size = wgpu::Extent3d {
                         width,
                         height,
                         depth_or_array_layers: 1,
                     };
+                    let mip_level_count = size.max_mips(wgpu::TextureDimension::D2);
 
                     let desc = wgpu::TextureDescriptor {
                         label: None,

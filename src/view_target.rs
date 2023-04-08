@@ -10,7 +10,7 @@ pub struct PostProcessWrite<'a> {
 impl<'a> PostProcessWrite<'a> {
     pub fn get_color_attachment(&self, color: wgpu::Color) -> RenderPassColorAttachment {
         RenderPassColorAttachment {
-            view: &self.destination,
+            view: self.destination,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(color),

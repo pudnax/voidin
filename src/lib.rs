@@ -21,10 +21,10 @@ pub static SHADER_COMPILER: Lazy<Mutex<ShaderCompiler>> =
 pub trait Pass {
     type Resoutces<'a>;
 
-    fn record<'a>(
+    fn record(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         view_target: &ViewTarget,
-        resources: Self::Resoutces<'a>,
+        resources: Self::Resoutces<'_>,
     );
 }

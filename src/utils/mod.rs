@@ -6,6 +6,8 @@ use std::{
     time::Duration,
 };
 
+mod buffer;
+
 use either::Either;
 use glam::Vec4;
 use wgpu::util::DeviceExt;

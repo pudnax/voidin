@@ -65,11 +65,11 @@ pub struct PostProcessResource<'a> {
 impl Pass for PostProcessPipeline {
     type Resoutces<'a> = PostProcessResource<'a>;
 
-    fn record<'a>(
+    fn record(
         &self,
         encoder: &mut CommandEncoder,
         view_target: &ViewTarget,
-        resource: Self::Resoutces<'a>,
+        resource: Self::Resoutces<'_>,
     ) {
         let post_process_target = view_target.post_process_write();
         let tex_bind_group = resource
@@ -81,11 +81,11 @@ impl Pass for PostProcessPipeline {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&post_process_target.source),
+                        resource: wgpu::BindingResource::TextureView(post_process_target.source),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&resource.sampler),
+                        resource: wgpu::BindingResource::Sampler(resource.sampler),
                     },
                 ],
             });
@@ -101,7 +101,7 @@ impl Pass for PostProcessPipeline {
             ))],
             depth_stencil_attachment: None,
         });
-        pass.set_bind_group(0, &resource.global_binding, &[]);
+        pass.set_bind_group(0, resource.global_binding, &[]);
         pass.set_bind_group(1, &tex_bind_group, &[]);
         pass.set_pipeline(resource.arena.get_pipeline(self.pipeline));
         pass.draw(0..3, 0..1);
