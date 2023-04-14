@@ -4,7 +4,7 @@ use color_eyre::{eyre::ContextCompat, Result};
 use glam::{vec3, vec4, Mat4, Vec2, Vec3};
 
 use pollster::FutureExt;
-use wgpu::{FilterMode, IndexFormat};
+use wgpu::FilterMode;
 use wgpu_profiler::GpuProfiler;
 use winit::{dpi::PhysicalSize, window::Window};
 
@@ -12,10 +12,7 @@ use crate::{
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
     pass::{self, Pass},
-    utils::{
-        self, align_to, create_solid_color_texture, DrawIndexedIndirect, NonZeroSized,
-        ResizableBuffer,
-    },
+    utils::{self, create_solid_color_texture, DrawIndexedIndirect, NonZeroSized, ResizableBuffer},
     watcher::{SpirvBytes, Watcher},
     Gpu,
 };
@@ -38,9 +35,7 @@ use self::{
     instance::InstancesManager,
     material::{Material, MaterialId, MaterialManager},
     mesh::{MeshId, MeshManager},
-    pipeline::{
-        ComputeHandle, ComputePipelineDescriptor, Handle, RenderHandle, RenderPipelineDescriptor,
-    },
+    pipeline::Handle,
     state::AppState,
     texture::{TextureId, TextureManager},
 };
@@ -81,10 +76,10 @@ pub struct App {
     draw_cmd_bind_group: wgpu::BindGroup,
     draw_cmd_layout: bind_group_layout::BindGroupLayout,
 
-    draw_indirect: RenderHandle,
-    compute_indirect: ComputeHandle,
+    geometry_pass: pass::geometry::Geometry,
+    emit_draws_pass: pass::geometry::EmitDraws,
 
-    postprocess_pipeline: pass::postprocess::PostProcessPipeline,
+    postprocess_pipeline: pass::postprocess::PostProcess,
 
     default_sampler: wgpu::Sampler,
 
@@ -193,66 +188,27 @@ impl App {
         });
 
         let path = "shaders/postprocess.wgsl";
-        let postprocess_pipeline = pass::postprocess::PostProcessPipeline::new(
+        let postprocess_pipeline = pass::postprocess::PostProcess::new(
             &mut pipeline_arena,
             global_uniform_binding.layout.clone(),
             path,
         )?;
 
-        let path = "shaders/emit_draws.wgsl";
-        let comp_desc = ComputePipelineDescriptor {
-            label: Some("Compute Indirect Pipeline Layout".into()),
-            layout: vec![
-                mesh_manager.mesh_info_layout.clone(),
-                instance_manager.bind_group_layout.clone(),
-                draw_cmd_layout.clone(),
-            ],
-            push_constant_ranges: vec![],
-            entry_point: "emit_draws".into(),
-        };
-        let compute_indirect =
-            pipeline_arena.process_compute_pipeline_from_path(path, comp_desc)?;
-        let path = "shaders/draw_indirect.wgsl";
-        let render_desc = RenderPipelineDescriptor {
-            label: Some("Draw Indirect Pipeline".into()),
-            layout: vec![
-                global_uniform_binding.layout.clone(),
-                camera_uniform.bind_group_layout.clone(),
-                texture_manager.bind_group_layout.clone(),
-                mesh_manager.mesh_info_layout.clone(),
-                instance_manager.bind_group_layout.clone(),
-                material_manager.bind_group_layout.clone(),
-            ],
-            vertex: pipeline::VertexState {
-                entry_point: "vs_main".into(),
-                buffers: vec![
-                    // Positions
-                    pipeline::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vec3>() as _,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: wgpu::vertex_attr_array![0 => Float32x3].to_vec(),
-                    },
-                    // Normals
-                    pipeline::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vec3>() as _,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: wgpu::vertex_attr_array![1 => Float32x3].to_vec(),
-                    },
-                    // UVs
-                    pipeline::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vec2>() as _,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: wgpu::vertex_attr_array![2 => Float32x2].to_vec(),
-                    },
-                ],
-            },
-            fragment: Some(pipeline::FragmentState {
-                entry_point: "fs_main".into(),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        let draw_indirect = pipeline_arena.process_render_pipeline_from_path(path, render_desc)?;
+        let geometry_pass = pass::geometry::Geometry::new(
+            &mut pipeline_arena,
+            global_uniform_binding.layout.clone(),
+            camera_uniform.bind_group_layout.clone(),
+            texture_manager.bind_group_layout.clone(),
+            mesh_manager.mesh_info_layout.clone(),
+            instance_manager.bind_group_layout.clone(),
+            material_manager.bind_group_layout.clone(),
+        )?;
+        let emit_draws_pass = pass::geometry::EmitDraws::new(
+            &mut pipeline_arena,
+            mesh_manager.mesh_info_layout.clone(),
+            instance_manager.bind_group_layout.clone(),
+            draw_cmd_layout.clone(),
+        )?;
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
@@ -271,8 +227,8 @@ impl App {
             draw_cmd_bind_group,
             draw_cmd_layout,
 
-            draw_indirect,
-            compute_indirect,
+            geometry_pass,
+            emit_draws_pass,
 
             profiler,
             blitter: blitter::Blitter::new(gpu.device()),
@@ -314,7 +270,7 @@ impl App {
             self.instance_manager.add(&instances)
         }
 
-        let sphere_mesh = models::sphere_mesh(self, 2., 10, 10);
+        let sphere_mesh = models::sphere_mesh(self, 2., 20, 20);
 
         let mut instances = vec![];
         let num = 10;
@@ -381,54 +337,29 @@ impl App {
 
         profiler.begin_scope("Main Render Scope ", &mut encoder, self.device());
 
-        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("Emit Draws Pass"),
-        });
+        let emit_resource = pass::geometry::EmitDrawsResource {
+            arena: &self.pipeline_arena,
+            mesh_info_bind_group: &self.mesh_manager.mesh_info_bind_group,
+            instance_bind_group: &self.instance_manager.bind_group,
+            draw_cmd_bind_group: &self.draw_cmd_bind_group,
+            draw_cmd_buffer: &self.draw_cmd_buffer,
+        };
+        self.emit_draws_pass
+            .record(&mut encoder, &self.view_target, emit_resource);
 
-        cpass.set_pipeline(self.get_pipeline(self.compute_indirect));
-        cpass.set_bind_group(0, &self.mesh_manager.mesh_info_bind_group, &[]);
-        cpass.set_bind_group(1, &self.instance_manager.bind_group, &[]);
-        cpass.set_bind_group(2, &self.draw_cmd_bind_group, &[]);
-        cpass.dispatch_workgroups(align_to(self.draw_cmd_buffer.len() as _, 32), 1, 1);
-        drop(cpass);
-
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some(self.view_target.get_color_attachment(wgpu::Color {
-                r: 0.13,
-                g: 0.13,
-                b: 0.13,
-                a: 0.0,
-            }))],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.depth_texture,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(0.0),
-                    store: true,
-                }),
-                stencil_ops: None,
-            }),
-        });
-
-        rpass.set_pipeline(self.get_pipeline(self.draw_indirect));
-        rpass.set_bind_group(0, &self.global_uniform_binding.binding, &[]);
-        rpass.set_bind_group(1, &self.camera_uniform.binding, &[]);
-        rpass.set_bind_group(2, &self.textures_bind_group, &[]);
-        rpass.set_bind_group(3, &self.mesh_manager.mesh_info_bind_group, &[]);
-        rpass.set_bind_group(4, &self.instance_manager.bind_group, &[]);
-        rpass.set_bind_group(5, &self.material_manager.bind_group, &[]);
-
-        rpass.set_vertex_buffer(0, self.mesh_manager.vertices.full_slice());
-        rpass.set_vertex_buffer(1, self.mesh_manager.normals.full_slice());
-        rpass.set_vertex_buffer(2, self.mesh_manager.tex_coords.full_slice());
-        rpass.set_index_buffer(self.mesh_manager.indices.full_slice(), IndexFormat::Uint32);
-        rpass.multi_draw_indexed_indirect(
-            &self.draw_cmd_buffer,
-            0,
-            self.draw_cmd_buffer.len() as _,
-        );
-
-        drop(rpass);
+        let geometry_resource = pass::geometry::GeometryResource {
+            arena: &self.pipeline_arena,
+            depth_texture: &self.depth_texture,
+            global_binding: &self.global_uniform_binding.binding,
+            camera_binding: &self.camera_uniform.binding,
+            textures_bind_group: &self.textures_bind_group,
+            instance_bind_group: &self.instance_manager.bind_group,
+            material_bind_group: &self.material_manager.bind_group,
+            draw_cmd_buffer: &self.draw_cmd_buffer,
+            mesh_manager: &self.mesh_manager,
+        };
+        self.geometry_pass
+            .record(&mut encoder, &self.view_target, geometry_resource);
 
         let resource = pass::postprocess::PostProcessResource {
             arena: &self.pipeline_arena,
@@ -516,12 +447,11 @@ impl App {
         self.pipeline_arena.reload_pipelines(&path, &module);
     }
 
-    fn get_pipeline<H: Handle>(&self, handle: H) -> &H::Pipeline {
+    pub fn get_pipeline<H: Handle>(&self, handle: H) -> &H::Pipeline {
         self.pipeline_arena.get_pipeline(handle)
     }
 
-    #[allow(dead_code)]
-    fn get_pipeline_desc<H: Handle>(&self, handle: H) -> &H::Descriptor {
+    pub fn get_pipeline_desc<H: Handle>(&self, handle: H) -> &H::Descriptor {
         self.pipeline_arena.get_descriptor(handle)
     }
 

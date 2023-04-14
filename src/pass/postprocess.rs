@@ -10,11 +10,11 @@ use crate::app::{
     ViewTarget,
 };
 
-pub struct PostProcessPipeline {
+pub struct PostProcess {
     pipeline: RenderHandle,
 }
 
-impl PostProcessPipeline {
+impl PostProcess {
     pub fn new(
         pipeline_arena: &mut Arena,
         global_uniform: BindGroupLayout,
@@ -62,7 +62,7 @@ pub struct PostProcessResource<'a> {
     pub sampler: &'a wgpu::Sampler,
 }
 
-impl Pass for PostProcessPipeline {
+impl Pass for PostProcess {
     type Resoutces<'a> = PostProcessResource<'a>;
 
     fn record(

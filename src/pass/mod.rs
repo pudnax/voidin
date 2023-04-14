@@ -1,3 +1,4 @@
+pub mod geometry;
 pub mod postprocess;
 
 pub trait Pass {
