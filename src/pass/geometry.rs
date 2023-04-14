@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use color_eyre::Result;
 use glam::{Vec2, Vec3};

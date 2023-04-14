@@ -39,7 +39,7 @@ impl ShaderCompiler {
             .build();
 
         let parsed_res = parser
-            .parse(uni_path::Path::new(path.to_str().unwrap()))
+            .parse(uni_path::Path::new(&path.to_string_lossy()))
             .map_err(|err| CompilerError::Read((err, path.to_string_lossy().into())))?;
         let source = parsed_res.collect().0;
         let module = self
