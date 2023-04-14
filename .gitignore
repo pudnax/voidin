@@ -1,5 +1,6 @@
 /target
 /.cargo
-/assets
+# /assets
 *.rdc
 *.png
+*.cap

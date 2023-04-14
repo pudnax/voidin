@@ -7,7 +7,7 @@ use std::{
 };
 
 mod buffer;
-pub use buffer::ResizableBuffer;
+pub use buffer::{ResizableBuffer, ResizableBufferExt};
 
 use either::Either;
 use glam::Vec4;
@@ -25,6 +25,20 @@ pub trait NonZeroSized: Sized {
     };
 }
 impl<T> NonZeroSized for T where T: Sized {}
+
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
+pub struct DrawIndexedIndirect {
+    pub vertex_count: u32,
+    pub instance_count: u32,
+    pub base_index: u32,
+    pub vertex_offset: i32,
+    pub base_instance: u32,
+}
+
+pub fn align_to(size: u32, align: u32) -> u32 {
+    (size + align - 1) & !(align - 1)
+}
 
 pub trait Lerp: Sized {
     fn lerp(self, range: Range<Self>) -> Self;

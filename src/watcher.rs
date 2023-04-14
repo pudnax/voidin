@@ -12,10 +12,6 @@ use crate::{shader_compiler::CompilerError, SHADER_COMPILER};
 
 pub type SpirvBytes = Vec<u32>;
 
-pub trait ReloadablePipeline {
-    fn reload(&mut self, device: &wgpu::Device, module: &wgpu::ShaderModule);
-}
-
 pub struct Watcher {
     watcher: notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>,
 }
@@ -55,6 +51,7 @@ fn watch_callback(
                     Some(OsStr::new("wgsl")),
                     "TODO: Support glsl shaders."
                 );
+
                 match SHADER_COMPILER.lock().create_shader_module(&path) {
                     Ok(module) => {
                         log::info!(
@@ -68,7 +65,7 @@ fn watch_callback(
                             .expect("Event Loop has been dropped");
                     }
                     Err(err) => match err {
-                        CompilerError::Compile { error, source } => {
+                        CompilerError::Compile { error, source, .. } => {
                             let file_name =
                                 path.file_name().and_then(|x| x.to_str()).unwrap_or("wgsl");
                             error.emit_to_stderr_with_path(&source, file_name);

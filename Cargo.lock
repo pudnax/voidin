@@ -1001,6 +1001,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "naga"
+version = "0.11.0"
+source = "git+https://github.com/gfx-rs/naga.git?rev=f59668ccfaf7bdb3a7e43d84363a21c77357b2fe#f59668ccfaf7bdb3a7e43d84363a21c77357b2fe"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "codespan-reporting",
+ "hexf-parse",
+ "indexmap",
+ "log",
+ "num-traits",
+ "rustc-hash",
+ "spirv",
+ "termcolor",
+ "thiserror",
+ "unicode-xid",
+]
+
+[[package]]
 name = "ndk"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1198,6 +1217,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ocl-include"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa26df9aaf487e3db9b4e9329f63cb572118fef78a7a437b13165d191033b424"
+dependencies = [
+ "lazy_static",
+ "regex",
+ "uni-path",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1307,14 +1337,16 @@ dependencies = [
  "image",
  "indexmap",
  "log",
- "naga",
+ "naga 0.11.0 (git+https://github.com/gfx-rs/naga.git?rev=f59668ccfaf7bdb3a7e43d84363a21c77357b2fe)",
  "notify",
  "notify-debouncer-mini",
+ "ocl-include",
  "once_cell",
  "parking_lot",
  "pollster",
  "slotmap",
  "tobj",
+ "uni-path",
  "wgpu",
  "wgpu-profiler",
  "winit",
@@ -1762,6 +1794,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0609f771ad9c6155384897e1df4d948e692667cc0588548b68eb44d052b27633"
 
 [[package]]
+name = "uni-path"
+version = "1.51.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25e328d505b1f855c20e7358711b7ec6398524181664f016dd15cfb36c3a6275"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1978,7 +2016,7 @@ dependencies = [
  "cfg-if",
  "js-sys",
  "log",
- "naga",
+ "naga 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "profiling",
  "raw-window-handle",
@@ -2004,7 +2042,7 @@ dependencies = [
  "codespan-reporting",
  "fxhash",
  "log",
- "naga",
+ "naga 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot",
  "profiling",
  "raw-window-handle",
@@ -2042,7 +2080,7 @@ dependencies = [
  "libloading",
  "log",
  "metal",
- "naga",
+ "naga 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "objc",
  "parking_lot",
  "profiling",

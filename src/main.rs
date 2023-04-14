@@ -4,9 +4,8 @@ use color_eyre::Result;
 use glam::vec3;
 use log::warn;
 use poisson_corrode::{
-    app::{App, AppState},
+    app::{state::AppState, App},
     camera::Camera,
-    gltf::GltfDocument,
     input::{KeyMap, KeyboardMap},
     watcher::Watcher,
 };
@@ -60,14 +59,7 @@ fn main() -> Result<()> {
     let info = app.get_info();
     println!("{info}");
 
-    let scene = GltfDocument::import(
-        "assets/sponza-optimized/Sponza.gltf",
-        // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-        // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-        // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-        // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-    )?;
-    app.add_gltf_model(scene)?;
+    app.setup_scene()?;
 
     let mut current_instant = Instant::now();
     let mut accumulated_time = 0.;
@@ -100,7 +92,7 @@ fn main() -> Result<()> {
                     match err {
                         SurfaceError::Lost | SurfaceError::Outdated => {
                             warn!("render: Outdated Surface");
-                            app.surface.configure(&app.device, &app.surface_config);
+                            app.surface.configure(app.device(), &app.surface_config);
                             window.request_redraw();
                         }
                         SurfaceError::OutOfMemory => *control_flow = ControlFlow::Exit,
