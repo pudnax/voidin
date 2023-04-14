@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use color_eyre::Result;
 use glam::{Vec2, Vec3};
 use wgpu::IndexFormat;
@@ -30,7 +32,7 @@ impl Geometry {
         instance_layout: BindGroupLayout,
         material_layout: BindGroupLayout,
     ) -> Result<Self> {
-        let path = "shaders/draw_indirect.wgsl";
+        let path = Path::new("shaders").join("draw_indirect.wgsl");
         let render_desc = RenderPipelineDescriptor {
             label: Some("Geometry Pipeline".into()),
             layout: vec![
@@ -148,7 +150,7 @@ impl EmitDraws {
         instance_layout: BindGroupLayout,
         draw_cmd_layout: BindGroupLayout,
     ) -> Result<Self> {
-        let path = "shaders/emit_draws.wgsl";
+        let path = Path::new("shaders").join("emit_draws.wgsl");
         let comp_desc = ComputePipelineDescriptor {
             label: Some("Compute Indirect Pipeline Layout".into()),
             layout: vec![

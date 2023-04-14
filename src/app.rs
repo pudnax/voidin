@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Display, sync::Arc};
+use std::{cell::RefCell, fmt::Display, path::Path, sync::Arc};
 
 use color_eyre::{eyre::ContextCompat, Result};
 use glam::{vec3, vec4, Mat4, Vec2, Vec3};
@@ -192,7 +192,7 @@ impl App {
             }],
         });
 
-        let path = "shaders/postprocess.wgsl";
+        let path = Path::new("shaders").join("postprocess.wgsl");
         let postprocess_pipeline = pass::postprocess::PostProcess::new(
             &mut pipeline_arena,
             global_uniform_binding.layout.clone(),
