@@ -14,7 +14,7 @@ use crate::{
         texture::TextureId,
         App,
     },
-    utils::FormatConversions,
+    utils::{FormatConversions, UnwrapRepeat},
 };
 
 pub struct GltfDocument {
@@ -203,7 +203,12 @@ impl GltfDocument {
                 }
                 let vertices = bytemuck::cast_slice(vertices);
                 let normals = get_data(&gltf::Semantic::Normals).unwrap_or(&zeros);
-                let tex_coords = get_data(&gltf::Semantic::TexCoords(0)).unwrap_or(&zeros);
+                let tex_coords: Vec<[f32; 2]> = reader
+                    .read_tex_coords(0)
+                    .map(|uv| uv.into_f32())
+                    .unwrap_repeat()
+                    .take(vertices.len())
+                    .collect();
                 let indices: Vec<_> = match reader.read_indices() {
                     Some(indices) => indices.into_u32().collect(),
                     None => (0..vertices.len() as u32).collect(),
@@ -211,7 +216,7 @@ impl GltfDocument {
                 let mesh = app.add_mesh(
                     vertices,
                     bytemuck::cast_slice(normals),
-                    bytemuck::cast_slice(tex_coords),
+                    bytemuck::cast_slice(&tex_coords),
                     &indices,
                 );
                 primitives.push(mesh);
