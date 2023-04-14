@@ -297,7 +297,6 @@ impl App {
     }
 
     pub fn setup_scene(&mut self) -> Result<()> {
-        let now = std::time::Instant::now();
         let gltf_scene = GltfDocument::import(
             self,
             "assets/sponza-optimized/Sponza.gltf",
@@ -306,31 +305,18 @@ impl App {
             // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
             // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
-        println!("    Importing gltf scene(old): {:?}", now.elapsed());
-        dbg!(&self.mesh_manager.mesh_cpu);
-        let temp = self.device().create_buffer(&wgpu::BufferDescriptor {
-            label: None,
-            size: self.mesh_manager.mesh_info.size_bytes(),
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
 
-        let now = std::time::Instant::now();
         for scene in gltf_scene.document.scenes() {
             let instances = gltf_scene.scene_data(scene, Mat4::IDENTITY);
             self.instance_manager.add(&instances)
         }
-        println!("    Getting instances: {:?}", now.elapsed());
 
-        let now = std::time::Instant::now();
         let mut encoder = self.device().create_command_encoder(&Default::default());
-        encoder.copy_buffer_to_buffer(&self.mesh_manager.mesh_info, 0, &temp, 0, temp.size());
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,
             &mut encoder,
-            dbg!(self.instance_manager.count()) as _,
+            self.instance_manager.count() as _,
         );
-        dbg!(self.draw_cmd_buffer.len());
         self.draw_cmd_bind_group = self.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Draw Commands Bind Group"),
             layout: &self.draw_cmd_layout,
@@ -339,15 +325,6 @@ impl App {
                 resource: self.draw_cmd_buffer.as_entire_binding(),
             }],
         });
-        let submit = self.queue().submit(Some(encoder.finish()));
-        let slice = temp.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.device()
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(submit));
-        let mapped = &slice.get_mapped_range();
-        let data: &[mesh::MeshInfo] = bytemuck::cast_slice(mapped);
-        dbg!(data);
-        println!("    Reserving instances on gpu: {:?}", now.elapsed());
 
         Ok(())
     }

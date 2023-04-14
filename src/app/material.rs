@@ -80,9 +80,7 @@ impl MaterialManager {
     }
 
     pub fn add(&mut self, material: Material) -> MaterialId {
-        let was_resized = self
-            .buffer
-            .push(self.gpu.device(), self.gpu.queue(), &[material]);
+        let was_resized = self.buffer.push(&self.gpu, &[material]);
 
         if was_resized {
             let desc = &wgpu::BindGroupDescriptor {

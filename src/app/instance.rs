@@ -88,10 +88,7 @@ impl InstancesManager {
 
     pub fn add(&mut self, instances: &[Instance]) {
         self.instances_data.extend_from_slice(instances);
-        if self
-            .instances
-            .push(self.gpu.device(), self.gpu.queue(), instances)
-        {
+        if self.instances.push(&self.gpu, instances) {
             let bind_group = Self::create_bind_group(
                 self.gpu.device(),
                 &self.bind_group_layout,

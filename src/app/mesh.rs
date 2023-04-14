@@ -131,18 +131,14 @@ impl MeshManager {
             .vertex_offset
             .fetch_add(vertices.len() as _, Ordering::Relaxed);
 
-        self.vertices
-            .push(self.gpu.device(), self.gpu.queue(), vertices);
-        self.normals
-            .push(self.gpu.device(), self.gpu.queue(), normals);
-        self.tex_coords
-            .push(self.gpu.device(), self.gpu.queue(), tex_coords);
+        self.vertices.push(&self.gpu, vertices);
+        self.normals.push(&self.gpu, normals);
+        self.tex_coords.push(&self.gpu, tex_coords);
 
         let index_count = indices.len() as u32;
         let base_index = self.base_index.fetch_add(index_count, Ordering::Relaxed);
 
-        self.indices
-            .push(self.gpu.device(), self.gpu.queue(), indices);
+        self.indices.push(&self.gpu, indices);
         let mesh_index = self.mesh_index.fetch_add(1, Ordering::Relaxed);
 
         let mesh_info = MeshInfo {
@@ -152,10 +148,7 @@ impl MeshManager {
             index_count,
         };
         self.mesh_cpu.push(mesh_info);
-        dbg!("me");
-        let was_resized = self
-            .mesh_info
-            .push(self.gpu.device(), self.gpu.queue(), &[mesh_info]);
+        let was_resized = self.mesh_info.push(&self.gpu, &[mesh_info]);
         if was_resized {
             let desc = wgpu::BindGroupDescriptor {
                 label: Some("Mesh Info Bind Group"),

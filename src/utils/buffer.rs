@@ -1,9 +1,11 @@
-use std::{marker::PhantomData, mem::size_of, num::NonZeroU64};
+use crate::Gpu;
+
+use std::{marker::PhantomData, mem::size_of, num::NonZeroU64, ops::RangeBounds};
 
 use bytemuck::Pod;
 use wgpu::{
     util::DeviceExt, Buffer, BufferAddress, BufferDescriptor, BufferSlice, BufferUsages,
-    CommandEncoder, CommandEncoderDescriptor, Device, Queue,
+    CommandEncoder, CommandEncoderDescriptor, Device,
 };
 
 pub trait ResizableBufferExt {
@@ -30,6 +32,7 @@ impl ResizableBufferExt for wgpu::Device {
     }
 }
 
+#[derive(Debug)]
 pub struct ResizableBuffer<T> {
     buffer: Buffer,
     len: usize,
@@ -122,44 +125,68 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     }
 
     /// Returns `true` if internal buffer was resized
-    // TODO: Consider adding on_resize callback
-    pub fn push(&mut self, device: &Device, queue: &Queue, values: &[T]) -> bool {
+    pub fn push(&mut self, gpu: &Gpu, values: &[T]) -> bool {
         let new_len = self.len() + values.len();
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("Copy Buffer Encoder"),
-        });
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("Copy Buffer Encoder"),
+            });
 
-        let was_reallocated = self.reserve(device, &mut encoder, new_len);
+        let was_reallocated = self.reserve(&gpu.device, &mut encoder, new_len);
+        gpu.queue.submit(Some(encoder.finish()));
 
-        queue.write_buffer(
+        gpu.queue.write_buffer(
             &self.buffer,
-            dbg!(self.size_bytes()),
+            self.size_bytes(),
             bytemuck::cast_slice(values),
         );
         self.len = new_len;
         was_reallocated
     }
 
-    pub fn write(&mut self, queue: &Queue, index: usize, value: T) {
+    pub fn write(&mut self, gpu: &Gpu, index: usize, value: T) {
         assert!(index < self.len());
-        queue.write_buffer(
+        gpu.queue.write_buffer(
             &self.buffer,
             (index * size_of::<T>()) as BufferAddress,
             bytemuck::bytes_of(&value),
         );
     }
 
-    pub fn write_slice(&mut self, queue: &Queue, index: usize, values: &[T]) {
-        assert!(index + values.len() < self.len());
-        queue.write_buffer(
+    pub fn write_slice(&mut self, gpu: &Gpu, index: usize, values: &[T]) {
+        assert!(index + values.len() <= self.len());
+        gpu.queue.write_buffer(
             &self.buffer,
             (index * size_of::<T>()) as BufferAddress,
             bytemuck::cast_slice(values),
         );
     }
 
-    pub fn write_bytes(&mut self, queue: &Queue, offset: BufferAddress, bytes: &[u8]) {
-        queue.write_buffer(&self.buffer, offset, bytes);
+    pub fn write_bytes(&mut self, gpu: &Gpu, offset: BufferAddress, bytes: &[u8]) {
+        gpu.queue.write_buffer(&self.buffer, offset, bytes);
+    }
+
+    pub fn read(&self, gpu: &Gpu) -> Vec<T> {
+        let staging = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: None,
+            size: self.size_bytes(),
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu.device().create_command_encoder(&Default::default());
+        encoder.copy_buffer_to_buffer(&self.buffer, 0, &staging, 0, self.size_bytes());
+        let submit = gpu.queue().submit(Some(encoder.finish()));
+        let slice = staging.slice(..);
+        slice.map_async(wgpu::MapMode::Read, |err| {
+            if let Err(err) = err {
+                log::error!("Failed to map buffer: {err}");
+            }
+        });
+        gpu.device()
+            .poll(wgpu::Maintain::WaitForSubmissionIndex(submit));
+        let mapped = slice.get_mapped_range();
+        bytemuck::cast_slice(&mapped).to_vec()
     }
 
     pub fn as_entire_binding(&self) -> wgpu::BindingResource {
@@ -190,7 +217,12 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
         (size_of::<T>() * self.len) as BufferAddress
     }
 
+    pub fn slice<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> BufferSlice {
+        self.buffer.slice(bounds)
+    }
+
     pub fn full_slice(&self) -> BufferSlice {
-        self.buffer.slice(0..self.size_bytes())
+        self.slice(0..self.size_bytes())
     }
 }
+
