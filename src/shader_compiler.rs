@@ -83,6 +83,9 @@ fn get_options() -> spv::Options {
         // TODO: fill out the rest
         spv::Capability::ImageBasic,
         spv::Capability::ImageReadWrite,
+        spv::Capability::SubgroupDispatch,
+        // spv::Capability::ShaderNonUniformEXT,
+        // spv::Capability::ShaderNonUniform,
     ];
 
     let mut flags = spv::WriterFlags::empty();
@@ -108,12 +111,7 @@ fn get_options() -> spv::Options {
         flags,
         capabilities: Some(capabilities.into_iter().collect()),
         zero_initialize_workgroup_memory: spv::ZeroInitializeWorkgroupMemoryMode::Native,
-        bounds_check_policies: naga::proc::BoundsCheckPolicies {
-            index: naga::proc::BoundsCheckPolicy::Unchecked,
-            buffer: naga::proc::BoundsCheckPolicy::Unchecked,
-            image: naga::proc::BoundsCheckPolicy::Unchecked,
-            binding_array: naga::proc::BoundsCheckPolicy::Unchecked,
-        },
+        bounds_check_policies: naga::proc::BoundsCheckPolicies::default(),
     }
 }
 

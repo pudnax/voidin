@@ -24,6 +24,8 @@ struct VertexOutput {
     @location(4) @interpolate(flat) material_id: u32,
 }
 
+const LIGTH_POS = vec3<f32>(15., 10.5, 15.);
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     let instance = instances[in.instance_index];
@@ -45,5 +47,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let material = materials[in.material_id];
-    return vec4(material.base_color.rgb, 1.0);
+    // let albedo = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
+    let nor = normalize(in.normal);
+    var color = material.base_color.rgb;
+    return vec4(nor * 0.7, 1.0);
 }

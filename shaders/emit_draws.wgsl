@@ -26,7 +26,6 @@ fn emit_draws(@builtin(global_invocation_id) global_id: vec3<u32>) {
     cmd.vertex_count = mesh_info.index_count;
     cmd.instance_count = 1u;
     cmd.base_index = mesh_info.base_index;
-	// TODO: smh my head
     cmd.vertex_offset = i32(mesh_info.vertex_offset);
     cmd.base_instance = global_id.x;
 
