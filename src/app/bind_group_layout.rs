@@ -8,6 +8,7 @@ use std::{
     },
 };
 
+#[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct BindGroupLayoutId(NonZeroU32);
 

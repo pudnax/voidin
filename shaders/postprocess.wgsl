@@ -1,8 +1,4 @@
-struct Globals {
-    resolution: vec2<f32>,
-    time: f32,
-    frame: u32,
-};
+#include "shared.wgsl";
 
 @group(0) @binding(0) var<uniform> un: Globals;
 @group(1) @binding(0) var src_texture : texture_2d<f32>;
@@ -33,7 +29,7 @@ fn fs_main(
     @builtin(position) pos: vec4<f32>,
     @location(0) uv: vec2<f32>,
 ) -> @location(0) vec4<f32> {
-    let off = 0.005;
+    let off = 0.0015;
     let uv = uv + off / 2.;
 
     let shifted_col = vec3(

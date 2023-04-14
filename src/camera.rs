@@ -29,13 +29,13 @@ impl Default for CameraUniform {
     }
 }
 
-pub struct CameraBinding {
+pub struct CameraUniformBinding {
     pub buffer: wgpu::Buffer,
     pub binding: wgpu::BindGroup,
     pub bind_group_layout: bind_group_layout::BindGroupLayout,
 }
 
-impl CameraBinding {
+impl CameraUniformBinding {
     pub const DESC: wgpu::BindGroupLayoutDescriptor<'static> = wgpu::BindGroupLayoutDescriptor {
         label: Some("Camera Bind Group Layout"),
         entries: &[wgpu::BindGroupLayoutEntry {

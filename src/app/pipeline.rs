@@ -7,14 +7,15 @@ use std::{
 };
 
 use color_eyre::Result;
-use either::Either;
+use either::Either::{self, Left, Right};
+use pollster::FutureExt;
 use slotmap::{SecondaryMap, SlotMap};
 use wgpu::{
     BufferAddress, ColorTargetState, DepthStencilState, MultisampleState, PrimitiveState,
     PushConstantRange, VertexAttribute, VertexFormat, VertexStepMode,
 };
 
-use crate::{app::App, utils::DeviceShaderExt, watcher::Watcher};
+use crate::{app::App, utils::DeviceShaderExt, watcher::Watcher, Gpu};
 
 use super::{bind_group_layout, view_target};
 
@@ -28,7 +29,7 @@ pub struct Arena {
     compute: ComputeArena,
     path_mapping: HashMap<PathBuf, HashSet<Either<RenderHandle, ComputeHandle>>>,
     file_watcher: Watcher,
-    pub device: Arc<wgpu::Device>,
+    gpu: Arc<Gpu>,
 }
 
 struct RenderArena {
@@ -52,7 +53,8 @@ impl RenderArena {
         })
     }
 
-    fn reload_pipeline(
+    #[allow(dead_code)]
+    fn update_pipeline(
         &mut self,
         device: &wgpu::Device,
         module: &wgpu::ShaderModule,
@@ -84,7 +86,8 @@ impl ComputeArena {
         })
     }
 
-    fn reload_pipeline(
+    #[allow(dead_code)]
+    fn update_pipeline(
         &mut self,
         device: &wgpu::Device,
         module: &wgpu::ShaderModule,
@@ -128,7 +131,7 @@ impl Handle for ComputeHandle {
 }
 
 impl Arena {
-    pub fn new(device: Arc<wgpu::Device>, file_watcher: Watcher) -> Self {
+    pub fn new(gpu: Arc<Gpu>, file_watcher: Watcher) -> Self {
         Self {
             render: RenderArena {
                 pipelines: SlotMap::with_key(),
@@ -142,7 +145,7 @@ impl Arena {
             },
             path_mapping: HashMap::new(),
             file_watcher,
-            device,
+            gpu,
         }
     }
 
@@ -160,7 +163,7 @@ impl Arena {
         descriptor: RenderPipelineDescriptor,
     ) -> RenderHandle {
         self.render
-            .process_pipeline(&self.device, module, descriptor)
+            .process_pipeline(self.gpu.device(), module, descriptor)
     }
 
     pub fn process_render_pipeline_from_path(
@@ -169,7 +172,7 @@ impl Arena {
         descriptor: RenderPipelineDescriptor,
     ) -> Result<RenderHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = self.device.create_shader_with_compiler(&path)?;
+        let module = self.gpu.device().create_shader_with_compiler(&path)?;
         let handle = self.process_render_pipeline(&module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
@@ -185,7 +188,7 @@ impl Arena {
         descriptor: ComputePipelineDescriptor,
     ) -> ComputeHandle {
         self.compute
-            .process_pipeline(&self.device, module, descriptor)
+            .process_pipeline(self.gpu.device(), module, descriptor)
     }
 
     pub fn process_compute_pipeline_from_path(
@@ -194,7 +197,7 @@ impl Arena {
         descriptor: ComputePipelineDescriptor,
     ) -> Result<ComputeHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = self.device.create_shader_with_compiler(&path)?;
+        let module = self.gpu.device().create_shader_with_compiler(&path)?;
         let handle = self.process_compute_pipeline(&module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
@@ -205,14 +208,34 @@ impl Arena {
     }
 
     pub fn reload_pipelines(&mut self, path: &Path, module: &wgpu::ShaderModule) {
-        for handle in &self.path_mapping[path] {
-            match handle {
-                Either::Left(handle) => self.render.reload_pipeline(&self.device, module, *handle),
-                Either::Right(handle) => {
-                    self.compute.reload_pipeline(&self.device, module, *handle)
+        let device = self.gpu.device();
+        for &handle in &self.path_mapping[path] {
+            self.gpu
+                .device()
+                .push_error_scope(wgpu::ErrorFilter::Validation);
+            let pipeline = handle.either(
+                |l| Left((l, self.render.descriptors[l].process(device, module))),
+                |r| Right((r, self.compute.descriptors[r].process(device, module))),
+            );
+            match device.pop_error_scope().block_on() {
+                None => match pipeline {
+                    Left((handle, pipeline)) => self.render.pipelines[handle] = pipeline,
+                    Right((handle, pipeline)) => self.compute.pipelines[handle] = pipeline,
+                },
+                Some(err) => {
+                    log::error!("Validation error on pipeline reloading.");
+                    eprintln!("{err}")
                 }
             }
         }
+    }
+
+    pub fn device(&self) -> &wgpu::Device {
+        self.gpu.device()
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        self.gpu.queue()
     }
 }
 

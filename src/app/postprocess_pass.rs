@@ -20,32 +20,31 @@ impl PostProcessPipeline {
         global_uniform: BindGroupLayout,
         path: impl AsRef<Path>,
     ) -> Result<Self> {
-        let postprocess_bind_group_layout =
-            pipeline_arena
-                .device
-                .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Post Process Bind Group Layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
-                                | wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Texture {
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled: false,
-                            },
-                            count: None,
+        let postprocess_bind_group_layout = pipeline_arena.device().create_bind_group_layout_wrap(
+            &wgpu::BindGroupLayoutDescriptor {
+                label: Some("Post Process Bind Group Layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
+                            | wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
                         },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
-                                | wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: None,
-                        },
-                    ],
-                });
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
+                            | wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            },
+        );
         let desc = RenderPipelineDescriptor {
             label: Some("Post Process Pipeline".into()),
             layout: vec![global_uniform, postprocess_bind_group_layout],
@@ -73,23 +72,26 @@ impl Pass for PostProcessPipeline {
         resource: Self::Resoutces<'_>,
     ) {
         let post_process_target = view_target.post_process_write();
-        let tex_bind_group = resource
-            .arena
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Post: Texture Bind Group"),
-                layout: &resource.arena.get_descriptor(self.pipeline).layout[1],
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(post_process_target.source),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(resource.sampler),
-                    },
-                ],
-            });
+        let tex_bind_group =
+            resource
+                .arena
+                .device()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Post: Texture Bind Group"),
+                    layout: &resource.arena.get_descriptor(self.pipeline).layout[1],
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::TextureView(
+                                post_process_target.source,
+                            ),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::Sampler(resource.sampler),
+                        },
+                    ],
+                });
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Post Process Pass"),
             color_attachments: &[Some(post_process_target.get_color_attachment(
