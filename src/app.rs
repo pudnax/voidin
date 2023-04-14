@@ -11,12 +11,13 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
+    pass::{self, Pass},
     utils::{
         self, align_to, create_solid_color_texture, DrawIndexedIndirect, NonZeroSized,
         ResizableBuffer,
     },
     watcher::{SpirvBytes, Watcher},
-    Gpu, Pass,
+    Gpu,
 };
 
 pub mod bind_group_layout;
@@ -26,7 +27,6 @@ pub mod instance;
 pub mod material;
 pub mod mesh;
 pub mod pipeline;
-mod postprocess_pass;
 pub mod state;
 pub mod texture;
 mod view_target;
@@ -84,7 +84,7 @@ pub struct App {
     draw_indirect: RenderHandle,
     compute_indirect: ComputeHandle,
 
-    postprocess_pipeline: postprocess_pass::PostProcessPipeline,
+    postprocess_pipeline: pass::postprocess::PostProcessPipeline,
 
     default_sampler: wgpu::Sampler,
 
@@ -193,7 +193,7 @@ impl App {
         });
 
         let path = "shaders/postprocess.wgsl";
-        let postprocess_pipeline = postprocess_pass::PostProcessPipeline::new(
+        let postprocess_pipeline = pass::postprocess::PostProcessPipeline::new(
             &mut pipeline_arena,
             global_uniform_binding.layout.clone(),
             path,
@@ -299,18 +299,17 @@ impl App {
     pub fn setup_scene(&mut self) -> Result<()> {
         let gltf_scene = GltfDocument::import(
             self,
-            "assets/ferris3d_v1.0.glb",
             // "assets/sponza-optimized/Sponza.gltf",
             // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
             // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
             // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+            "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
 
         for scene in gltf_scene.document.scenes() {
             let instances = gltf_scene.scene_data(
                 scene,
-                Mat4::from_translation(vec3(0., -4., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
+                Mat4::from_translation(vec3(0., -4., 0.)) * Mat4::from_scale(Vec3::splat(4.0)),
             );
             self.instance_manager.add(&instances)
         }
@@ -335,12 +334,21 @@ impl App {
         let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
         for (mesh, material) in ferris {
             instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(0., 2., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
+                Mat4::from_translation(vec3(-3., 2., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
                 mesh,
                 material,
             ));
         }
         self.instance_manager.add(&instances);
+
+        let ferris_gltf = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
+        for scene in ferris_gltf.document.scenes() {
+            let instances = ferris_gltf.scene_data(
+                scene,
+                Mat4::from_translation(vec3(3., 2., 0.)) * Mat4::from_scale(Vec3::splat(4.0)),
+            );
+            self.instance_manager.add(&instances)
+        }
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
@@ -422,7 +430,7 @@ impl App {
 
         drop(rpass);
 
-        let resource = postprocess_pass::PostProcessResource {
+        let resource = pass::postprocess::PostProcessResource {
             arena: &self.pipeline_arena,
             global_binding: &self.global_uniform_binding.binding,
             sampler: &self.default_sampler,

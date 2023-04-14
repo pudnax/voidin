@@ -2,6 +2,7 @@ pub mod app;
 pub mod camera;
 pub mod input;
 pub mod models;
+pub mod pass;
 pub mod shader_compiler;
 pub mod utils;
 pub mod watcher;
@@ -14,17 +15,6 @@ use parking_lot::Mutex;
 // Global shader compiler with application specific flags not compatible with wgpu
 pub(crate) static SHADER_COMPILER: Lazy<Mutex<ShaderCompiler>> =
     Lazy::new(|| Mutex::new(ShaderCompiler::new()));
-
-pub trait Pass {
-    type Resoutces<'a>;
-
-    fn record(
-        &self,
-        encoder: &mut wgpu::CommandEncoder,
-        view_target: &app::ViewTarget,
-        resources: Self::Resoutces<'_>,
-    );
-}
 
 #[derive(Debug)]
 pub struct Gpu {

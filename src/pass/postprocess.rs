@@ -2,9 +2,9 @@ use color_eyre::Result;
 use std::path::Path;
 use wgpu::CommandEncoder;
 
-use crate::Pass;
+use super::Pass;
 
-use super::{
+use crate::app::{
     bind_group_layout::{BindGroupLayout, WrappedBindGroupLayout},
     pipeline::{Arena, RenderHandle, RenderPipelineDescriptor},
     ViewTarget,
