@@ -113,6 +113,11 @@ impl App {
 
         let limits = adapter.limits();
         let mut features = adapter.features();
+        dbg!(features);
+        dbg!(features.contains(
+            wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
+        ));
+        dbg!(features.contains(wgpu::Features::TEXTURE_BINDING_ARRAY));
         features.remove(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS);
 
         let (device, queue) = adapter
@@ -256,55 +261,71 @@ impl App {
         let gltf_scene = GltfDocument::import(
             self,
             // "assets/sponza-optimized/Sponza.gltf",
-            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-            "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf", // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+                                                                     // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+                                                                     // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+                                                                     // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
 
         for scene in gltf_scene.document.scenes() {
             let instances = gltf_scene.scene_data(
                 scene,
-                Mat4::from_translation(vec3(0., -4., 0.)) * Mat4::from_scale(Vec3::splat(4.0)),
+                Mat4::from_rotation_y(std::f32::consts::PI / 2.)
+                    * Mat4::from_translation(vec3(0., -4., 0.))
+                    * Mat4::from_scale(Vec3::splat(3.)),
             );
+            dbg!(instances.len());
             self.instance_manager.add(&instances)
         }
 
-        let sphere_mesh = models::sphere_mesh(self, 2., 20, 20);
+        let sphere_mesh = models::sphere_mesh(self, 0.6, 20, 20);
 
         let mut instances = vec![];
         let num = 10;
         for i in 0..num {
-            let r = 10.;
+            let r = 4.0;
             let x = r * (std::f32::consts::TAU * (i as f32) / num as f32).cos();
             let y = r * (std::f32::consts::TAU * (i as f32) / num as f32).sin();
 
             instances.push(instance::Instance {
-                transform: Mat4::from_translation(vec3(x, y, 0.)),
+                transform: Mat4::from_translation(vec3(x, y, 2.)),
                 mesh: sphere_mesh,
                 material: MaterialId::default(),
                 ..Default::default()
             });
         }
+        // self.instance_manager.add(&instances);
 
+        // let mut instances = vec![];
         let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
-        for (mesh, material) in ferris {
+        for (mesh, material) in &ferris {
             instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(-3., 2., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
-                mesh,
-                material,
+                Mat4::from_translation(vec3(-3., -4.1, -8.)) * Mat4::from_scale(Vec3::splat(3.)),
+                *mesh,
+                *material,
             ));
         }
         self.instance_manager.add(&instances);
+        // let mut instances = vec![];
+        // for (mesh, material) in &ferris {
+        //     instances.push(instance::Instance::new(
+        //         Mat4::from_translation(vec3(-3., -4.1, -5.)) * Mat4::from_scale(Vec3::splat(3.)),
+        //         *mesh,
+        //         *material,
+        //     ));
+        // }
+        // self.instance_manager.add(&instances);
 
         let ferris_gltf = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
         for scene in ferris_gltf.document.scenes() {
             let instances = ferris_gltf.scene_data(
                 scene,
-                Mat4::from_translation(vec3(3., 2., 0.)) * Mat4::from_scale(Vec3::splat(4.0)),
+                Mat4::from_translation(vec3(3., -4.5, -5.)) * Mat4::from_scale(Vec3::splat(3.0)),
             );
             self.instance_manager.add(&instances)
         }
+        dbg!(instances.len());
+        dbg!(self.instance_manager.instances.len());
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
