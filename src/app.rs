@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, sync::Arc};
 
 use color_eyre::{eyre::ContextCompat, Result};
-use glam::{vec4, Mat4, Vec2, Vec3};
+use glam::{vec3, vec4, Mat4, Vec2, Vec3};
 
 use pollster::FutureExt;
 use wgpu::{FilterMode, IndexFormat};
@@ -10,7 +10,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     camera::CameraUniformBinding,
-    models::GltfDocument,
+    models::{self, GltfDocument},
     utils::{
         self, align_to, create_solid_color_texture, DrawIndexedIndirect, NonZeroSized,
         ResizableBuffer,
@@ -299,7 +299,8 @@ impl App {
     pub fn setup_scene(&mut self) -> Result<()> {
         let gltf_scene = GltfDocument::import(
             self,
-            "assets/sponza-optimized/Sponza.gltf",
+            "assets/ferris3d_v1.0.glb",
+            // "assets/sponza-optimized/Sponza.gltf",
             // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
             // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
             // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
@@ -307,9 +308,39 @@ impl App {
         )?;
 
         for scene in gltf_scene.document.scenes() {
-            let instances = gltf_scene.scene_data(scene, Mat4::IDENTITY);
+            let instances = gltf_scene.scene_data(
+                scene,
+                Mat4::from_translation(vec3(0., -4., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
+            );
             self.instance_manager.add(&instances)
         }
+
+        let sphere_mesh = models::sphere_mesh(self, 2., 10, 10);
+
+        let mut instances = vec![];
+        let num = 10;
+        for i in 0..num {
+            let r = 10.;
+            let x = r * (std::f32::consts::TAU * (i as f32) / num as f32).cos();
+            let y = r * (std::f32::consts::TAU * (i as f32) / num as f32).sin();
+
+            instances.push(instance::Instance {
+                transform: Mat4::from_translation(vec3(x, y, 0.)),
+                mesh: sphere_mesh,
+                material: MaterialId::default(),
+                ..Default::default()
+            });
+        }
+
+        let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
+        for (mesh, material) in ferris {
+            instances.push(instance::Instance::new(
+                Mat4::from_translation(vec3(0., 2., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
+                mesh,
+                material,
+            ));
+        }
+        self.instance_manager.add(&instances);
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
@@ -379,7 +410,6 @@ impl App {
         rpass.set_bind_group(4, &self.instance_manager.bind_group, &[]);
         rpass.set_bind_group(5, &self.material_manager.bind_group, &[]);
 
-        // TODO: combine them, manager -> meshes
         rpass.set_vertex_buffer(0, self.mesh_manager.vertices.full_slice());
         rpass.set_vertex_buffer(1, self.mesh_manager.normals.full_slice());
         rpass.set_vertex_buffer(2, self.mesh_manager.tex_coords.full_slice());

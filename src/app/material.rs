@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use glam::Vec4;
+use glam::{vec4, Vec4};
 
 use crate::{
     utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
@@ -41,7 +41,10 @@ impl MaterialManager {
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
-            &[Material::default()],
+            &[Material {
+                base_color: vec4(1., 1., 1., 1.),
+                ..Default::default()
+            }],
         );
 
         let bind_group_layout =

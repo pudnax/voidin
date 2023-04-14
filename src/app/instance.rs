@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use glam::Mat4;
+
 use crate::{
     utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
     Gpu,
@@ -12,7 +14,7 @@ use super::{
 };
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Instance {
     pub transform: glam::Mat4,
     pub mesh: MeshId,
@@ -20,7 +22,27 @@ pub struct Instance {
     pub junk: [u32; 2],
 }
 
+impl Default for Instance {
+    fn default() -> Self {
+        Self {
+            transform: Mat4::IDENTITY,
+            mesh: MeshId::default(),
+            material: MaterialId::default(),
+            junk: [0; 2],
+        }
+    }
+}
+
 impl Instance {
+    pub fn new(transform: glam::Mat4, mesh: MeshId, material: MaterialId) -> Self {
+        Self {
+            transform,
+            mesh,
+            material,
+            junk: [0; 2],
+        }
+    }
+
     pub fn transform(&mut self, transform: glam::Mat4) {
         self.transform = transform * self.transform;
     }
