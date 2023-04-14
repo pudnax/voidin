@@ -22,6 +22,7 @@ struct VertexOutput {
     @location(1) normal: vec3<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) @interpolate(flat) material_id: u32,
+    @location(5) @interpolate(flat) mesh_id: u32,
 }
 
 const LIGTH_POS = vec3<f32>(15., 10.5, 15.);
@@ -40,6 +41,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.normal = mat4_to_mat3(instance.transform) * in.normal;
     out.uv = in.tex_coords;
     out.material_id = instance.material_id;
+    out.mesh_id = instance.mesh_id;
 
     return out;
 }
@@ -50,5 +52,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // let albedo = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
     let nor = normalize(in.normal);
     var color = material.base_color.rgb;
-    return vec4(nor * 0.7, 1.0);
+    color = hash13(f32(in.mesh_id + in.material_id));
+    color = cos(color * PI) * 0.5 + 0.4;
+    return vec4(color, 1.0);
 }

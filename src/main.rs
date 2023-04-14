@@ -34,8 +34,8 @@ fn main() -> Result<()> {
     let window = winit::window::WindowBuilder::new()
         .with_title("Poisson Corrode")
         .with_inner_size(LogicalSize::new(1280, 1024))
-        .with_resizable(false)
-        .with_decorations(false)
+        // .with_resizable(false)
+        // .with_decorations(false)
         .build(&event_loop)?;
 
     let PhysicalSize { width, height } = window.inner_size();
