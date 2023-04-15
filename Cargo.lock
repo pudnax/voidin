@@ -1324,35 +1324,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "poisson_corrode"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "color-eyre",
- "dolly",
- "either",
- "env_logger",
- "glam",
- "gltf",
- "image",
- "indexmap",
- "log",
- "naga 0.11.0 (git+https://github.com/gfx-rs/naga.git?rev=f59668ccfaf7bdb3a7e43d84363a21c77357b2fe)",
- "notify",
- "notify-debouncer-mini",
- "ocl-include",
- "once_cell",
- "parking_lot",
- "pollster",
- "slotmap",
- "tobj",
- "uni-path",
- "wgpu",
- "wgpu-profiler",
- "winit",
-]
-
-[[package]]
 name = "pollster"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1840,6 +1811,35 @@ name = "version_check"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
+
+[[package]]
+name = "voidin"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "color-eyre",
+ "dolly",
+ "either",
+ "env_logger",
+ "glam",
+ "gltf",
+ "image",
+ "indexmap",
+ "log",
+ "naga 0.11.0 (git+https://github.com/gfx-rs/naga.git?rev=f59668ccfaf7bdb3a7e43d84363a21c77357b2fe)",
+ "notify",
+ "notify-debouncer-mini",
+ "ocl-include",
+ "once_cell",
+ "parking_lot",
+ "pollster",
+ "slotmap",
+ "tobj",
+ "uni-path",
+ "wgpu",
+ "wgpu-profiler",
+ "winit",
+]
 
 [[package]]
 name = "walkdir"

@@ -3,7 +3,7 @@ use std::time::Instant;
 use color_eyre::Result;
 use glam::vec3;
 use log::warn;
-use poisson_corrode::{
+use voidin::{
     app::{state::AppState, App},
     camera::Camera,
     input::{KeyMap, KeyboardMap},
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
 
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
     let window = winit::window::WindowBuilder::new()
-        .with_title("Poisson Corrode")
+        .with_title("Voidin")
         .with_inner_size(LogicalSize::new(1280, 1024))
         // .with_resizable(false)
         // .with_decorations(false)
