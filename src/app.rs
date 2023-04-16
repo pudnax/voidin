@@ -261,30 +261,9 @@ impl App {
     }
 
     pub fn setup_scene(&mut self) -> Result<()> {
-        let gltf_scene = GltfDocument::import(
-            self,
-            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-            // "assets/sponza-optimized/Sponza.gltf",
-            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        )?;
-
-        for scene in gltf_scene.document.scenes() {
-            let instances = gltf_scene.scene_data(
-                scene,
-                Mat4::from_rotation_y(std::f32::consts::PI / 2.)
-                    * Mat4::from_translation(vec3(0., -4., 0.))
-                    * Mat4::from_scale(Vec3::splat(3.)),
-            );
-            dbg!(instances.len());
-            self.instance_manager.add(&instances)
-        }
-
-        let sphere_mesh = models::sphere_mesh(self, 0.6, 20, 20);
-
         let mut instances = vec![];
+        let sphere_mesh = models::sphere_mesh(self, 0.6, 30, 20);
+
         let num = 10;
         for i in 0..num {
             let r = 4.0;
@@ -298,9 +277,7 @@ impl App {
                 ..Default::default()
             });
         }
-        // self.instance_manager.add(&instances);
 
-        // let mut instances = vec![];
         let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
         for (mesh, material) in &ferris {
             instances.push(instance::Instance::new(
@@ -309,25 +286,36 @@ impl App {
                 *material,
             ));
         }
-        self.instance_manager.add(&instances);
-        // let mut instances = vec![];
-        // for (mesh, material) in &ferris {
-        //     instances.push(instance::Instance::new(
-        //         Mat4::from_translation(vec3(-3., -4.1, -5.)) * Mat4::from_scale(Vec3::splat(3.)),
-        //         *mesh,
-        //         *material,
-        //     ));
-        // }
-        // self.instance_manager.add(&instances);
-
-        let ferris_gltf = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
-        for scene in ferris_gltf.document.scenes() {
-            let instances = ferris_gltf.scene_data(
-                scene,
-                Mat4::from_translation(vec3(3., -4.5, -5.)) * Mat4::from_scale(Vec3::splat(3.0)),
-            );
-            self.instance_manager.add(&instances)
+        for (mesh, material) in &ferris {
+            instances.push(instance::Instance::new(
+                Mat4::from_translation(vec3(3., -4.1, -5.)) * Mat4::from_scale(Vec3::splat(3.)),
+                *mesh,
+                *material,
+            ));
         }
+
+        let gltf_scene = GltfDocument::import(
+            self,
+            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
+            // "assets/sponza-optimized/Sponza.gltf",
+            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+        )?;
+
+        for scene in gltf_scene.document.scenes() {
+            let scene_instances = gltf_scene.scene_data(
+                scene,
+                Mat4::from_rotation_y(std::f32::consts::PI / 2.)
+                    * Mat4::from_translation(vec3(0., -4., 0.))
+                    * Mat4::from_scale(Vec3::splat(3.)),
+            );
+            instances.extend(scene_instances);
+        }
+
+        self.instance_manager.add(&instances);
+
         dbg!(instances.len());
         dbg!(self.instance_manager.instances.len());
 

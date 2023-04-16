@@ -46,8 +46,6 @@ impl AppState {
             );
         }
 
-        dbg!(&self.input.keyboard_state);
-
         if self
             .input
             .keyboard_state

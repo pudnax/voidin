@@ -29,7 +29,7 @@ impl From<MeshId> for usize {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MeshInfo {
-    vertex_offset: u32,
+    vertex_offset: i32,
     vertex_count: u32,
     base_index: u32,
     index_count: u32,
@@ -129,7 +129,7 @@ impl MeshManager {
         let vertex_count = vertices.len() as u32;
         let vertex_offset = self
             .vertex_offset
-            .fetch_add(vertices.len() as _, Ordering::Relaxed);
+            .fetch_add(vertex_count, Ordering::Relaxed);
 
         self.vertices.push(&self.gpu, vertices);
         self.normals.push(&self.gpu, normals);
@@ -142,7 +142,7 @@ impl MeshManager {
         let mesh_index = self.mesh_index.fetch_add(1, Ordering::Relaxed);
 
         let mesh_info = MeshInfo {
-            vertex_offset,
+            vertex_offset: vertex_offset as i32,
             vertex_count,
             base_index,
             index_count,
