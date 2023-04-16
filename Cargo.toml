@@ -27,13 +27,6 @@ pollster = { version = "0.3.0", features = ["macro"] }
 wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
 wgpu-profiler = "0.11.0"
 winit = "0.28.3"
-naga = { git = "https://github.com/gfx-rs/naga.git", rev = "b9c5cb5a7841a8728137a58840fbbdbb9b310267", features = [
-	"spv-out",
-	"wgsl-in",
-	"validate",
-	"span",
-] }
-once_cell = "1.17.1"
 parking_lot = "0.12.1"
 ocl-include = "0.5.1"
 uni-path = "1.51.1"

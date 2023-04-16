@@ -16,7 +16,7 @@ use glam::Vec4;
 use wgpu::util::DeviceExt;
 use wgpu_profiler::GpuTimerScopeResult;
 
-use crate::{app::ImageDimentions, SCREENSHOTS_FOLDER, SHADER_COMPILER};
+use crate::{app::ImageDimentions, SCREENSHOTS_FOLDER, SHADER_FOLDER};
 
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = {
@@ -130,11 +130,20 @@ impl DeviceShaderExt for wgpu::Device {
         &self,
         path: impl AsRef<Path>,
     ) -> color_eyre::Result<wgpu::ShaderModule> {
-        let bytes = SHADER_COMPILER.lock().create_shader_module(path.as_ref())?;
+        let parser = ocl_include::Parser::builder()
+            .add_source(
+                ocl_include::source::Fs::builder()
+                    .include_dir(uni_path::Path::new(SHADER_FOLDER))?
+                    .build(),
+            )
+            .build();
+
+        let parsed_res = parser.parse(uni_path::Path::new(&path.as_ref().to_string_lossy()))?;
+        let source = parsed_res.collect().0;
 
         let module = self.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: path.as_ref().to_str(),
-            source: wgpu::ShaderSource::SpirV(bytes.into()),
+            source: wgpu::ShaderSource::Wgsl(source.into()),
         });
         Ok(module)
     }

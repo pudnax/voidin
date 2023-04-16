@@ -8,16 +8,14 @@ use std::{
     time::Duration,
 };
 
-use crate::{shader_compiler::CompilerError, SHADER_COMPILER};
-
-pub type SpirvBytes = Vec<u32>;
+use crate::SHADER_FOLDER;
 
 pub struct Watcher {
     watcher: notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>,
 }
 
 impl Watcher {
-    pub fn new(proxy: EventLoopProxy<(PathBuf, SpirvBytes)>) -> Result<Self> {
+    pub fn new(proxy: EventLoopProxy<(PathBuf, String)>) -> Result<Self> {
         let watcher = notify_debouncer_mini::new_debouncer(
             Duration::from_millis(100),
             None,
@@ -36,7 +34,7 @@ impl Watcher {
 }
 
 fn watch_callback(
-    proxy: EventLoopProxy<(PathBuf, SpirvBytes)>,
+    proxy: EventLoopProxy<(PathBuf, String)>,
 ) -> impl FnMut(notify_debouncer_mini::DebounceEventResult) {
     move |event| match event {
         Ok(events) => {
@@ -52,27 +50,24 @@ fn watch_callback(
                     "TODO: Support glsl shaders."
                 );
 
-                match SHADER_COMPILER.lock().create_shader_module(&path) {
-                    Ok(module) => {
-                        log::info!(
-                            "Shader successfully compiled: {}",
-                            path.file_name()
-                                .and_then(|name| name.to_str())
-                                .unwrap_or("")
-                        );
-                        proxy
-                            .send_event((path, module))
-                            .expect("Event Loop has been dropped");
-                    }
-                    Err(err) => match err {
-                        CompilerError::Compile { error, source, .. } => {
-                            let file_name =
-                                path.file_name().and_then(|x| x.to_str()).unwrap_or("wgsl");
-                            error.emit_to_stderr_with_path(&source, file_name);
-                        }
-                        _ => eprintln!("{err}"),
-                    },
-                }
+                let parser = ocl_include::Parser::builder()
+                    .add_source(
+                        ocl_include::source::Fs::builder()
+                            .include_dir(uni_path::Path::new(SHADER_FOLDER))
+                            .expect("Shader folder doesn't exist")
+                            .build(),
+                    )
+                    .build();
+
+                let Ok(parsed_res) = parser
+                    .parse(uni_path::Path::new(&path.to_string_lossy())) else {
+                        log::error!("Failed to read file: {}", path.display());
+                        return;
+                    } ;
+                let source = parsed_res.collect().0;
+                proxy
+                    .send_event((path, source))
+                    .expect("Event Loop has been dropped");
             }
         }
         Err(errs) => errs.into_iter().for_each(|err| {

@@ -213,18 +213,35 @@ impl Arena {
             self.gpu
                 .device()
                 .push_error_scope(wgpu::ErrorFilter::Validation);
-            let pipeline = handle.either(
-                |l| Left((l, self.render.descriptors[l].process(device, module))),
-                |r| Right((r, self.compute.descriptors[r].process(device, module))),
-            );
-            match device.pop_error_scope().block_on() {
-                None => match pipeline {
-                    Left((handle, pipeline)) => self.render.pipelines[handle] = pipeline,
-                    Right((handle, pipeline)) => self.compute.pipelines[handle] = pipeline,
-                },
-                Some(err) => {
-                    log::error!("Validation error on pipeline reloading.");
-                    eprintln!("{err}")
+            match handle {
+                Left(handle) => {
+                    let desc = self.get_descriptor(handle);
+                    let pipeline = desc.process(device, module);
+                    match device.pop_error_scope().block_on() {
+                        None => {
+                            log::info!("{} reloaded successfully", desc.name());
+                            self.render.pipelines[handle] = pipeline;
+                        }
+
+                        Some(err) => {
+                            log::error!("Validation error on pipeline reloading.");
+                            eprintln!("{err}")
+                        }
+                    }
+                }
+                Right(handle) => {
+                    let desc = self.get_descriptor(handle);
+                    let pipeline = desc.process(device, module);
+                    match device.pop_error_scope().block_on() {
+                        None => {
+                            log::info!("{} reloaded successfully", desc.name());
+                            self.compute.pipelines[handle] = pipeline;
+                        }
+                        Some(err) => {
+                            log::error!("Validation error on pipeline reloading.");
+                            eprintln!("{err}")
+                        }
+                    }
                 }
             }
         }
@@ -407,6 +424,13 @@ pub struct ComputePipelineDescriptor {
 }
 
 impl ComputePipelineDescriptor {
+    pub fn name(&self) -> &str {
+        self.label
+            .as_ref()
+            .map(|name| name.as_ref())
+            .unwrap_or("Compute Pipeline")
+    }
+
     fn process(&self, device: &wgpu::Device, module: &wgpu::ShaderModule) -> wgpu::ComputePipeline {
         let bind_group_layouts = self.layout.iter().map(|x| x.value()).collect::<Vec<_>>();
         let layout = if self.push_constant_ranges.is_empty() && self.layout.is_empty() {

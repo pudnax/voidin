@@ -3,20 +3,11 @@ pub mod camera;
 pub mod input;
 pub mod models;
 pub mod pass;
-pub mod shader_compiler;
 pub mod utils;
 pub mod watcher;
 
-use shader_compiler::ShaderCompiler;
-
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
-
 pub const SCREENSHOTS_FOLDER: &str = "screenshots/";
-
-// Global shader compiler with application specific flags not compatible with wgpu
-pub(crate) static SHADER_COMPILER: Lazy<Mutex<ShaderCompiler>> =
-    Lazy::new(|| Mutex::new(ShaderCompiler::new()));
+pub const SHADER_FOLDER: &str = "shaders";
 
 #[derive(Debug)]
 pub struct Gpu {

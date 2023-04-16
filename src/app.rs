@@ -16,7 +16,7 @@ use crate::{
         self, create_solid_color_texture, save_screenshot, DrawIndexedIndirect, NonZeroSized,
         ResizableBuffer,
     },
-    watcher::{SpirvBytes, Watcher},
+    watcher::Watcher,
     Gpu,
 };
 
@@ -441,13 +441,23 @@ impl App {
         }
     }
 
-    pub fn handle_events(&mut self, path: std::path::PathBuf, module: SpirvBytes) {
+    pub fn handle_events(&mut self, path: std::path::PathBuf, source: String) {
+        let device = self.gpu.device();
+        device.push_error_scope(wgpu::ErrorFilter::Validation);
         let module = self
             .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: path.to_str(),
-                source: wgpu::ShaderSource::SpirV(module.into()),
+                source: wgpu::ShaderSource::Wgsl(source.into()),
             });
+        match device.pop_error_scope().block_on() {
+            None => {}
+            Some(err) => {
+                log::error!("Validation error on shader compilation.");
+                eprintln!("{err}");
+                return;
+            }
+        }
         self.pipeline_arena.reload_pipelines(&path, &module);
     }
 

@@ -22,7 +22,6 @@ struct VertexOutput {
     @location(1) normal: vec3<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) @interpolate(flat) material_id: u32,
-    @location(5) @interpolate(flat) mesh_id: u32,
 }
 
 const LIGTH_POS = vec3<f32>(15., 10.5, 15.);
@@ -41,7 +40,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.normal = mat4_to_mat3(instance.transform) * in.normal;
     out.uv = in.tex_coords;
     out.material_id = instance.material_id;
-    out.mesh_id = instance.mesh_id;
 
     return out;
 }
@@ -49,10 +47,20 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let material = materials[in.material_id];
-    // let albedo = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
+    let albedo_tex = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
+    let normal_tex = textureSample(texture_array[material.normal], tex_sampler, in.uv);
+
+    if material.base_color.w < 0.1 {
+	 	discard;
+    }
+
+    var albedo = albedo_tex.rgb + material.base_color.rgb * 0.1;
     let nor = normalize(in.normal);
-    var color = material.base_color.rgb;
-    color = hash13(f32(in.mesh_id + in.material_id));
-    color = cos(color * PI) * 0.5 + 0.4;
+    let ligth_dir = normalize(LIGTH_POS - in.position);
+
+    let ndotl = dot(nor, ligth_dir);
+    let dif = mix(max(0., ndotl), ndotl * 0.5 + 0.5, 0.5);
+
+    let color = dif * albedo + hash13(f32(in.material_id)) * 0.01;
     return vec4(color, 1.0);
 }

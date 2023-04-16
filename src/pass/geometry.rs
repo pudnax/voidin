@@ -152,7 +152,7 @@ impl EmitDraws {
     ) -> Result<Self> {
         let path = Path::new("shaders").join("emit_draws.wgsl");
         let comp_desc = ComputePipelineDescriptor {
-            label: Some("Compute Indirect Pipeline Layout".into()),
+            label: Some("Compute Indirect Pipeline".into()),
             layout: vec![
                 mesh_layout.clone(),
                 instance_layout.clone(),

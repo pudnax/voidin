@@ -127,8 +127,8 @@ fn main() -> Result<()> {
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
-            Event::UserEvent((path, module)) => {
-                app.handle_events(path, module);
+            Event::UserEvent((path, source)) => {
+                app.handle_events(path, source);
             }
             Event::LoopDestroyed => {
                 println!("// End from the loop. Bye bye~⏎ ");
