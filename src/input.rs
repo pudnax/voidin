@@ -160,6 +160,12 @@ impl Input {
         Default::default()
     }
 
+    pub fn tick(&mut self) {
+        self.keyboard_state.keys_down.values_mut().for_each(|val| {
+            val.ticks += 1;
+        });
+    }
+
     pub fn update<T>(&mut self, event: &Event<'_, T>, window: &Window) -> bool {
         let mouse = &mut self.mouse_state;
         let keyb = &mut self.keyboard_state.keys_down;
@@ -222,10 +228,6 @@ impl Input {
                     } else {
                         keyb.remove(keycode);
                     }
-
-                    keyb.values_mut().for_each(|val| {
-                        val.ticks += 1;
-                    });
                 }
                 _ => {}
             },

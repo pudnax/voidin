@@ -49,20 +49,6 @@ impl AppState {
         if self
             .input
             .keyboard_state
-            .was_just_pressed(VirtualKeyCode::F2)
-        {
-            dbg!("Boom?");
-        };
-        if self
-            .input
-            .keyboard_state
-            .was_just_pressed(VirtualKeyCode::F1)
-        {
-            dbg!("wwwwww?");
-        };
-        if self
-            .input
-            .keyboard_state
             .was_just_pressed(VirtualKeyCode::F3)
         {
             actions.push(StateAction::Screenshot);

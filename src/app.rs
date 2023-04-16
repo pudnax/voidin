@@ -316,9 +316,6 @@ impl App {
 
         self.instance_manager.add(&instances);
 
-        dbg!(instances.len());
-        dbg!(self.instance_manager.instances.len());
-
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,

@@ -79,6 +79,7 @@ fn main() -> Result<()> {
 
                 accumulated_time += frame_time;
                 while accumulated_time >= FIXED_TIME_STEP {
+                    app_state.input.tick();
                     let actions = app_state.update(FIXED_TIME_STEP);
                     app.update(&app_state, actions);
 
