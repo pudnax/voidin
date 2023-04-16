@@ -3,7 +3,7 @@ use std::sync::Arc;
 use glam::Mat4;
 
 use crate::{
-    utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
+    utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt, Resource},
     Gpu,
 };
 
@@ -57,8 +57,13 @@ pub struct InstancesManager {
     gpu: Arc<Gpu>,
 }
 
+impl Resource for InstancesManager {
+    fn init(gpu: Arc<Gpu>) -> Self {
+        Self::new(gpu)
+    }
+}
+
 impl InstancesManager {
-    pub const MAX_INSTANCES: usize = 1_000_000;
     const LAYOUT: wgpu::BindGroupLayoutDescriptor<'static> = wgpu::BindGroupLayoutDescriptor {
         label: Some("Draw Instances Bind Group Layout"),
         entries: &[wgpu::BindGroupLayoutEntry {

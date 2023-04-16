@@ -4,22 +4,24 @@ use wgpu::CommandEncoder;
 
 use super::Pass;
 
-use crate::app::{
-    bind_group_layout::{BindGroupLayout, WrappedBindGroupLayout},
-    pipeline::{Arena, RenderHandle, RenderPipelineDescriptor},
-    ViewTarget,
+use crate::{
+    app::{
+        bind_group_layout::WrappedBindGroupLayout,
+        global_ubo::GlobalUniformBinding,
+        pipeline::{Arena, RenderHandle, RenderPipelineDescriptor},
+        ViewTarget,
+    },
+    utils::{Ref, World},
 };
 
 pub struct PostProcess {
     pipeline: RenderHandle,
+    global_ubo: Ref<GlobalUniformBinding>,
 }
 
 impl PostProcess {
-    pub fn new(
-        pipeline_arena: &mut Arena,
-        global_uniform: BindGroupLayout,
-        path: impl AsRef<Path>,
-    ) -> Result<Self> {
+    pub fn new(world: &World, pipeline_arena: &mut Arena, path: impl AsRef<Path>) -> Result<Self> {
+        let global_ubo = world.get::<GlobalUniformBinding>();
         let postprocess_bind_group_layout = pipeline_arena.device().create_bind_group_layout_wrap(
             &wgpu::BindGroupLayoutDescriptor {
                 label: Some("Post Process Bind Group Layout"),
@@ -47,18 +49,23 @@ impl PostProcess {
         );
         let desc = RenderPipelineDescriptor {
             label: Some("Post Process Pipeline".into()),
-            layout: vec![global_uniform, postprocess_bind_group_layout],
+            layout: vec![
+                global_ubo.get().layout.clone(),
+                postprocess_bind_group_layout,
+            ],
             depth_stencil: None,
             ..Default::default()
         };
         let pipeline = pipeline_arena.process_render_pipeline_from_path(path, desc)?;
-        Ok(Self { pipeline })
+        Ok(Self {
+            pipeline,
+            global_ubo,
+        })
     }
 }
 
 pub struct PostProcessResource<'a> {
     pub arena: &'a Arena,
-    pub global_binding: &'a wgpu::BindGroup,
     pub sampler: &'a wgpu::Sampler,
 }
 
@@ -71,6 +78,7 @@ impl Pass for PostProcess {
         view_target: &ViewTarget,
         resource: Self::Resoutces<'_>,
     ) {
+        let global_ubo = self.global_ubo.get();
         let post_process_target = view_target.post_process_write();
         let tex_bind_group =
             resource
@@ -104,7 +112,7 @@ impl Pass for PostProcess {
             ))],
             depth_stencil_attachment: None,
         });
-        pass.set_bind_group(0, resource.global_binding, &[]);
+        pass.set_bind_group(0, &global_ubo.binding, &[]);
         pass.set_bind_group(1, &tex_bind_group, &[]);
         pass.set_pipeline(resource.arena.get_pipeline(self.pipeline));
         pass.draw(0..3, 0..1);

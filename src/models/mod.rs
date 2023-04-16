@@ -52,7 +52,7 @@ impl ObjModel {
             meshes.push((mesh_id, material_id));
         }
 
-        app.textures_bind_group = app.texture_manager.create_bind_group(app.device());
+        app.texture_manager.get_mut().update_bind_group();
         Ok(meshes)
     }
 }

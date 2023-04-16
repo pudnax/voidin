@@ -1,4 +1,4 @@
-use crate::utils::NonZeroSized;
+use crate::utils::{NonZeroSized, Resource};
 use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
@@ -10,6 +10,12 @@ pub struct GlobalUniformBinding {
     pub binding: wgpu::BindGroup,
     pub layout: bind_group_layout::BindGroupLayout,
     buffer: wgpu::Buffer,
+}
+
+impl Resource for GlobalUniformBinding {
+    fn init(gpu: std::sync::Arc<crate::Gpu>) -> Self {
+        Self::new(gpu.device())
+    }
 }
 
 impl GlobalUniformBinding {

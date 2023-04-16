@@ -4,7 +4,7 @@ use std::sync::Arc;
 use glam::{Vec2, Vec3};
 
 use crate::{
-    utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
+    utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt, Resource},
     Gpu,
 };
 
@@ -51,6 +51,12 @@ pub struct MeshManager {
     pub indices: ResizableBuffer<u32>,
 
     gpu: Arc<Gpu>,
+}
+
+impl Resource for MeshManager {
+    fn init(gpu: Arc<Gpu>) -> Self {
+        Self::new(gpu)
+    }
 }
 
 impl MeshManager {

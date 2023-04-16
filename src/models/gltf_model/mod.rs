@@ -54,7 +54,7 @@ impl GltfDocument {
             instances.push(instance);
         }
 
-        app.textures_bind_group = app.texture_manager.create_bind_group(app.device());
+        app.texture_manager.get_mut().update_bind_group();
 
         Ok(Self {
             document,

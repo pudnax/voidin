@@ -8,7 +8,9 @@ use std::{
 };
 
 mod buffer;
+mod resource;
 pub use buffer::{ResizableBuffer, ResizableBufferExt};
+pub use resource::*;
 
 use either::Either;
 use glam::Vec4;
