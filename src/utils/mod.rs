@@ -1,9 +1,11 @@
 use std::{
+    fs::File,
+    io::{self, BufWriter, Write},
     iter::{self, Repeat},
     num::NonZeroU64,
     ops::Range,
     path::Path,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 mod buffer;
@@ -14,7 +16,7 @@ use glam::Vec4;
 use wgpu::util::DeviceExt;
 use wgpu_profiler::GpuTimerScopeResult;
 
-use crate::SHADER_COMPILER;
+use crate::{app::ImageDimentions, SCREENSHOTS_FOLDER, SHADER_COMPILER};
 
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = {
@@ -136,6 +138,53 @@ impl DeviceShaderExt for wgpu::Device {
         });
         Ok(module)
     }
+}
+
+pub fn create_folder(name: impl AsRef<Path>) -> io::Result<()> {
+    match std::fs::create_dir(name) {
+        Ok(_) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+
+    Ok(())
+}
+
+pub fn save_screenshot(
+    frame: Vec<u8>,
+    image_dimentions: ImageDimentions,
+) -> std::thread::JoinHandle<color_eyre::Result<()>> {
+    std::thread::spawn(move || {
+        let now = Instant::now();
+        let screenshots_folder = Path::new(SCREENSHOTS_FOLDER);
+        create_folder(screenshots_folder)?;
+        let path = screenshots_folder.join(format!(
+            "screenshot-{}.png",
+            chrono::Local::now().format("%d-%m-%Y-%H-%M-%S")
+        ));
+        let file = File::create(path)?;
+        let w = BufWriter::new(file);
+        let mut encoder =
+            png::Encoder::new(w, image_dimentions.width as _, image_dimentions.height as _);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let padded_bytes = image_dimentions.padded_bytes_per_row as _;
+        let unpadded_bytes = image_dimentions.unpadded_bytes_per_row as _;
+        let mut writer = encoder
+            .write_header()?
+            .into_stream_writer_with_size(unpadded_bytes)?;
+        writer.set_filter(png::FilterType::Paeth);
+        writer.set_adaptive_filter(png::AdaptiveFilterType::Adaptive);
+        for chunk in frame
+            .chunks(padded_bytes)
+            .map(|chunk| &chunk[..unpadded_bytes])
+        {
+            writer.write_all(chunk)?;
+        }
+        writer.finish()?;
+        log::info!("Encode image: {:#.2?}", now.elapsed());
+        Ok(())
+    })
 }
 
 pub trait FormatConversions {

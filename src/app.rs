@@ -12,7 +12,10 @@ use crate::{
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
     pass::{self, Pass},
-    utils::{self, create_solid_color_texture, DrawIndexedIndirect, NonZeroSized, ResizableBuffer},
+    utils::{
+        self, create_solid_color_texture, save_screenshot, DrawIndexedIndirect, NonZeroSized,
+        ResizableBuffer,
+    },
     watcher::{SpirvBytes, Watcher},
     Gpu,
 };
@@ -24,10 +27,12 @@ pub mod instance;
 pub mod material;
 pub mod mesh;
 pub mod pipeline;
+mod screenshot;
 pub mod state;
 pub mod texture;
 mod view_target;
 
+pub use screenshot::ImageDimentions;
 pub(crate) use view_target::ViewTarget;
 
 use self::{
@@ -36,7 +41,8 @@ use self::{
     material::{Material, MaterialId, MaterialManager},
     mesh::{MeshId, MeshManager},
     pipeline::Handle,
-    state::AppState,
+    screenshot::ScreenshotCtx,
+    state::{AppState, StateAction},
     texture::{TextureId, TextureManager},
 };
 
@@ -87,6 +93,7 @@ pub struct App {
 
     pipeline_arena: pipeline::Arena,
 
+    screenshot_ctx: ScreenshotCtx,
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
 
@@ -113,11 +120,6 @@ impl App {
 
         let limits = adapter.limits();
         let mut features = adapter.features();
-        dbg!(features);
-        dbg!(features.contains(
-            wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
-        ));
-        dbg!(features.contains(wgpu::Features::TEXTURE_BINDING_ARRAY));
         features.remove(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS);
 
         let (device, queue) = adapter
@@ -237,6 +239,7 @@ impl App {
 
             profiler,
             blitter: blitter::Blitter::new(gpu.device()),
+            screenshot_ctx: ScreenshotCtx::new(&gpu, width, height),
 
             gpu,
             surface,
@@ -260,11 +263,12 @@ impl App {
     pub fn setup_scene(&mut self) -> Result<()> {
         let gltf_scene = GltfDocument::import(
             self,
+            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
             // "assets/sponza-optimized/Sponza.gltf",
-            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf", // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-                                                                     // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-                                                                     // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-                                                                     // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
 
         for scene in gltf_scene.document.scenes() {
@@ -420,9 +424,11 @@ impl App {
         self.depth_texture = Self::create_depth_texture(self.gpu.device(), &self.surface_config);
         self.view_target = view_target::ViewTarget::new(self.gpu.device(), width, height);
         self.global_uniform.resolution = [width as f32, height as f32];
+
+        self.screenshot_ctx.resize(&self.gpu, width, height);
     }
 
-    pub fn update(&mut self, state: &AppState) {
+    pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) {
         self.global_uniform.frame = state.frame_count as _;
         self.global_uniform.time = state.total_time as _;
         self.global_uniform_binding
@@ -437,6 +443,33 @@ impl App {
             utils::scopes_to_console_recursive(&last_profile, 0);
             println!();
         }
+
+        for action in actions {
+            match action {
+                StateAction::Screenshot => self.capture_frame(|frame, dims| {
+                    save_screenshot(frame, dims);
+                }),
+            }
+        }
+    }
+
+    pub fn handle_events(&mut self, path: std::path::PathBuf, module: SpirvBytes) {
+        let module = self
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: path.to_str(),
+                source: wgpu::ShaderSource::SpirV(module.into()),
+            });
+        self.pipeline_arena.reload_pipelines(&path, &module);
+    }
+
+    pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions) + Send + 'static) {
+        self.screenshot_ctx.capture_frame(
+            &self.gpu,
+            &self.blitter,
+            self.view_target.main_view(),
+            callback,
+        )
     }
 
     pub fn add_mesh(
@@ -456,16 +489,6 @@ impl App {
 
     pub fn add_texture(&mut self, view: wgpu::TextureView) -> TextureId {
         self.texture_manager.add(view)
-    }
-
-    pub fn handle_events(&mut self, path: std::path::PathBuf, module: SpirvBytes) {
-        let module = self
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: path.to_str(),
-                source: wgpu::ShaderSource::SpirV(module.into()),
-            });
-        self.pipeline_arena.reload_pipelines(&path, &module);
     }
 
     pub fn get_pipeline<H: Handle>(&self, handle: H) -> &H::Pipeline {

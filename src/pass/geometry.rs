@@ -188,9 +188,9 @@ impl Pass for EmitDraws {
         });
 
         cpass.set_pipeline(resources.arena.get_pipeline(self.pipeline));
-        cpass.set_bind_group(0, &resources.mesh_info_bind_group, &[]);
-        cpass.set_bind_group(1, &resources.instance_bind_group, &[]);
-        cpass.set_bind_group(2, &resources.draw_cmd_bind_group, &[]);
+        cpass.set_bind_group(0, resources.mesh_info_bind_group, &[]);
+        cpass.set_bind_group(1, resources.instance_bind_group, &[]);
+        cpass.set_bind_group(2, resources.draw_cmd_bind_group, &[]);
         cpass.dispatch_workgroups(align_to(resources.draw_cmd_buffer.len() as _, 32), 1, 1);
     }
 }

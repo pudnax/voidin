@@ -1,10 +1,15 @@
 use dolly::prelude::{Position, YawPitch};
 use glam::Vec3;
+use winit::event::VirtualKeyCode;
 
 use crate::{
     camera::Camera,
     input::{Input, KeyboardMap},
 };
+
+pub enum StateAction {
+    Screenshot,
+}
 
 pub struct AppState {
     pub frame_count: u64,
@@ -12,6 +17,7 @@ pub struct AppState {
     pub camera: Camera,
     pub input: Input,
     pub keyboard_map: KeyboardMap,
+    pub make_screenshot: bool,
 }
 
 impl AppState {
@@ -22,10 +28,13 @@ impl AppState {
             total_time: 0.,
             camera,
             keyboard_map: keyboard_map.unwrap_or_default(),
+            make_screenshot: false,
         }
     }
 
-    pub fn update(&mut self, dt: f64) {
+    pub fn update(&mut self, dt: f64) -> Vec<StateAction> {
+        let mut actions = vec![];
+
         self.total_time += dt;
         self.frame_count = self.frame_count.wrapping_add(1);
 
@@ -36,6 +45,30 @@ impl AppState {
                 -sensitivity * self.input.mouse_state.delta.y,
             );
         }
+
+        dbg!(&self.input.keyboard_state);
+
+        if self
+            .input
+            .keyboard_state
+            .was_just_pressed(VirtualKeyCode::F2)
+        {
+            dbg!("Boom?");
+        };
+        if self
+            .input
+            .keyboard_state
+            .was_just_pressed(VirtualKeyCode::F1)
+        {
+            dbg!("wwwwww?");
+        };
+        if self
+            .input
+            .keyboard_state
+            .was_just_pressed(VirtualKeyCode::F3)
+        {
+            actions.push(StateAction::Screenshot);
+        };
 
         let moves = self.keyboard_map.map(&self.input.keyboard_state);
         let move_vec = self.camera.rig.final_transform.rotation
@@ -54,5 +87,7 @@ impl AppState {
         self.camera.rotation = self.camera.rig.final_transform.rotation;
 
         self.input.mouse_state.refresh();
+
+        actions
     }
 }
