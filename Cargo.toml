@@ -33,6 +33,7 @@ uni-path = "1.51.1"
 chrono = "0.4.24"
 clap = "4.2.2"
 png = "0.17.8"
+crossbeam-channel = "0.5.8"
 
 [profile.dev.package."*"]
 opt-level = 1

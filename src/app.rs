@@ -12,8 +12,9 @@ use crate::{
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
     pass::{self, Pass},
+    recorder::Recorder,
     utils::{
-        self, create_solid_color_texture, save_screenshot, DrawIndexedIndirect, NonZeroSized,
+        self, create_solid_color_texture, DrawIndexedIndirect, ImageDimentions, NonZeroSized,
         ResizableBuffer,
     },
     watcher::Watcher,
@@ -32,7 +33,6 @@ pub mod state;
 pub mod texture;
 mod view_target;
 
-pub use screenshot::ImageDimentions;
 pub(crate) use view_target::ViewTarget;
 
 use self::{
@@ -93,6 +93,7 @@ pub struct App {
 
     pipeline_arena: pipeline::Arena,
 
+    recorder: Recorder,
     screenshot_ctx: ScreenshotCtx,
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
 }
@@ -224,6 +225,20 @@ impl App {
         ));
 
         Ok(Self {
+            surface,
+            surface_config,
+            depth_texture,
+            view_target,
+
+            default_sampler,
+
+            global_uniform_binding,
+            global_uniform,
+
+            camera_uniform,
+
+            postprocess_pipeline,
+
             texture_manager,
             mesh_manager,
             material_manager,
@@ -240,23 +255,10 @@ impl App {
             profiler,
             blitter: blitter::Blitter::new(gpu.device()),
             screenshot_ctx: ScreenshotCtx::new(&gpu, width, height),
-
-            gpu,
-            surface,
-            surface_config,
-            depth_texture,
-            view_target,
-
-            default_sampler,
-
-            global_uniform_binding,
-            global_uniform,
-
-            camera_uniform,
-
-            postprocess_pipeline,
+            recorder: Recorder::new(),
 
             pipeline_arena,
+            gpu,
         })
     }
 
@@ -395,6 +397,12 @@ impl App {
 
         profiler.end_frame().ok();
 
+        if self.recorder.is_active() {
+            self.capture_frame(|frame, _| {
+                self.recorder.record(frame);
+            });
+        }
+
         Ok(())
     }
 
@@ -411,6 +419,10 @@ impl App {
         self.global_uniform.resolution = [width as f32, height as f32];
 
         self.screenshot_ctx.resize(&self.gpu, width, height);
+
+        if self.recorder.is_active() {
+            self.recorder.finish();
+        }
     }
 
     pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) {
@@ -431,9 +443,15 @@ impl App {
 
         for action in actions {
             match action {
-                StateAction::Screenshot => self.capture_frame(|frame, dims| {
-                    save_screenshot(frame, dims);
-                }),
+                StateAction::Screenshot => {
+                    self.capture_frame(|frame, dims| {
+                        self.recorder.screenshot(frame, dims);
+                    });
+                }
+                StateAction::StartRecording => {
+                    self.recorder.start(self.screenshot_ctx.image_dimentions)
+                }
+                StateAction::FinishRecording => self.recorder.finish(),
             }
         }
     }
@@ -458,13 +476,13 @@ impl App {
         self.pipeline_arena.reload_pipelines(&path, &module);
     }
 
-    pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions) + Send + 'static) {
-        self.screenshot_ctx.capture_frame(
+    pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions)) {
+        let (frame, dims) = self.screenshot_ctx.capture_frame(
             &self.gpu,
             &self.blitter,
             self.view_target.main_view(),
-            callback,
-        )
+        );
+        callback(frame, dims)
     }
 
     pub fn add_mesh(

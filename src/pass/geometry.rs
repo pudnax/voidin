@@ -2,7 +2,7 @@ use std::path::Path;
 
 use color_eyre::Result;
 use glam::{Vec2, Vec3};
-use wgpu::IndexFormat;
+use wgpu::{util::align_to, IndexFormat};
 
 use super::Pass;
 
@@ -15,7 +15,7 @@ use crate::{
             RenderPipelineDescriptor,
         },
     },
-    utils::{align_to, DrawIndexedIndirect, ResizableBuffer},
+    utils::{DrawIndexedIndirect, ResizableBuffer},
 };
 
 pub struct Geometry {

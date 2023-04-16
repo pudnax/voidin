@@ -1,11 +1,10 @@
 use std::{
-    fs::File,
-    io::{self, BufWriter, Write},
+    io,
     iter::{self, Repeat},
     num::NonZeroU64,
     ops::Range,
     path::Path,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 mod buffer;
@@ -13,10 +12,10 @@ pub use buffer::{ResizableBuffer, ResizableBufferExt};
 
 use either::Either;
 use glam::Vec4;
-use wgpu::util::DeviceExt;
+use wgpu::util::{align_to, DeviceExt};
 use wgpu_profiler::GpuTimerScopeResult;
 
-use crate::{app::ImageDimentions, SCREENSHOTS_FOLDER, SHADER_FOLDER};
+use crate::SHADER_FOLDER;
 
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = {
@@ -36,10 +35,6 @@ pub struct DrawIndexedIndirect {
     pub base_index: u32,
     pub vertex_offset: i32,
     pub base_instance: u32,
-}
-
-pub fn align_to(size: u32, align: u32) -> u32 {
-    (size + align - 1) & !(align - 1)
 }
 
 pub trait Lerp: Sized {
@@ -149,6 +144,35 @@ impl DeviceShaderExt for wgpu::Device {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ImageDimentions {
+    pub width: u32,
+    pub height: u32,
+    pub unpadded_bytes_per_row: u32,
+    pub padded_bytes_per_row: u32,
+}
+
+impl ImageDimentions {
+    pub fn new(width: u32, height: u32, align: u32) -> Self {
+        let width = align_to(width, 2);
+        let height = align_to(height, 2);
+        let bytes_per_pixel = std::mem::size_of::<[u8; 4]>() as u32;
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let row_padding = (align - unpadded_bytes_per_row % align) % align;
+        let padded_bytes_per_row = unpadded_bytes_per_row + row_padding;
+        Self {
+            width,
+            height,
+            unpadded_bytes_per_row,
+            padded_bytes_per_row,
+        }
+    }
+
+    pub fn linear_size(&self) -> u64 {
+        self.padded_bytes_per_row as u64 * self.height as u64
+    }
+}
+
 pub fn create_folder(name: impl AsRef<Path>) -> io::Result<()> {
     match std::fs::create_dir(name) {
         Ok(_) => {}
@@ -157,43 +181,6 @@ pub fn create_folder(name: impl AsRef<Path>) -> io::Result<()> {
     }
 
     Ok(())
-}
-
-pub fn save_screenshot(
-    frame: Vec<u8>,
-    image_dimentions: ImageDimentions,
-) -> std::thread::JoinHandle<color_eyre::Result<()>> {
-    std::thread::spawn(move || {
-        let now = Instant::now();
-        let screenshots_folder = Path::new(SCREENSHOTS_FOLDER);
-        create_folder(screenshots_folder)?;
-        let path = screenshots_folder.join(format!(
-            "screenshot-{}.png",
-            chrono::Local::now().format("%d-%m-%Y-%H-%M-%S")
-        ));
-        let file = File::create(path)?;
-        let w = BufWriter::new(file);
-        let mut encoder =
-            png::Encoder::new(w, image_dimentions.width as _, image_dimentions.height as _);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        let padded_bytes = image_dimentions.padded_bytes_per_row as _;
-        let unpadded_bytes = image_dimentions.unpadded_bytes_per_row as _;
-        let mut writer = encoder
-            .write_header()?
-            .into_stream_writer_with_size(unpadded_bytes)?;
-        writer.set_filter(png::FilterType::Paeth);
-        writer.set_adaptive_filter(png::AdaptiveFilterType::Adaptive);
-        for chunk in frame
-            .chunks(padded_bytes)
-            .map(|chunk| &chunk[..unpadded_bytes])
-        {
-            writer.write_all(chunk)?;
-        }
-        writer.finish()?;
-        log::info!("Encode image: {:#.2?}", now.elapsed());
-        Ok(())
-    })
 }
 
 pub trait FormatConversions {

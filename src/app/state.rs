@@ -4,11 +4,13 @@ use winit::event::VirtualKeyCode;
 
 use crate::{
     camera::Camera,
-    input::{Input, KeyboardMap},
+    input::{Input, KeyboardMap, KeyboardState},
 };
 
 pub enum StateAction {
     Screenshot,
+    StartRecording,
+    FinishRecording,
 }
 
 pub struct AppState {
@@ -18,6 +20,7 @@ pub struct AppState {
     pub input: Input,
     pub keyboard_map: KeyboardMap,
     pub make_screenshot: bool,
+    recording: bool,
 }
 
 impl AppState {
@@ -29,6 +32,7 @@ impl AppState {
             camera,
             keyboard_map: keyboard_map.unwrap_or_default(),
             make_screenshot: false,
+            recording: false,
         }
     }
 
@@ -45,14 +49,6 @@ impl AppState {
                 -sensitivity * self.input.mouse_state.delta.y,
             );
         }
-
-        if self
-            .input
-            .keyboard_state
-            .was_just_pressed(VirtualKeyCode::F3)
-        {
-            actions.push(StateAction::Screenshot);
-        };
 
         let moves = self.keyboard_map.map(&self.input.keyboard_state);
         let move_vec = self.camera.rig.final_transform.rotation
@@ -72,6 +68,21 @@ impl AppState {
 
         self.input.mouse_state.refresh();
 
+        if self.keyboard().was_just_pressed(VirtualKeyCode::F3) {
+            actions.push(StateAction::Screenshot);
+        };
+        if self.keyboard().was_just_pressed(VirtualKeyCode::F4) {
+            if !self.recording {
+                actions.push(StateAction::StartRecording)
+            } else {
+                actions.push(StateAction::FinishRecording)
+            }
+            self.recording = !self.recording;
+        };
         actions
+    }
+
+    fn keyboard(&self) -> &KeyboardState {
+        &self.input.keyboard_state
     }
 }
