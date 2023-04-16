@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use crate::SHADER_FOLDER;
+use crate::{utils::ImportResolver, SHADER_FOLDER};
 
 pub struct Watcher {
     watcher: notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>,
@@ -50,21 +50,14 @@ fn watch_callback(
                     "TODO: Support glsl shaders."
                 );
 
-                let parser = ocl_include::Parser::builder()
-                    .add_source(
-                        ocl_include::source::Fs::builder()
-                            .include_dir(uni_path::Path::new(SHADER_FOLDER))
-                            .expect("Shader folder doesn't exist")
-                            .build(),
-                    )
-                    .build();
-
-                let Ok(parsed_res) = parser
-                    .parse(uni_path::Path::new(&path.to_string_lossy())) else {
-                        log::error!("Failed to read file: {}", path.display());
+                let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
+                let source = match resolver.populate(&path) {
+                    Ok(s) => s.contents,
+                    Err(err) => {
+                        log::error!("Failed to parse imports: {err}");
                         return;
-                    } ;
-                let source = parsed_res.collect().0;
+                    }
+                };
                 proxy
                     .send_event((path, source))
                     .expect("Event Loop has been dropped");

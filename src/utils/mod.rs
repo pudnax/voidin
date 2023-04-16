@@ -8,8 +8,10 @@ use std::{
 };
 
 mod buffer;
+mod import_resolver;
 mod resource;
 pub use buffer::{ResizableBuffer, ResizableBufferExt};
+pub use import_resolver::ImportResolver;
 pub use resource::*;
 
 use either::Either;
@@ -127,16 +129,8 @@ impl DeviceShaderExt for wgpu::Device {
         &self,
         path: impl AsRef<Path>,
     ) -> color_eyre::Result<wgpu::ShaderModule> {
-        let parser = ocl_include::Parser::builder()
-            .add_source(
-                ocl_include::source::Fs::builder()
-                    .include_dir(uni_path::Path::new(SHADER_FOLDER))?
-                    .build(),
-            )
-            .build();
-
-        let parsed_res = parser.parse(uni_path::Path::new(&path.as_ref().to_string_lossy()))?;
-        let source = parsed_res.collect().0;
+        let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
+        let source = resolver.populate(&path)?.contents;
 
         let module = self.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: path.as_ref().to_str(),

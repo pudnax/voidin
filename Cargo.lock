@@ -351,6 +351,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a2dd5a6fe8c6e3502f568a6353e5273bbb15193ad9a89e457b9970798efbea1"
 
 [[package]]
+name = "clean-path"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aaa6b4b263a5d737e9bf6b7c09b72c41a5480aec4d7219af827f6564e950b6a5"
+
+[[package]]
 name = "codespan-reporting"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1392,17 +1398,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ocl-include"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa26df9aaf487e3db9b4e9329f63cb572118fef78a7a437b13165d191033b424"
-dependencies = [
- "lazy_static",
- "regex",
- "uni-path",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1970,12 +1965,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0609f771ad9c6155384897e1df4d948e692667cc0588548b68eb44d052b27633"
 
 [[package]]
-name = "uni-path"
-version = "1.51.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25e328d505b1f855c20e7358711b7ec6398524181664f016dd15cfb36c3a6275"
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2030,6 +2019,7 @@ dependencies = [
  "bytemuck",
  "chrono",
  "clap",
+ "clean-path",
  "color-eyre",
  "crossbeam-channel",
  "dolly",
@@ -2042,13 +2032,11 @@ dependencies = [
  "log",
  "notify",
  "notify-debouncer-mini",
- "ocl-include",
  "parking_lot",
  "png",
  "pollster",
  "slotmap",
  "tobj",
- "uni-path",
  "wgpu",
  "wgpu-profiler",
  "winit",

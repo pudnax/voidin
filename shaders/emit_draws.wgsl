@@ -1,4 +1,4 @@
-#include "shared.wgsl";
+#import <shared.wgsl>
 
 @group(0) @binding(0)
 var<storage, read> meshes: array<MeshInfo>;

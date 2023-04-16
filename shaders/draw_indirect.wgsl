@@ -1,4 +1,4 @@
-#include "shared.wgsl";
+#import <shared.wgsl>
 
 @group(0) @binding(0) var<uniform> un: Globals;
 @group(1) @binding(0) var<uniform> camera: Camera;

@@ -1,5 +1,3 @@
-#pragma once
-
 struct Globals {
     resolution: vec2<f32>,
     time: f32,
