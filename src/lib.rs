@@ -12,7 +12,7 @@ use shader_compiler::ShaderCompiler;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
-pub const SCREENSHOTS_FOLDER: &str = "screenshots";
+pub const SCREENSHOTS_FOLDER: &str = "screenshots/";
 
 // Global shader compiler with application specific flags not compatible with wgpu
 pub(crate) static SHADER_COMPILER: Lazy<Mutex<ShaderCompiler>> =
