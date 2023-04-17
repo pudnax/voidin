@@ -13,7 +13,6 @@ struct Camera {
 
 struct MeshInfo {
     vertex_offset: i32,
-	vertex_count: u32,
 	base_index: u32,
 	index_count: u32,
 }

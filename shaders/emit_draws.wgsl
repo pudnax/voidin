@@ -10,7 +10,7 @@ var<storage, read> instances: array<Instance>;
 var<storage, read_write> cmd_buffer: array<DrawIndexedIndirect>;
 
 @compute
-@workgroup_size(32, 1, 1)
+@workgroup_size(64, 1, 1)
 fn emit_draws(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
     let len = arrayLength(&instances);

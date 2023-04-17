@@ -1,6 +1,7 @@
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3};
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
 use super::bind_group_layout::{self, WrappedBindGroupLayout};
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Pod, Zeroable)]
 pub struct MeshId(u32);
 
 impl From<MeshId> for u32 {
@@ -25,12 +26,17 @@ impl From<MeshId> for usize {
     }
 }
 
+impl MeshId {
+    pub fn id(&self) -> u32 {
+        self.0
+    }
+}
+
 // TODO: rearrange
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 pub struct MeshInfo {
     vertex_offset: i32,
-    vertex_count: u32,
     base_index: u32,
     index_count: u32,
 }
@@ -149,7 +155,6 @@ impl MeshManager {
 
         let mesh_info = MeshInfo {
             vertex_offset: vertex_offset as i32,
-            vertex_count,
             base_index,
             index_count,
         };
@@ -167,6 +172,7 @@ impl MeshManager {
             self.mesh_info_bind_group = self.gpu.device().create_bind_group(&desc);
         }
 
+        log::info!("Added new mesh with id: {mesh_index}");
         MeshId(mesh_index)
     }
 }

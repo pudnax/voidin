@@ -27,6 +27,13 @@ pub struct GltfDocument {
 
 impl GltfDocument {
     pub fn import(app: &mut App, path: impl AsRef<Path>) -> Result<Self> {
+        let name = path
+            .as_ref()
+            .file_name()
+            .map(|s| s.to_str())
+            .flatten()
+            .unwrap_or("Gltf Model");
+        log::info!("Started processing model: {name:?}",);
         let (document, buffers, images) = gltf::import(path)?;
         let textures = Self::make_textures(app, &document, &images)?;
         let materials = Self::make_materials(app, &document, &textures)?;
@@ -71,6 +78,7 @@ impl GltfDocument {
     ) -> Result<Vec<TextureId>> {
         let mut textures = vec![];
         for image in document.images() {
+            let name = image.name().unwrap_or("");
             let image = images
                 .get(image.index())
                 .ok_or_else(|| eyre!("Invalid image index"))?;
@@ -121,6 +129,7 @@ impl GltfDocument {
             app.queue().submit(Some(encoder.finish()));
 
             let texture_id = app.add_texture(texture_view);
+            log::info!("Inserted texture {name} with id: {}", texture_id.id());
             textures.push(texture_id);
         }
 
@@ -142,6 +151,7 @@ impl GltfDocument {
     ) -> Result<Vec<MaterialId>> {
         let mut materials = vec![];
         for material in document.materials() {
+            let name = material.name().unwrap_or("");
             let pbr = material.pbr_metallic_roughness();
             let mut color: Vec4 = pbr.base_color_factor().into();
             color.w = material.alpha_cutoff().unwrap_or(0.5);
@@ -167,13 +177,16 @@ impl GltfDocument {
                 .and_then(|t| textures.get(t.texture().index()).copied())
                 .unwrap_or_default();
 
-            materials.push(app.add_material(Material {
+            let material = Material {
                 base_color: color,
                 albedo,
                 normal,
                 metallic_roughness,
                 emissive,
-            }));
+            };
+            let id = app.add_material(material);
+            log::info!("Inserted material {name} with id: {:?}", id);
+            materials.push(id);
         }
 
         Ok(materials)

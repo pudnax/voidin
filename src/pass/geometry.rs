@@ -214,6 +214,7 @@ impl Pass for EmitDraws {
         cpass.set_bind_group(0, &meshes.mesh_info_bind_group, &[]);
         cpass.set_bind_group(1, &instances.bind_group, &[]);
         cpass.set_bind_group(2, resources.draw_cmd_bind_group, &[]);
-        cpass.dispatch_workgroups(align_to(resources.draw_cmd_buffer.len() as _, 32), 1, 1);
+        let num_dispatches = align_to(resources.draw_cmd_buffer.len() as _, 64) / 64;
+        cpass.dispatch_workgroups(num_dispatches, 1, 1);
     }
 }

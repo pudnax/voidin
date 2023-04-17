@@ -20,7 +20,7 @@ impl BindGroupLayoutId {
         Self(NonZeroU32::new(counter).unwrap_or_else(|| {
             panic!(
                 "The system ran out of unique `{}`s.",
-                std::any::type_name::<Self>(),
+                pretty_type_name::pretty_type_name::<Self>(),
             );
         }))
     }

@@ -3,6 +3,7 @@ use crate::Gpu;
 use std::{marker::PhantomData, mem::size_of, num::NonZeroU64, ops::RangeBounds};
 
 use bytemuck::Pod;
+use pretty_type_name::pretty_type_name;
 use wgpu::{
     util::DeviceExt, Buffer, BufferAddress, BufferDescriptor, BufferSlice, BufferUsages,
     CommandEncoder, CommandEncoderDescriptor, Device,
@@ -52,7 +53,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     pub fn new(device: &Device, usages: BufferUsages) -> Self {
         let default_cap = 32;
         let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some(&format!("Buffer<{}>", std::any::type_name::<T>())),
+            label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
             size: (size_of::<T>() * default_cap) as u64,
             usage: usages | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             mapped_at_creation: false,
@@ -69,7 +70,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
 
     pub fn new_with_data(device: &Device, usages: BufferUsages, data: &[T]) -> Self {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some(&format!("Buffer<{}>", std::any::type_name::<T>())),
+            label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
             contents: bytemuck::cast_slice(data),
             usage: usages | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
         });
@@ -99,7 +100,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
             .unwrap_or(new_len)
             .min(max_buffer_size as usize / size_of::<T>());
         let new_buf = device.create_buffer(&BufferDescriptor {
-            label: Some(&format!("Buffer<{}>", std::any::type_name::<T>())),
+            label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
             size: (size_of::<T>() * new_cap) as u64,
             usage: self.usages(),
             mapped_at_creation: false,

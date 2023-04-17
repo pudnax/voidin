@@ -14,6 +14,12 @@ use super::{
 #[derive(Debug, Copy, Default, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct TextureId(u32);
 
+impl TextureId {
+    pub fn id(&self) -> u32 {
+        self.0
+    }
+}
+
 pub struct TextureManager {
     pub views: Vec<wgpu::TextureView>,
 

@@ -49,7 +49,7 @@ impl Instance {
 }
 
 pub struct InstancesManager {
-    instances_data: Vec<Instance>,
+    pub instances_data: Vec<Instance>,
     pub(crate) instances: ResizableBuffer<Instance>,
 
     pub bind_group: wgpu::BindGroup,

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
 use glam::{vec4, Vec4};
 
 use crate::{
@@ -13,7 +14,7 @@ use super::{
 };
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Pod, Zeroable)]
 pub struct MaterialId(u32);
 
 impl MaterialId {
@@ -23,7 +24,7 @@ impl MaterialId {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Copy, Clone, Default, Pod, Zeroable)]
 pub struct Material {
     pub base_color: Vec4,
     pub albedo: TextureId,
@@ -109,6 +110,7 @@ impl MaterialManager {
             self.bind_group = self.gpu.device().create_bind_group(desc);
         }
 
+        log::info!("Added material with id: {}", self.buffer.len() as u32 - 1);
         MaterialId(self.buffer.len() as u32 - 1)
     }
 }
