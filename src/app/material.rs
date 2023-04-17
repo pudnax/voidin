@@ -16,6 +16,12 @@ use super::{
 #[derive(Debug, Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct MaterialId(u32);
 
+impl MaterialId {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Material {
@@ -27,7 +33,7 @@ pub struct Material {
 }
 
 pub struct MaterialManager {
-    buffer: ResizableBuffer<Material>,
+    pub(crate) buffer: ResizableBuffer<Material>,
 
     pub(crate) bind_group_layout: bind_group_layout::BindGroupLayout,
     pub(crate) bind_group: wgpu::BindGroup,

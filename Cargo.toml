@@ -33,6 +33,7 @@ clap = "4.2.2"
 png = "0.17.8"
 crossbeam-channel = "0.5.8"
 clean-path = "0.2.1"
+rand = "0.8.5"
 
 [profile.dev.package."*"]
 opt-level = 1

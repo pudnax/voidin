@@ -51,7 +51,7 @@ impl std::str::FromStr for ImportClause {
 
             return s
                 .parse()
-                .with_context(|| "couldn't parse {s:?} as PAthBuf")
+                .with_context(|| "couldn't parse {s:?} as PathBuf")
                 .map(|path| Self { path });
         }
 
@@ -66,7 +66,7 @@ impl std::fmt::Display for ImportClause {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct InterpolatedFile {
+pub struct ResolvedFile {
     pub contents: String,
     pub imports: HashSet<PathBuf>,
 }
@@ -86,18 +86,18 @@ impl ImportResolver {
         }
     }
 
-    pub fn populate(&mut self, path: impl AsRef<Path>) -> color_eyre::Result<InterpolatedFile> {
+    pub fn populate(&mut self, path: impl AsRef<Path>) -> color_eyre::Result<ResolvedFile> {
         let mut path_stack = Vec::new();
         let mut visited_stack = HashSet::new();
-        let mut interp_files = HashMap::default();
+        let mut resolved_files = HashMap::default();
 
         fn populate_impl(
             this: &mut ImportResolver,
             path: impl AsRef<Path>,
-            interp_files: &mut HashMap<PathBuf, Rc<InterpolatedFile>>,
+            resolved_files: &mut HashMap<PathBuf, Rc<ResolvedFile>>,
             path_stack: &mut Vec<PathBuf>,
             visited_stack: &mut HashSet<PathBuf>,
-        ) -> color_eyre::Result<Rc<InterpolatedFile>> {
+        ) -> color_eyre::Result<Rc<ResolvedFile>> {
             let path = path.as_ref().clean();
 
             path_stack.push(path.clone());
@@ -105,7 +105,7 @@ impl ImportResolver {
                 return Err(eyre!("import cycle detected: {path_stack:?}"));
             }
 
-            if interp_files.contains_key(&path) {
+            if resolved_files.contains_key(&path) {
                 path_stack.pop().unwrap();
                 visited_stack.remove(&path);
 
@@ -127,9 +127,9 @@ impl ImportResolver {
                                 eyre!("couldn't resolve import clause path at {:?}", clause.path)
                             })?;
                         imports.insert(clause_path.clone());
-                        populate_impl(this, clause_path, interp_files, path_stack, visited_stack)
+                        populate_impl(this, clause_path, resolved_files, path_stack, visited_stack)
                     } else {
-                        Ok(Rc::new(InterpolatedFile {
+                        Ok(Rc::new(ResolvedFile {
                             contents: line.to_owned(),
                             ..Default::default()
                         }))
@@ -139,11 +139,11 @@ impl ImportResolver {
             let children = children?;
 
             let interp = children.into_iter().fold(
-                InterpolatedFile {
+                ResolvedFile {
                     imports,
                     ..Default::default()
                 },
-                |acc, child| InterpolatedFile {
+                |acc, child| ResolvedFile {
                     contents: match (acc.contents.is_empty(), child.contents.is_empty()) {
                         (true, _) => child.contents.clone(),
                         (_, true) => acc.contents,
@@ -153,23 +153,23 @@ impl ImportResolver {
                 },
             );
 
-            let interp = Rc::new(interp);
-            interp_files.insert(path.clone(), Rc::clone(&interp));
+            let resolved = Rc::new(interp);
+            resolved_files.insert(path.clone(), Rc::clone(&resolved));
 
             path_stack.pop().unwrap();
             visited_stack.remove(&path);
 
-            Ok(interp)
+            Ok(resolved)
         }
 
         populate_impl(
             self,
             path,
-            &mut interp_files,
+            &mut resolved_files,
             &mut path_stack,
             &mut visited_stack,
         )
-        .map(|interp| (*interp).clone())
+        .map(|reslv| (*reslv).clone())
     }
 
     fn resolve_clause_path(

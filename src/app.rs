@@ -4,6 +4,7 @@ use color_eyre::{eyre::ContextCompat, Result};
 use glam::{vec3, vec4, Mat4, Vec2, Vec3};
 
 use pollster::FutureExt;
+use rand::Rng;
 use wgpu::FilterMode;
 use wgpu_profiler::GpuProfiler;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -249,37 +250,6 @@ impl App {
 
     pub fn setup_scene(&mut self) -> Result<()> {
         let mut instances = vec![];
-        let sphere_mesh = models::sphere_mesh(self, 0.6, 30, 20);
-
-        let num = 10;
-        for i in 0..num {
-            let r = 4.0;
-            let x = r * (std::f32::consts::TAU * (i as f32) / num as f32).cos();
-            let y = r * (std::f32::consts::TAU * (i as f32) / num as f32).sin();
-
-            instances.push(instance::Instance {
-                transform: Mat4::from_translation(vec3(x, y, 2.)),
-                mesh: sphere_mesh,
-                material: MaterialId::default(),
-                ..Default::default()
-            });
-        }
-
-        let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
-        for (mesh, material) in &ferris {
-            instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(-3., -4.1, -8.)) * Mat4::from_scale(Vec3::splat(3.)),
-                *mesh,
-                *material,
-            ));
-        }
-        for (mesh, material) in &ferris {
-            instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(3., -4.1, -5.)) * Mat4::from_scale(Vec3::splat(3.)),
-                *mesh,
-                *material,
-            ));
-        }
 
         let gltf_scene = GltfDocument::import(
             self,
@@ -299,6 +269,40 @@ impl App {
                     * Mat4::from_scale(Vec3::splat(3.)),
             );
             instances.extend(scene_instances);
+        }
+        let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
+        for (mesh, material) in &ferris {
+            instances.push(instance::Instance::new(
+                Mat4::from_translation(vec3(-3., -4.1, -8.)) * Mat4::from_scale(Vec3::splat(3.)),
+                *mesh,
+                *material,
+            ));
+        }
+        for (mesh, material) in &ferris {
+            instances.push(instance::Instance::new(
+                Mat4::from_translation(vec3(3., -4.1, -5.)) * Mat4::from_scale(Vec3::splat(3.)),
+                *mesh,
+                *material,
+            ));
+        }
+
+        let sphere_mesh = models::sphere_mesh(self, 0.6, 30, 20);
+
+        let mut rng = rand::thread_rng();
+        let num = 10;
+        for i in 0..num {
+            let r = 4.0;
+            let x = r * (std::f32::consts::TAU * (i as f32) / num as f32).cos();
+            let y = r * (std::f32::consts::TAU * (i as f32) / num as f32).sin();
+
+            instances.push(instance::Instance {
+                transform: Mat4::from_translation(vec3(x, y, 2.)),
+                mesh: sphere_mesh,
+                material: MaterialId::new(
+                    rng.gen_range(0..self.material_manager.get().buffer.len() as u32),
+                ),
+                ..Default::default()
+            });
         }
 
         self.instance_manager.get_mut().add(&instances);
