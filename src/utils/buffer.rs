@@ -1,6 +1,6 @@
 use crate::Gpu;
 
-use std::{marker::PhantomData, mem::size_of, num::NonZeroU64, ops::RangeBounds};
+use std::{marker::PhantomData, mem::size_of, ops::RangeBounds};
 
 use bytemuck::Pod;
 use pretty_type_name::pretty_type_name;
@@ -192,11 +192,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     }
 
     pub fn as_entire_binding(&self) -> wgpu::BindingResource {
-        wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-            buffer: &self.buffer,
-            offset: 0,
-            size: NonZeroU64::new(self.size_bytes()),
-        })
+        self.buffer.as_entire_binding()
     }
 
     pub fn usages(&self) -> BufferUsages {

@@ -68,7 +68,7 @@ impl MeshManager {
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let mesh_info = gpu
             .device()
-            .create_resizable_buffer(wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC);
+            .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
         let vertices = gpu
             .device()
             .create_resizable_buffer(wgpu::BufferUsages::VERTEX);

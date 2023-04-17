@@ -40,7 +40,7 @@ fn main() -> Result<()> {
 
     let PhysicalSize { width, height } = window.inner_size();
 
-    let camera = Camera::new(vec3(5., 4., 4.), 45., 0., width, height);
+    let camera = Camera::new(vec3(2., 5., 12.), 0., -20., width, height);
     use VirtualKeyCode::*;
     let keyboard_map = KeyboardMap::new()
         .bind(W, KeyMap::new("move_fwd", 1.0))

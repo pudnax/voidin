@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use glam::Mat4;
+use std::sync::Arc;
 
 use crate::{
     utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt, Resource},
