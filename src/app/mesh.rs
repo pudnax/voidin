@@ -32,7 +32,6 @@ impl MeshId {
     }
 }
 
-// TODO: rearrange
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 pub struct MeshInfo {

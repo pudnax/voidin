@@ -198,7 +198,6 @@ impl GltfDocument {
         buffers: &[gltf::buffer::Data],
     ) -> Result<Vec<Vec<MeshId>>> {
         let mut meshes = vec![];
-        let mut zeros = vec![0u8; 2048];
         for mesh in document.meshes() {
             let mut primitives = vec![];
             for primitive in mesh.primitives() {
@@ -209,11 +208,7 @@ impl GltfDocument {
                         .and_then(|sem| data_of_accessor(buffers, &sem))
                 };
                 let Some(vertices) = get_data(&gltf::Semantic::Positions) else { continue; };
-                if vertices.len() > zeros.len() {
-                    zeros.extend(
-                        std::iter::repeat(0).take(vertices.len().saturating_sub(zeros.len())),
-                    );
-                }
+                let zeros = vec![0u8; vertices.len()];
                 let vertices = bytemuck::cast_slice(vertices);
                 let normals = get_data(&gltf::Semantic::Normals).unwrap_or(&zeros);
                 let tex_coords: Vec<[f32; 2]> = reader

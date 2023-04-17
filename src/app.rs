@@ -249,6 +249,7 @@ impl App {
     }
 
     pub fn setup_scene(&mut self) -> Result<()> {
+        let now = std::time::Instant::now();
         let mut instances = vec![];
 
         // let gltf_scene = GltfDocument::import(
@@ -344,6 +345,8 @@ impl App {
                 resource: self.draw_cmd_buffer.as_entire_binding(),
             }],
         });
+
+        println!("Scene complete: {:?}", now.elapsed());
 
         Ok(())
     }
