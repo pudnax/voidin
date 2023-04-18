@@ -126,7 +126,7 @@ impl Pass for Geometry {
                 a: 0.0,
             }))],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &resources.depth_texture,
+                view: resources.depth_texture,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(0.0),
                     store: true,
@@ -148,7 +148,7 @@ impl Pass for Geometry {
         rpass.set_vertex_buffer(2, meshes.tex_coords.full_slice());
         rpass.set_index_buffer(meshes.indices.full_slice(), IndexFormat::Uint32);
         rpass.multi_draw_indexed_indirect(
-            &resources.draw_cmd_buffer,
+            resources.draw_cmd_buffer,
             0,
             resources.draw_cmd_buffer.len() as _,
         );
@@ -175,7 +175,7 @@ impl EmitDraws {
             layout: vec![
                 meshes.get().mesh_info_layout.clone(),
                 instances.get().bind_group_layout.clone(),
-                draw_cmd_layout.clone(),
+                draw_cmd_layout,
             ],
             push_constant_ranges: vec![],
             entry_point: "emit_draws".into(),

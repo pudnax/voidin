@@ -128,7 +128,7 @@ fn new_ffmpeg_command(image_dimentions: ImageDimentions, filename: &str) -> Resu
             image_dimentions.unpadded_bytes_per_row / 4,
             image_dimentions.height
         ))
-        .args(&args)
+        .args(args)
         .arg(filename)
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit())

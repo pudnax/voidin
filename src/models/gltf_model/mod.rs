@@ -27,12 +27,7 @@ pub struct GltfDocument {
 
 impl GltfDocument {
     pub fn import(app: &mut App, path: impl AsRef<Path>) -> Result<Self> {
-        let name = path
-            .as_ref()
-            .file_name()
-            .map(|s| s.to_str())
-            .flatten()
-            .unwrap_or("Gltf Model");
+        let name = path.as_ref().file_name();
         log::info!("Started processing model: {name:?}",);
         let (document, buffers, images) = gltf::import(path)?;
         let textures = Self::make_textures(app, &document, &images)?;

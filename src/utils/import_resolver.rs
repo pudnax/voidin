@@ -80,7 +80,7 @@ impl ImportResolver {
     pub fn new(search_path: &[impl AsRef<Path>]) -> Self {
         Self {
             search_path: search_path
-                .into_iter()
+                .iter()
                 .map(|p| p.as_ref().to_path_buf())
                 .collect(),
         }

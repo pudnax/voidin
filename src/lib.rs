@@ -1,3 +1,4 @@
+#![allow(clippy::new_without_default)]
 pub mod app;
 pub mod camera;
 pub mod input;

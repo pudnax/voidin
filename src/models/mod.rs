@@ -22,6 +22,8 @@ pub struct ObjModel;
 
 impl ObjModel {
     pub fn import(app: &mut App, path: impl AsRef<Path>) -> Result<Vec<(MeshId, MaterialId)>> {
+        let name = path.as_ref().file_name();
+        log::info!("Started processing model: {name:?}",);
         let (model_meshes, model_materials) =
             tobj::load_obj(path.as_ref(), &tobj::GPU_LOAD_OPTIONS)?;
 

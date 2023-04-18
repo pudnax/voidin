@@ -255,7 +255,6 @@ impl App {
         let gltf_scene = GltfDocument::import(
             self,
             "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-            // "assets/sponza-optimized/Sponza.gltf",
             // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
             // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
             // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
@@ -266,7 +265,7 @@ impl App {
             let scene_instances = gltf_scene.scene_data(
                 scene,
                 Mat4::from_rotation_y(std::f32::consts::PI / 2.)
-                    * Mat4::from_translation(vec3(1.5, -4., 0.))
+                    * Mat4::from_translation(vec3(5., -4., 1.))
                     * Mat4::from_scale(Vec3::splat(3.)),
             );
             instances.extend(scene_instances);
@@ -300,7 +299,6 @@ impl App {
         }
 
         let sphere_mesh = models::sphere_mesh(self, 0.6, 30, 20);
-
         let mut rng = rand::thread_rng();
         let num = 10;
         for i in 0..num {
