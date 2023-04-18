@@ -4,7 +4,7 @@
 var<storage, read> meshes: array<MeshInfo>;
 
 @group(1) @binding(0)
-var<storage, read> instances: array<Instance>;
+var<storage, read_write> instances: array<Instance>;
 
 @group(2) @binding(0)
 var<storage, read_write> cmd_buffer: array<DrawIndexedIndirect>;

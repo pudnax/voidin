@@ -8,6 +8,7 @@ use voidin::{
     camera::Camera,
     input::{KeyMap, KeyboardMap},
     watcher::Watcher,
+    FIXED_TIME_STEP, MAX_FRAME_TIME,
 };
 use wgpu::SurfaceError;
 use winit::{
@@ -15,10 +16,6 @@ use winit::{
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::ControlFlow,
 };
-
-const UPDATES_PER_SECOND: u32 = 60;
-const FIXED_TIME_STEP: f64 = 1. / UPDATES_PER_SECOND as f64;
-const MAX_FRAME_TIME: f64 = 15. * FIXED_TIME_STEP; // 0.25;
 
 fn main() -> Result<()> {
     color_eyre::install()?;

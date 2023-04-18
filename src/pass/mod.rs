@@ -1,5 +1,6 @@
 use crate::utils::world::World;
 
+pub mod compute_update;
 pub mod geometry;
 pub mod postprocess;
 

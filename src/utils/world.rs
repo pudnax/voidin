@@ -3,6 +3,7 @@ use color_eyre::{eyre::eyre, Result};
 use pretty_type_name::pretty_type_name;
 use std::any::Any;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use std::{
@@ -24,6 +25,7 @@ use crate::Gpu;
 
 use super::DrawIndexedIndirect;
 
+// Thanks Ralith from Rust Gamedev discord
 pub trait Resource: 'static {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -107,6 +109,8 @@ impl World {
         this.insert(CameraUniformBinding::new(gpu.device()));
         this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageWriteBindGroupLayoutDyn::new(&gpu));
+        this.insert(StorageReadBindGroupLayout::<u32>::new(&gpu));
+        this.insert(StorageWriteBindGroupLayout::<u32>::new(&gpu));
         this.insert(StorageReadBindGroupLayout::<DrawIndexedIndirect>::new(&gpu));
         this.insert(StorageWriteBindGroupLayout::<DrawIndexedIndirect>::new(
             &gpu,
@@ -147,6 +151,13 @@ impl World {
         Ok(Write(borrowed))
     }
 
+    pub fn entry<'a, R: Resource>(&'a mut self) -> Entry<'a, R> {
+        Entry {
+            world: self,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
     pub fn unwrap<R: Resource>(&self) -> Read<R> {
         self.get().unwrap()
     }
@@ -174,5 +185,33 @@ impl World {
 
     pub fn queue(&self) -> &wgpu::Queue {
         self.gpu.queue()
+    }
+}
+
+pub struct Entry<'a, R: Resource> {
+    pub world: &'a mut World,
+    pub _phantom: PhantomData<R>,
+}
+
+impl<'a, R: Resource> Entry<'a, R> {
+    pub fn or_insert(self, default: R) -> Write<'a, R> {
+        self.or_insert_with(|_| default)
+    }
+
+    pub fn or_insert_with<F: FnOnce(&World) -> R>(self, default: F) -> Write<'a, R> {
+        if self.world.contains::<R>() {
+            self.world.get_mut::<R>().unwrap()
+        } else {
+            let resource = default(self.world);
+            self.world.insert(resource);
+            self.world.get_mut::<R>().unwrap()
+        }
+    }
+
+    pub fn or_default(self) -> Write<'a, R>
+    where
+        R: Default,
+    {
+        self.or_insert_with(|_| Default::default())
     }
 }

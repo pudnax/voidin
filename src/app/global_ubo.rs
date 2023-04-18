@@ -1,4 +1,4 @@
-use crate::utils::NonZeroSized;
+use crate::{utils::NonZeroSized, FIXED_TIME_STEP};
 use std::time::Duration;
 
 use bytemuck::{Pod, Zeroable};
@@ -59,8 +59,10 @@ impl GlobalUniformBinding {
 #[derive(Debug, Clone, Copy, Pod, Zeroable)]
 pub struct Uniform {
     pub resolution: [f32; 2],
-    pub time: f32,
     pub frame: u32,
+    pub time: f32,
+    pub dt: f32,
+    pub custom: f32,
 }
 
 impl Default for Uniform {
@@ -69,6 +71,8 @@ impl Default for Uniform {
             time: 0.,
             resolution: [1920.0, 780.],
             frame: 0,
+            dt: FIXED_TIME_STEP as _,
+            custom: 0.,
         }
     }
 }

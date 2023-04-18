@@ -20,7 +20,7 @@ use crate::{
         DrawIndexedIndirect, ImageDimentions, ResizableBuffer, ResizableBufferExt,
     },
     watcher::Watcher,
-    Gpu,
+    Gpu, FIXED_TIME_STEP,
 };
 
 pub mod bind_group_layout;
@@ -83,6 +83,8 @@ pub struct App {
     emit_draws_pass: pass::geometry::EmitDraws,
 
     postprocess_pass: pass::postprocess::PostProcess,
+
+    update_pass: pass::compute_update::ComputeUpdate,
 
     default_sampler: wgpu::Sampler,
 
@@ -149,6 +151,8 @@ impl App {
         let global_uniform = global_ubo::Uniform {
             time: 0.,
             frame: 0,
+            dt: FIXED_TIME_STEP as _,
+            custom: 0.,
             resolution: [surface_config.width as f32, surface_config.height as f32],
         };
 
@@ -159,7 +163,7 @@ impl App {
             gpu.device(),
             wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
         );
-        let draw_cmd_bind_group = draw_cmd_buffer.create_storage_bind_group(gpu.device(), false);
+        let draw_cmd_bind_group = draw_cmd_buffer.create_storage_write_bind_group(&mut world);
 
         let path = Path::new("shaders").join("postprocess.wgsl");
         let postprocess_pass = pass::postprocess::PostProcess::new(&mut world, path)?;
@@ -177,7 +181,10 @@ impl App {
             .device()
             .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
         let moving_instances_bind_group =
-            moving_instances.create_storage_bind_group(&gpu.device, true);
+            moving_instances.create_storage_read_bind_group(&mut world);
+
+        let path = Path::new("shaders").join("compute_update.wgsl");
+        let update_pass = pass::compute_update::ComputeUpdate::new(&world, path)?;
 
         Ok(Self {
             surface,
@@ -202,6 +209,8 @@ impl App {
             geometry_pass,
             emit_draws_pass,
 
+            update_pass,
+
             profiler,
             blitter: blitter::Blitter::new(gpu.device()),
             screenshot_ctx: ScreenshotCtx::new(&gpu, width, height),
@@ -225,13 +234,12 @@ impl App {
         )?;
 
         for scene in gltf_scene.document.scenes() {
-            let scene_instances = gltf_scene.scene_data(
+            instances.extend(gltf_scene.scene_data(
                 scene,
                 Mat4::from_rotation_y(std::f32::consts::PI / 2.)
                     * Mat4::from_translation(vec3(7., -4., 1.))
                     * Mat4::from_scale(Vec3::splat(3.)),
-            );
-            instances.extend(scene_instances);
+            ));
         }
 
         let helmet = GltfDocument::import(
@@ -239,27 +247,24 @@ impl App {
             "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
         for scene in helmet.document.scenes() {
-            let scene_instances = helmet.scene_data(
+            instances.extend(helmet.scene_data(
                 scene,
                 Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
-            );
-            instances.extend(scene_instances);
+            ));
         }
 
         let gltf_ferris = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
         for scene in gltf_ferris.document.scenes() {
-            let scene_instances = gltf_ferris.scene_data(
+            instances.extend(gltf_ferris.scene_data(
                 scene,
                 Mat4::from_translation(vec3(-3., -3.5, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
-            );
-            instances.extend(scene_instances);
+            ));
         }
         for scene in gltf_ferris.document.scenes() {
-            let scene_instances = gltf_ferris.scene_data(
+            instances.extend(gltf_ferris.scene_data(
                 scene,
                 Mat4::from_translation(vec3(2., -3.5, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
-            );
-            instances.extend(scene_instances);
+            ));
         }
 
         let sphere_mesh = models::sphere_mesh(self, 0.9, 30, 20);
@@ -286,13 +291,12 @@ impl App {
             });
 
             for scene in gltf_ferris.document.scenes() {
-                let scene_instances = gltf_ferris.scene_data(
+                moving_instances.extend(gltf_ferris.scene_data(
                     scene,
                     Mat4::from_translation(vec3(x, y + 1., -9.))
                         * Mat4::from_rotation_z(angle)
                         * Mat4::from_scale(Vec3::splat(2.5)),
-                );
-                moving_instances.extend(scene_instances);
+                ));
             }
         }
 
@@ -303,14 +307,18 @@ impl App {
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,
             &mut encoder,
-            instance_manager.count() as _,
+            dbg!(instance_manager.count()) as _,
         );
+        drop(instance_manager);
+
         self.draw_cmd_bind_group = self
             .draw_cmd_buffer
-            .create_storage_bind_group(self.device(), false);
+            .create_storage_write_bind_group(&mut self.world);
         self.moving_instances_bind_group = self
             .moving_instances
-            .create_storage_bind_group(&self.gpu.device(), false);
+            .create_storage_read_bind_group(&mut self.world);
+
+        dbg!(self.moving_instances.len());
 
         println!("Scene complete: {:?}", now.elapsed());
 
@@ -407,6 +415,20 @@ impl App {
         self.world
             .get_mut::<CameraUniformBinding>()?
             .update(self.gpu.queue(), &state.camera);
+
+        let mut encoder =
+            self.gpu
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Compute Update"),
+                });
+        let resources = pass::compute_update::ComputeUpdateResourse {
+            idx_bind_group: &self.moving_instances_bind_group,
+            dispatch_size: self.moving_instances.len() as u32,
+        };
+        self.update_pass
+            .record(&self.world, &mut encoder, &self.view_target, resources);
+        self.gpu.queue().submit(Some(encoder.finish()));
 
         if state.frame_count % 500 == 0 && std::env::var("GPU_PROFILING").is_ok() {
             let mut last_profile = vec![];

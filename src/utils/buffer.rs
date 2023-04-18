@@ -1,4 +1,7 @@
-use crate::Gpu;
+use crate::{
+    app::bind_group_layout::{StorageReadBindGroupLayout, StorageWriteBindGroupLayout},
+    Gpu,
+};
 
 use std::{marker::PhantomData, mem::size_of, ops::RangeBounds};
 
@@ -9,7 +12,7 @@ use wgpu::{
     CommandEncoder, CommandEncoderDescriptor, Device,
 };
 
-use super::NonZeroSized;
+use super::world::World;
 
 pub trait ResizableBufferExt {
     fn create_resizable_buffer<T: Pod>(&self, usages: BufferUsages) -> ResizableBuffer<T>;
@@ -194,22 +197,29 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
         bytemuck::cast_slice(&mapped).to_vec()
     }
 
-    pub fn create_storage_bind_group(&self, device: &Device, read_only: bool) -> wgpu::BindGroup {
-        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE.union(wgpu::ShaderStages::VERTEX_FRAGMENT),
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only },
-                    has_dynamic_offset: false,
-                    min_binding_size: Some(T::NSIZE),
-                },
-                count: None,
-            }],
-        });
+    pub fn create_storage_read_bind_group(&self, world: &mut World) -> wgpu::BindGroup {
+        let gpu = world.gpu.clone();
+        let layout = world
+            .entry::<StorageReadBindGroupLayout<T>>()
+            .or_insert_with(|world| StorageReadBindGroupLayout::new(&world.gpu));
 
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(&format!("Buffer<{}> Bind Group", pretty_type_name::<T>())),
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.as_entire_binding(),
+            }],
+        })
+    }
+
+    pub fn create_storage_write_bind_group(&self, world: &mut World) -> wgpu::BindGroup {
+        let gpu = world.gpu.clone();
+        let layout = world
+            .entry::<StorageWriteBindGroupLayout<T>>()
+            .or_insert_with(|world| StorageWriteBindGroupLayout::new(&world.gpu));
+
+        gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(&format!("Buffer<{}> Bind Group", pretty_type_name::<T>())),
             layout: &layout,
             entries: &[wgpu::BindGroupEntry {

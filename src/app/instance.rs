@@ -74,7 +74,7 @@ impl InstanceManager {
             binding: 0,
             visibility: wgpu::ShaderStages::COMPUTE.union(wgpu::ShaderStages::VERTEX_FRAGMENT),
             ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                ty: wgpu::BufferBindingType::Storage { read_only: false },
                 has_dynamic_offset: false,
                 min_binding_size: Some(Instance::NSIZE),
             },
@@ -129,7 +129,8 @@ impl InstanceManager {
             self.bind_group = bind_group;
         }
 
-        (initial_len..initial_len + instances.len())
+        (initial_len..)
+            .take(instances.len())
             .map(|x| InstanceId(x as u32))
             .collect()
     }

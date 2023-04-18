@@ -32,7 +32,7 @@ impl BindGroupLayoutId {
 
 #[derive(Clone, Debug)]
 pub struct StorageReadBindGroupLayout<T> {
-    layout: BindGroupLayout,
+    pub layout: BindGroupLayout,
     _marker: PhantomData<T>,
 }
 

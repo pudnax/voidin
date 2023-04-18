@@ -155,7 +155,7 @@ impl EmitDraws {
         let draw_cmd_layout = world.get::<StorageWriteBindGroupLayout<DrawIndexedIndirect>>()?;
         let path = Path::new("shaders").join("emit_draws.wgsl");
         let comp_desc = ComputePipelineDescriptor {
-            label: Some("Compute Indirect Pipeline".into()),
+            label: Some("Emit Draws Pipeline".into()),
             layout: vec![
                 meshes.mesh_info_layout.clone(),
                 instances.bind_group_layout.clone(),

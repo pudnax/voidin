@@ -1,4 +1,5 @@
 #import <shared.wgsl>
+#import <utils.wgsl>
 
 @group(0) @binding(0) var<uniform> un: Globals;
 @group(1) @binding(0) var<uniform> camera: Camera;
@@ -6,7 +7,8 @@
 @group(2) @binding(1) var tex_sampler: sampler;
 
 @group(3) @binding(0) var<storage, read> meshes: array<MeshInfo>;
-@group(4) @binding(0) var<storage, read> instances: array<Instance>;
+// FIXME: add more bind groups for only read storage
+@group(4) @binding(0) var<storage, read_write> instances: array<Instance>;
 @group(5) @binding(0) var<storage, read> materials: array<Material>;
 
 struct VertexInput {
