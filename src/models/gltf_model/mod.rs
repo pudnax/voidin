@@ -1,6 +1,9 @@
 use std::{num::NonZeroU32, path::Path, vec};
 
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::{
+    eyre::{eyre, Context},
+    Result,
+};
 
 mod conversions;
 pub use conversions::*;
@@ -29,7 +32,8 @@ impl GltfDocument {
     pub fn import(app: &mut App, path: impl AsRef<Path>) -> Result<Self> {
         let name = path.as_ref().file_name();
         log::info!("Started processing model: {name:?}",);
-        let (document, buffers, images) = gltf::import(path)?;
+        let (document, buffers, images) = gltf::import(&path)
+            .with_context(|| eyre!("Failed to open file: {}", path.as_ref().display()))?;
         let textures = Self::make_textures(app, &document, &images)?;
         let materials = Self::make_materials(app, &document, &textures)?;
         let meshes = Self::make_meshes(app, &document, &buffers)?;

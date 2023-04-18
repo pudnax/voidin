@@ -3,7 +3,10 @@ mod gltf_model;
 mod plane;
 mod sphere;
 
-use color_eyre::Result;
+use color_eyre::{
+    eyre::{eyre, Context},
+    Result,
+};
 use glam::Vec3;
 use std::path::Path;
 
@@ -25,7 +28,8 @@ impl ObjModel {
         let name = path.as_ref().file_name();
         log::info!("Started processing model: {name:?}",);
         let (model_meshes, model_materials) =
-            tobj::load_obj(path.as_ref(), &tobj::GPU_LOAD_OPTIONS)?;
+            tobj::load_obj(path.as_ref(), &tobj::GPU_LOAD_OPTIONS)
+                .with_context(|| eyre!("Failed to open file: {}", path.as_ref().display()))?;
 
         let mut materials = vec![];
         if let Ok(model_materials) = model_materials {
