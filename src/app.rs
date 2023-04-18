@@ -307,7 +307,7 @@ impl App {
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,
             &mut encoder,
-            dbg!(instance_manager.count()) as _,
+            instance_manager.count() as _,
         );
         drop(instance_manager);
 
@@ -317,8 +317,6 @@ impl App {
         self.moving_instances_bind_group = self
             .moving_instances
             .create_storage_read_bind_group(&mut self.world);
-
-        dbg!(self.moving_instances.len());
 
         println!("Scene complete: {:?}", now.elapsed());
 

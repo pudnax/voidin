@@ -27,7 +27,7 @@ pub struct TextureManager {
     gpu: Arc<Gpu>,
 }
 
-const MAX_TEXTURES: u32 = 1 << 10;
+const MAX_TEXTURES: u32 = 1 << 9;
 
 impl TextureManager {
     pub fn new(gpu: Arc<Gpu>) -> Self {
