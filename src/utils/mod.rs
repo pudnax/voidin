@@ -9,10 +9,9 @@ use std::{
 
 mod buffer;
 mod import_resolver;
-mod resource;
+pub mod world;
 pub use buffer::{ResizableBuffer, ResizableBufferExt};
 pub use import_resolver::ImportResolver;
-pub use resource::*;
 
 use either::Either;
 use glam::Vec4;

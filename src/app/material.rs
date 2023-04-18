@@ -4,7 +4,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{vec4, Vec4};
 
 use crate::{
-    utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt, Resource},
+    utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
     Gpu,
 };
 
@@ -40,12 +40,6 @@ pub struct MaterialManager {
     pub(crate) bind_group: wgpu::BindGroup,
 
     gpu: Arc<Gpu>,
-}
-
-impl Resource for MaterialManager {
-    fn init(gpu: Arc<Gpu>) -> Self {
-        Self::new(gpu)
-    }
 }
 
 impl MaterialManager {

@@ -15,8 +15,9 @@ use crate::{
     pass::{self, Pass},
     recorder::Recorder,
     utils::{
-        self, create_solid_color_texture, DrawIndexedIndirect, ImageDimentions, NonZeroSized, Ref,
-        ResizableBuffer, World,
+        self, create_solid_color_texture,
+        world::{Read, World, Write},
+        DrawIndexedIndirect, ImageDimentions, NonZeroSized, ResizableBuffer,
     },
     watcher::Watcher,
     Gpu,
@@ -38,13 +39,13 @@ pub(crate) use view_target::ViewTarget;
 
 use self::{
     bind_group_layout::WrappedBindGroupLayout,
-    instance::InstancesManager,
-    material::{Material, MaterialId, MaterialManager},
+    instance::InstanceManager,
+    material::{MaterialId, MaterialManager},
     mesh::{MeshId, MeshManager},
-    pipeline::Handle,
+    pipeline::PipelineArena,
     screenshot::ScreenshotCtx,
     state::{AppState, StateAction},
-    texture::{TextureId, TextureManager},
+    texture::TextureManager,
 };
 
 pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
@@ -69,17 +70,10 @@ pub struct App {
     depth_texture: wgpu::TextureView,
     view_target: view_target::ViewTarget,
 
-    global_uniform_binding: Ref<global_ubo::GlobalUniformBinding>,
     global_uniform: global_ubo::Uniform,
-
-    camera_uniform: Ref<CameraUniformBinding>,
 
     pub world: World,
 
-    pub texture_manager: Ref<TextureManager>,
-    pub mesh_manager: Ref<MeshManager>,
-    pub material_manager: Ref<MaterialManager>,
-    pub instance_manager: Ref<InstancesManager>,
     draw_cmd_buffer: ResizableBuffer<DrawIndexedIndirect>,
     draw_cmd_bind_group: wgpu::BindGroup,
     draw_cmd_layout: bind_group_layout::BindGroupLayout,
@@ -92,8 +86,6 @@ pub struct App {
     default_sampler: wgpu::Sampler,
 
     pub blitter: blitter::Blitter,
-
-    pipeline_arena: pipeline::Arena,
 
     recorder: Recorder,
     screenshot_ctx: ScreenshotCtx,
@@ -150,14 +142,15 @@ impl App {
 
         let view_target = view_target::ViewTarget::new(gpu.device(), width, height);
 
-        let world = World::new(gpu.clone());
-        let texture_manager = world.get::<TextureManager>();
-        let mesh_manager = world.get::<MeshManager>();
-        let material_manager = world.get::<MaterialManager>();
-        let instance_manager = world.get::<InstancesManager>();
-        let mut pipeline_arena = pipeline::Arena::new(gpu.clone(), file_watcher);
-        let camera_uniform = world.get::<CameraUniformBinding>();
-        let global_uniform_binding = world.get::<global_ubo::GlobalUniformBinding>();
+        let mut world = World::new(gpu.clone());
+        world.insert(TextureManager::new(gpu.clone()));
+        world.insert(MeshManager::new(gpu.clone()));
+        world.insert(MaterialManager::new(gpu.clone()));
+        world.insert(InstanceManager::new(gpu.clone()));
+        world.insert(PipelineArena::new(gpu.clone(), file_watcher));
+        world.insert(global_ubo::GlobalUniformBinding::new(gpu.device()));
+        world.insert(CameraUniformBinding::new(gpu.device()));
+
         let global_uniform = global_ubo::Uniform {
             time: 0.,
             frame: 0,
@@ -197,12 +190,10 @@ impl App {
         });
 
         let path = Path::new("shaders").join("postprocess.wgsl");
-        let postprocess_pipeline =
-            pass::postprocess::PostProcess::new(&world, &mut pipeline_arena, path)?;
+        let postprocess_pipeline = pass::postprocess::PostProcess::new(&mut world, path)?;
 
-        let geometry_pass = pass::geometry::Geometry::new(&world, &mut pipeline_arena)?;
-        let emit_draws_pass =
-            pass::geometry::EmitDraws::new(&world, &mut pipeline_arena, draw_cmd_layout.clone())?;
+        let geometry_pass = pass::geometry::Geometry::new(&mut world)?;
+        let emit_draws_pass = pass::geometry::EmitDraws::new(&mut world, draw_cmd_layout.clone())?;
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
@@ -218,18 +209,11 @@ impl App {
 
             default_sampler,
 
-            global_uniform_binding,
             global_uniform,
-
-            camera_uniform,
 
             postprocess_pipeline,
 
             world,
-            texture_manager,
-            mesh_manager,
-            material_manager,
-            instance_manager,
 
             draw_cmd_buffer,
             draw_cmd_bind_group,
@@ -243,7 +227,6 @@ impl App {
             screenshot_ctx: ScreenshotCtx::new(&gpu, width, height),
             recorder: Recorder::new(),
 
-            pipeline_arena,
             gpu,
         })
     }
@@ -290,12 +273,16 @@ impl App {
                 *material,
             ));
         }
-        for (mesh, material) in &ferris {
-            instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(3., -4.1, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
-                *mesh,
-                *material,
-            ));
+
+        let gltf_ferris = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
+        for node in gltf_ferris.document.nodes() {
+            let scene_instances = gltf_ferris.node_instances(
+                node,
+                Some(
+                    Mat4::from_translation(vec3(2., -4., -2.)) * Mat4::from_scale(Vec3::splat(3.)),
+                ),
+            );
+            instances.extend(scene_instances);
         }
 
         let sphere_mesh = models::sphere_mesh(self, 0.6, 30, 20);
@@ -311,7 +298,7 @@ impl App {
                 transform: Mat4::from_translation(vec3(x, y, 2.)),
                 mesh: sphere_mesh,
                 material: MaterialId::new(
-                    rng.gen_range(0..self.material_manager.get().buffer.len() as u32),
+                    rng.gen_range(0..self.get_material_manager().buffer.len() as u32),
                 ),
                 ..Default::default()
             });
@@ -327,13 +314,14 @@ impl App {
             }
         }
 
-        self.instance_manager.get_mut().add(&instances);
+        let mut instance_manager = self.world.get_mut::<InstanceManager>()?;
+        instance_manager.add(&instances);
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,
             &mut encoder,
-            self.instance_manager.get().count() as _,
+            instance_manager.count() as _,
         );
         self.draw_cmd_bind_group = self.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Draw Commands Bind Group"),
@@ -363,27 +351,28 @@ impl App {
         profiler.begin_scope("Main Render Scope ", &mut encoder, self.device());
 
         let emit_resource = pass::geometry::EmitDrawsResource {
-            arena: &self.pipeline_arena,
             draw_cmd_bind_group: &self.draw_cmd_bind_group,
             draw_cmd_buffer: &self.draw_cmd_buffer,
         };
         self.emit_draws_pass
-            .record(&mut encoder, &self.view_target, emit_resource);
+            .record(&self.world, &mut encoder, &self.view_target, emit_resource);
 
         let geometry_resource = pass::geometry::GeometryResource {
-            arena: &self.pipeline_arena,
             depth_texture: &self.depth_texture,
             draw_cmd_buffer: &self.draw_cmd_buffer,
         };
-        self.geometry_pass
-            .record(&mut encoder, &self.view_target, geometry_resource);
+        self.geometry_pass.record(
+            &self.world,
+            &mut encoder,
+            &self.view_target,
+            geometry_resource,
+        );
 
         let resource = pass::postprocess::PostProcessResource {
-            arena: &self.pipeline_arena,
             sampler: &self.default_sampler,
         };
         self.postprocess_pipeline
-            .record(&mut encoder, &self.view_target, resource);
+            .record(&self.world, &mut encoder, &self.view_target, resource);
 
         self.blitter.blit_to_texture(
             &mut encoder,
@@ -429,14 +418,14 @@ impl App {
         }
     }
 
-    pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) {
+    pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) -> Result<()> {
         self.global_uniform.frame = state.frame_count as _;
         self.global_uniform.time = state.total_time as _;
-        self.global_uniform_binding
-            .get_mut()
+        self.world
+            .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
-        self.camera_uniform
-            .get_mut()
+        self.world
+            .get_mut::<CameraUniformBinding>()?
             .update(self.gpu.queue(), &state.camera);
 
         if state.frame_count % 500 == 0 && std::env::var("GPU_PROFILING").is_ok() {
@@ -461,6 +450,7 @@ impl App {
                 StateAction::FinishRecording => self.recorder.finish(),
             }
         }
+        Ok(())
     }
 
     pub fn handle_events(&mut self, path: std::path::PathBuf, source: String) {
@@ -480,7 +470,10 @@ impl App {
                 return;
             }
         }
-        self.pipeline_arena.reload_pipelines(&path, &module);
+        self.world
+            .get_mut::<PipelineArena>()
+            .unwrap()
+            .reload_pipelines(&path, &module);
     }
 
     pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions)) {
@@ -499,25 +492,42 @@ impl App {
         tex_coords: &[Vec2],
         indices: &[u32],
     ) -> MeshId {
-        self.mesh_manager
-            .get_mut()
+        self.world
+            .get_mut::<MeshManager>()
+            .unwrap()
             .add(vertices, normals, tex_coords, indices)
     }
 
-    pub fn add_material(&mut self, material: Material) -> MaterialId {
-        self.material_manager.get_mut().add(material)
+    pub fn get_material_manager(&self) -> Read<MaterialManager> {
+        self.world.get::<MaterialManager>().unwrap()
     }
 
-    pub fn add_texture(&mut self, view: wgpu::TextureView) -> TextureId {
-        self.texture_manager.get_mut().add(view)
+    pub fn get_material_manager_mut(&self) -> Write<MaterialManager> {
+        self.world.get_mut::<MaterialManager>().unwrap()
     }
 
-    pub fn get_pipeline<H: Handle>(&self, handle: H) -> &H::Pipeline {
-        self.pipeline_arena.get_pipeline(handle)
+    pub fn get_texture_manager(&self) -> Read<TextureManager> {
+        self.world.get::<TextureManager>().unwrap()
     }
 
-    pub fn get_pipeline_desc<H: Handle>(&self, handle: H) -> &H::Descriptor {
-        self.pipeline_arena.get_descriptor(handle)
+    pub fn get_texture_manager_mut(&self) -> Write<TextureManager> {
+        self.world.get_mut::<TextureManager>().unwrap()
+    }
+
+    pub fn get_mesh_manager(&self) -> Read<MeshManager> {
+        self.world.get::<MeshManager>().unwrap()
+    }
+
+    pub fn get_mesh_manager_mut(&self) -> Write<MeshManager> {
+        self.world.get_mut::<MeshManager>().unwrap()
+    }
+
+    pub fn get_instance_manager(&self) -> Read<InstanceManager> {
+        self.world.get::<InstanceManager>().unwrap()
+    }
+
+    pub fn get_instance_manager_mut(&self) -> Write<InstanceManager> {
+        self.world.get_mut::<InstanceManager>().unwrap()
     }
 
     pub fn queue(&self) -> &wgpu::Queue {

@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::{
-    utils::{self, Resource},
-    Gpu,
-};
+use crate::{utils, Gpu};
 
 use super::{
     bind_group_layout::{self, WrappedBindGroupLayout},
@@ -28,12 +25,6 @@ pub struct TextureManager {
     pub bind_group: wgpu::BindGroup,
 
     gpu: Arc<Gpu>,
-}
-
-impl Resource for TextureManager {
-    fn init(gpu: std::sync::Arc<crate::Gpu>) -> Self {
-        Self::new(gpu)
-    }
 }
 
 const MAX_TEXTURES: u32 = 1 << 10;

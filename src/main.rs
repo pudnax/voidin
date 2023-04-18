@@ -81,7 +81,7 @@ fn main() -> Result<()> {
                 while accumulated_time >= FIXED_TIME_STEP {
                     app_state.input.tick();
                     let actions = app_state.update(FIXED_TIME_STEP);
-                    app.update(&app_state, actions);
+                    app.update(&app_state, actions).unwrap();
 
                     accumulated_time -= FIXED_TIME_STEP;
                 }

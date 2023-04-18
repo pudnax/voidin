@@ -10,48 +10,42 @@ use crate::{
     app::{
         bind_group_layout::BindGroupLayout,
         global_ubo::GlobalUniformBinding,
-        instance::InstancesManager,
+        instance::InstanceManager,
         material::MaterialManager,
         mesh::MeshManager,
         pipeline::{
-            self, Arena, ComputeHandle, ComputePipelineDescriptor, RenderHandle,
+            self, ComputeHandle, ComputePipelineDescriptor, PipelineArena, RenderHandle,
             RenderPipelineDescriptor,
         },
         texture::TextureManager,
+        ViewTarget,
     },
     camera::CameraUniformBinding,
-    utils::{DrawIndexedIndirect, Ref, ResizableBuffer, World},
+    utils::{world::World, DrawIndexedIndirect, ResizableBuffer},
 };
 
 pub struct Geometry {
     pipeline: RenderHandle,
-
-    textures: Ref<TextureManager>,
-    meshes: Ref<MeshManager>,
-    materials: Ref<MaterialManager>,
-    instances: Ref<InstancesManager>,
-    global_ubo: Ref<GlobalUniformBinding>,
-    camera: Ref<CameraUniformBinding>,
 }
 
 impl Geometry {
-    pub fn new(world: &World, pipeline_arena: &mut Arena) -> Result<Self> {
+    pub fn new(world: &World) -> Result<Self> {
         let path = Path::new("shaders").join("draw_indirect.wgsl");
-        let textures = world.get::<TextureManager>();
-        let meshes = world.get::<MeshManager>();
-        let materials = world.get::<MaterialManager>();
-        let instances = world.get::<InstancesManager>();
-        let global_ubo = world.get::<GlobalUniformBinding>();
-        let camera = world.get::<CameraUniformBinding>();
+        let textures = world.get::<TextureManager>()?;
+        let meshes = world.get::<MeshManager>()?;
+        let materials = world.get::<MaterialManager>()?;
+        let instances = world.get::<InstanceManager>()?;
+        let global_ubo = world.get::<GlobalUniformBinding>()?;
+        let camera = world.get::<CameraUniformBinding>()?;
         let render_desc = RenderPipelineDescriptor {
             label: Some("Geometry Pipeline".into()),
             layout: vec![
-                global_ubo.get().layout.clone(),
-                camera.get().bind_group_layout.clone(),
-                textures.get().bind_group_layout.clone(),
-                meshes.get().mesh_info_layout.clone(),
-                instances.get().bind_group_layout.clone(),
-                materials.get().bind_group_layout.clone(),
+                global_ubo.layout.clone(),
+                camera.bind_group_layout.clone(),
+                textures.bind_group_layout.clone(),
+                meshes.mesh_info_layout.clone(),
+                instances.bind_group_layout.clone(),
+                materials.bind_group_layout.clone(),
             ],
             vertex: pipeline::VertexState {
                 entry_point: "vs_main".into(),
@@ -82,21 +76,14 @@ impl Geometry {
             }),
             ..Default::default()
         };
-        let pipeline = pipeline_arena.process_render_pipeline_from_path(path, render_desc)?;
-        Ok(Self {
-            pipeline,
-            textures,
-            meshes,
-            materials,
-            instances,
-            global_ubo,
-            camera,
-        })
+        let pipeline = world
+            .get_mut::<PipelineArena>()?
+            .process_render_pipeline_from_path(path, render_desc)?;
+        Ok(Self { pipeline })
     }
 }
 
 pub struct GeometryResource<'a> {
-    pub arena: &'a Arena,
     pub depth_texture: &'a wgpu::TextureView,
 
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
@@ -106,16 +93,18 @@ impl Pass for Geometry {
     type Resoutces<'a> = GeometryResource<'a>;
     fn record(
         &self,
+        world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        view_target: &crate::app::ViewTarget,
+        view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
-        let meshes = self.meshes.get();
-        let textures = self.textures.get();
-        let materials = self.materials.get();
-        let instances = self.instances.get();
-        let global_ubo = self.global_ubo.get();
-        let camera = self.camera.get();
+        let meshes = world.unwrap::<MeshManager>();
+        let textures = world.unwrap::<TextureManager>();
+        let materials = world.unwrap::<MaterialManager>();
+        let instances = world.unwrap::<InstanceManager>();
+        let global_ubo = world.unwrap::<GlobalUniformBinding>();
+        let arena = world.unwrap::<PipelineArena>();
+        let camera = world.unwrap::<CameraUniformBinding>();
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Geometry Pass"),
@@ -135,7 +124,7 @@ impl Pass for Geometry {
             }),
         });
 
-        rpass.set_pipeline(resources.arena.get_pipeline(self.pipeline));
+        rpass.set_pipeline(arena.get_pipeline(self.pipeline));
         rpass.set_bind_group(0, &global_ubo.binding, &[]);
         rpass.set_bind_group(1, &camera.binding, &[]);
         rpass.set_bind_group(2, &textures.bind_group, &[]);
@@ -157,40 +146,31 @@ impl Pass for Geometry {
 
 pub struct EmitDraws {
     pipeline: ComputeHandle,
-    meshes: Ref<MeshManager>,
-    instances: Ref<InstancesManager>,
 }
 
 impl EmitDraws {
-    pub fn new(
-        world: &World,
-        pipeline_arena: &mut Arena,
-        draw_cmd_layout: BindGroupLayout,
-    ) -> Result<Self> {
-        let meshes = world.get::<MeshManager>();
-        let instances = world.get::<InstancesManager>();
+    pub fn new(world: &World, draw_cmd_layout: BindGroupLayout) -> Result<Self> {
+        let meshes = world.get::<MeshManager>()?;
+        let instances = world.get::<InstanceManager>()?;
         let path = Path::new("shaders").join("emit_draws.wgsl");
         let comp_desc = ComputePipelineDescriptor {
             label: Some("Compute Indirect Pipeline".into()),
             layout: vec![
-                meshes.get().mesh_info_layout.clone(),
-                instances.get().bind_group_layout.clone(),
+                meshes.mesh_info_layout.clone(),
+                instances.bind_group_layout.clone(),
                 draw_cmd_layout,
             ],
             push_constant_ranges: vec![],
             entry_point: "emit_draws".into(),
         };
-        let pipeline = pipeline_arena.process_compute_pipeline_from_path(path, comp_desc)?;
-        Ok(Self {
-            pipeline,
-            meshes,
-            instances,
-        })
+        let pipeline = world
+            .get_mut::<PipelineArena>()?
+            .process_compute_pipeline_from_path(path, comp_desc)?;
+        Ok(Self { pipeline })
     }
 }
 
 pub struct EmitDrawsResource<'a> {
-    pub arena: &'a Arena,
     pub draw_cmd_bind_group: &'a wgpu::BindGroup,
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
 }
@@ -200,17 +180,19 @@ impl Pass for EmitDraws {
 
     fn record(
         &self,
+        world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        _view_target: &crate::app::ViewTarget,
+        _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
-        let meshes = self.meshes.get();
-        let instances = self.instances.get();
+        let meshes = world.unwrap::<MeshManager>();
+        let arena = world.unwrap::<PipelineArena>();
+        let instances = world.unwrap::<InstanceManager>();
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Emit Draws Pass"),
         });
 
-        cpass.set_pipeline(resources.arena.get_pipeline(self.pipeline));
+        cpass.set_pipeline(arena.get_pipeline(self.pipeline));
         cpass.set_bind_group(0, &meshes.mesh_info_bind_group, &[]);
         cpass.set_bind_group(1, &instances.bind_group, &[]);
         cpass.set_bind_group(2, resources.draw_cmd_bind_group, &[]);

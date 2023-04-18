@@ -54,7 +54,7 @@ impl ObjModel {
             meshes.push((mesh_id, material_id));
         }
 
-        app.texture_manager.get_mut().update_bind_group();
+        app.get_texture_manager_mut().update_bind_group();
         Ok(meshes)
     }
 }

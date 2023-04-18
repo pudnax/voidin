@@ -24,7 +24,7 @@ slotmap::new_key_type! {
     pub struct ComputeHandle;
 }
 
-pub struct Arena {
+pub struct PipelineArena {
     render: RenderArena,
     compute: ComputeArena,
     path_mapping: HashMap<PathBuf, HashSet<Either<RenderHandle, ComputeHandle>>>,
@@ -101,19 +101,19 @@ impl ComputeArena {
 pub trait Handle {
     type Pipeline;
     type Descriptor;
-    fn get_pipeline(self, arena: &Arena) -> &Self::Pipeline;
-    fn get_descriptor(self, arena: &Arena) -> &Self::Descriptor;
+    fn get_pipeline(self, arena: &PipelineArena) -> &Self::Pipeline;
+    fn get_descriptor(self, arena: &PipelineArena) -> &Self::Descriptor;
 }
 
 impl Handle for RenderHandle {
     type Pipeline = wgpu::RenderPipeline;
     type Descriptor = RenderPipelineDescriptor;
 
-    fn get_pipeline(self, arena: &Arena) -> &Self::Pipeline {
+    fn get_pipeline(self, arena: &PipelineArena) -> &Self::Pipeline {
         &arena.render.pipelines[self]
     }
 
-    fn get_descriptor(self, arena: &Arena) -> &Self::Descriptor {
+    fn get_descriptor(self, arena: &PipelineArena) -> &Self::Descriptor {
         &arena.render.descriptors[self]
     }
 }
@@ -121,16 +121,16 @@ impl Handle for RenderHandle {
 impl Handle for ComputeHandle {
     type Pipeline = wgpu::ComputePipeline;
     type Descriptor = ComputePipelineDescriptor;
-    fn get_pipeline(self, arena: &Arena) -> &Self::Pipeline {
+    fn get_pipeline(self, arena: &PipelineArena) -> &Self::Pipeline {
         &arena.compute.pipelines[self]
     }
 
-    fn get_descriptor(self, arena: &Arena) -> &Self::Descriptor {
+    fn get_descriptor(self, arena: &PipelineArena) -> &Self::Descriptor {
         &arena.compute.descriptors[self]
     }
 }
 
-impl Arena {
+impl PipelineArena {
     pub fn new(gpu: Arc<Gpu>, file_watcher: Watcher) -> Self {
         Self {
             render: RenderArena {

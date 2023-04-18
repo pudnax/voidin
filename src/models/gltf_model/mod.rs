@@ -56,7 +56,7 @@ impl GltfDocument {
             instances.push(instance);
         }
 
-        app.texture_manager.get_mut().update_bind_group();
+        app.get_texture_manager_mut().update_bind_group();
 
         Ok(Self {
             document,
@@ -123,7 +123,7 @@ impl GltfDocument {
                 .generate_mipmaps(&mut encoder, app.device(), &texture);
             app.queue().submit(Some(encoder.finish()));
 
-            let texture_id = app.add_texture(texture_view);
+            let texture_id = app.get_texture_manager_mut().add(texture_view);
             log::info!("Inserted texture {name} with id: {}", texture_id.id());
             textures.push(texture_id);
         }
@@ -179,7 +179,7 @@ impl GltfDocument {
                 metallic_roughness,
                 emissive,
             };
-            let id = app.add_material(material);
+            let id = app.get_material_manager_mut().add(material);
             log::info!("Inserted material {name} with id: {:?}", id);
             materials.push(id);
         }

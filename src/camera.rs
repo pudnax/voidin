@@ -7,10 +7,7 @@ use dolly::{
 use glam::{Mat4, Quat, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
-use crate::{
-    app::bind_group_layout::{self, WrappedBindGroupLayout},
-    utils::Resource,
-};
+use crate::app::bind_group_layout::{self, WrappedBindGroupLayout};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -36,12 +33,6 @@ pub struct CameraUniformBinding {
     pub buffer: wgpu::Buffer,
     pub binding: wgpu::BindGroup,
     pub bind_group_layout: bind_group_layout::BindGroupLayout,
-}
-
-impl Resource for CameraUniformBinding {
-    fn init(gpu: std::sync::Arc<crate::Gpu>) -> Self {
-        Self::new(gpu.device())
-    }
 }
 
 impl CameraUniformBinding {
