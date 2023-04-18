@@ -1,3 +1,4 @@
+use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
 use std::sync::Arc;
 
@@ -11,6 +12,16 @@ use super::{
     material::MaterialId,
     mesh::MeshId,
 };
+
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy, Zeroable, Pod)]
+pub struct InstanceId(u32);
+
+impl InstanceId {
+    pub fn id(&self) -> u32 {
+        self.0
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -106,7 +117,8 @@ impl InstanceManager {
         bind_group
     }
 
-    pub fn add(&mut self, instances: &[Instance]) {
+    pub fn add(&mut self, instances: &[Instance]) -> Vec<InstanceId> {
+        let initial_len = self.instances.len();
         self.instances_data.extend_from_slice(instances);
         if self.instances.push(&self.gpu, instances) {
             let bind_group = Self::create_bind_group(
@@ -116,6 +128,10 @@ impl InstanceManager {
             );
             self.bind_group = bind_group;
         }
+
+        (initial_len..initial_len + instances.len())
+            .map(|x| InstanceId(x as u32))
+            .collect()
     }
 
     pub fn count(&self) -> u32 {

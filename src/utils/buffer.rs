@@ -9,6 +9,8 @@ use wgpu::{
     CommandEncoder, CommandEncoderDescriptor, Device,
 };
 
+use super::NonZeroSized;
+
 pub trait ResizableBufferExt {
     fn create_resizable_buffer<T: Pod>(&self, usages: BufferUsages) -> ResizableBuffer<T>;
 
@@ -128,6 +130,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
 
     /// Returns `true` if internal buffer was resized
     pub fn push(&mut self, gpu: &Gpu, values: &[T]) -> bool {
+        assert!(!values.is_empty(), "Don't push empty values");
         let new_len = self.len() + values.len();
         let mut encoder = gpu
             .device
@@ -189,6 +192,31 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
             .poll(wgpu::Maintain::WaitForSubmissionIndex(submit));
         let mapped = slice.get_mapped_range();
         bytemuck::cast_slice(&mapped).to_vec()
+    }
+
+    pub fn create_storage_bind_group(&self, device: &Device, read_only: bool) -> wgpu::BindGroup {
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE.union(wgpu::ShaderStages::VERTEX_FRAGMENT),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only },
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(T::NSIZE),
+                },
+                count: None,
+            }],
+        });
+
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(&format!("Buffer<{}> Bind Group", pretty_type_name::<T>())),
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: self.as_entire_binding(),
+            }],
+        })
     }
 
     pub fn as_entire_binding(&self) -> wgpu::BindingResource {

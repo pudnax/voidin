@@ -10,7 +10,19 @@ use std::{
     cell::{Ref, RefCell, RefMut},
 };
 
+use crate::app::bind_group_layout::{
+    StorageReadBindGroupLayout, StorageReadBindGroupLayoutDyn, StorageWriteBindGroupLayout,
+    StorageWriteBindGroupLayoutDyn,
+};
+use crate::app::global_ubo;
+use crate::app::instance::InstanceManager;
+use crate::app::material::MaterialManager;
+use crate::app::mesh::MeshManager;
+use crate::app::texture::TextureManager;
+use crate::camera::CameraUniformBinding;
 use crate::Gpu;
+
+use super::DrawIndexedIndirect;
 
 pub trait Resource: 'static {
     fn as_any(&self) -> &dyn Any;
@@ -83,10 +95,23 @@ pub struct World {
 
 impl World {
     pub fn new(gpu: Arc<Gpu>) -> Self {
-        Self {
+        let mut this = Self {
             resources: HashMap::new(),
-            gpu,
-        }
+            gpu: gpu.clone(),
+        };
+        this.insert(TextureManager::new(gpu.clone()));
+        this.insert(MeshManager::new(gpu.clone()));
+        this.insert(MaterialManager::new(gpu.clone()));
+        this.insert(InstanceManager::new(gpu.clone()));
+        this.insert(global_ubo::GlobalUniformBinding::new(gpu.device()));
+        this.insert(CameraUniformBinding::new(gpu.device()));
+        this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));
+        this.insert(StorageWriteBindGroupLayoutDyn::new(&gpu));
+        this.insert(StorageReadBindGroupLayout::<DrawIndexedIndirect>::new(&gpu));
+        this.insert(StorageWriteBindGroupLayout::<DrawIndexedIndirect>::new(
+            &gpu,
+        ));
+        this
     }
 
     pub fn insert<R: Resource>(&mut self, resource: R) {

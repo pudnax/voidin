@@ -71,6 +71,7 @@ impl GltfDocument {
         document: &gltf::Document,
         images: &[gltf::image::Data],
     ) -> Result<Vec<TextureId>> {
+        let mut encoder = app.device().create_command_encoder(&Default::default());
         let mut textures = vec![];
         for image in document.images() {
             let name = image.name().unwrap_or("");
@@ -118,15 +119,15 @@ impl GltfDocument {
             );
             let texture_view = texture.create_view(&Default::default());
 
-            let mut encoder = app.device().create_command_encoder(&Default::default());
             app.blitter
                 .generate_mipmaps(&mut encoder, app.device(), &texture);
-            app.queue().submit(Some(encoder.finish()));
 
             let texture_id = app.get_texture_manager_mut().add(texture_view);
             log::info!("Inserted texture {name} with id: {}", texture_id.id());
             textures.push(texture_id);
         }
+
+        app.queue().submit(Some(encoder.finish()));
 
         document
             .textures()

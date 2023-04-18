@@ -8,7 +8,7 @@ use super::Pass;
 
 use crate::{
     app::{
-        bind_group_layout::BindGroupLayout,
+        bind_group_layout::StorageWriteBindGroupLayout,
         global_ubo::GlobalUniformBinding,
         instance::InstanceManager,
         material::MaterialManager,
@@ -149,16 +149,17 @@ pub struct EmitDraws {
 }
 
 impl EmitDraws {
-    pub fn new(world: &World, draw_cmd_layout: BindGroupLayout) -> Result<Self> {
+    pub fn new(world: &World) -> Result<Self> {
         let meshes = world.get::<MeshManager>()?;
         let instances = world.get::<InstanceManager>()?;
+        let draw_cmd_layout = world.get::<StorageWriteBindGroupLayout<DrawIndexedIndirect>>()?;
         let path = Path::new("shaders").join("emit_draws.wgsl");
         let comp_desc = ComputePipelineDescriptor {
             label: Some("Compute Indirect Pipeline".into()),
             layout: vec![
                 meshes.mesh_info_layout.clone(),
                 instances.bind_group_layout.clone(),
-                draw_cmd_layout,
+                draw_cmd_layout.layout.clone(),
             ],
             push_constant_ranges: vec![],
             entry_point: "emit_draws".into(),

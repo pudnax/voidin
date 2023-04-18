@@ -17,7 +17,7 @@ use crate::{
     utils::{
         self, create_solid_color_texture,
         world::{Read, World, Write},
-        DrawIndexedIndirect, ImageDimentions, NonZeroSized, ResizableBuffer,
+        DrawIndexedIndirect, ImageDimentions, ResizableBuffer, ResizableBufferExt,
     },
     watcher::Watcher,
     Gpu,
@@ -38,8 +38,7 @@ mod view_target;
 pub(crate) use view_target::ViewTarget;
 
 use self::{
-    bind_group_layout::WrappedBindGroupLayout,
-    instance::InstanceManager,
+    instance::{InstanceId, InstanceManager},
     material::{MaterialId, MaterialManager},
     mesh::{MeshId, MeshManager},
     pipeline::PipelineArena,
@@ -76,12 +75,14 @@ pub struct App {
 
     draw_cmd_buffer: ResizableBuffer<DrawIndexedIndirect>,
     draw_cmd_bind_group: wgpu::BindGroup,
-    draw_cmd_layout: bind_group_layout::BindGroupLayout,
+
+    moving_instances: ResizableBuffer<InstanceId>,
+    moving_instances_bind_group: wgpu::BindGroup,
 
     geometry_pass: pass::geometry::Geometry,
     emit_draws_pass: pass::geometry::EmitDraws,
 
-    postprocess_pipeline: pass::postprocess::PostProcess,
+    postprocess_pass: pass::postprocess::PostProcess,
 
     default_sampler: wgpu::Sampler,
 
@@ -143,13 +144,7 @@ impl App {
         let view_target = view_target::ViewTarget::new(gpu.device(), width, height);
 
         let mut world = World::new(gpu.clone());
-        world.insert(TextureManager::new(gpu.clone()));
-        world.insert(MeshManager::new(gpu.clone()));
-        world.insert(MaterialManager::new(gpu.clone()));
-        world.insert(InstanceManager::new(gpu.clone()));
         world.insert(PipelineArena::new(gpu.clone(), file_watcher));
-        world.insert(global_ubo::GlobalUniformBinding::new(gpu.device()));
-        world.insert(CameraUniformBinding::new(gpu.device()));
 
         let global_uniform = global_ubo::Uniform {
             time: 0.,
@@ -164,42 +159,25 @@ impl App {
             gpu.device(),
             wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
         );
-        let draw_cmd_layout =
-            gpu.device()
-                .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Draw Commands Bind Group Layout"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE
-                            | wgpu::ShaderStages::VERTEX_FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: Some(utils::DrawIndexedIndirect::NSIZE),
-                        },
-                        count: None,
-                    }],
-                });
-        let draw_cmd_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Draw Commands Bind Group"),
-            layout: &draw_cmd_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: draw_cmd_buffer.as_entire_binding(),
-            }],
-        });
+        let draw_cmd_bind_group = draw_cmd_buffer.create_storage_bind_group(gpu.device(), false);
 
         let path = Path::new("shaders").join("postprocess.wgsl");
-        let postprocess_pipeline = pass::postprocess::PostProcess::new(&mut world, path)?;
+        let postprocess_pass = pass::postprocess::PostProcess::new(&mut world, path)?;
 
         let geometry_pass = pass::geometry::Geometry::new(&mut world)?;
-        let emit_draws_pass = pass::geometry::EmitDraws::new(&mut world, draw_cmd_layout.clone())?;
+        let emit_draws_pass = pass::geometry::EmitDraws::new(&mut world)?;
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
             gpu.queue().get_timestamp_period(),
             features,
         ));
+
+        let moving_instances = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
+        let moving_instances_bind_group =
+            moving_instances.create_storage_bind_group(&gpu.device, true);
 
         Ok(Self {
             surface,
@@ -211,13 +189,15 @@ impl App {
 
             global_uniform,
 
-            postprocess_pipeline,
+            postprocess_pass,
 
             world,
 
             draw_cmd_buffer,
             draw_cmd_bind_group,
-            draw_cmd_layout,
+
+            moving_instances,
+            moving_instances_bind_group,
 
             geometry_pass,
             emit_draws_pass,
@@ -248,7 +228,7 @@ impl App {
             let scene_instances = gltf_scene.scene_data(
                 scene,
                 Mat4::from_rotation_y(std::f32::consts::PI / 2.)
-                    * Mat4::from_translation(vec3(5., -4., 1.))
+                    * Mat4::from_translation(vec3(7., -4., 1.))
                     * Mat4::from_scale(Vec3::splat(3.)),
             );
             instances.extend(scene_instances);
@@ -261,40 +241,42 @@ impl App {
         for scene in helmet.document.scenes() {
             let scene_instances = helmet.scene_data(
                 scene,
-                Mat4::from_translation(vec3(0., 0., 7.)) * Mat4::from_scale(Vec3::splat(3.)),
+                Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
             );
             instances.extend(scene_instances);
-        }
-        let ferris = models::ObjModel::import(self, "assets/ferris3d_v1.0.obj")?;
-        for (mesh, material) in &ferris {
-            instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(-3., -4.1, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
-                *mesh,
-                *material,
-            ));
         }
 
         let gltf_ferris = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
-        for node in gltf_ferris.document.nodes() {
-            let scene_instances = gltf_ferris.node_instances(
-                node,
-                Some(
-                    Mat4::from_translation(vec3(2., -4., -2.)) * Mat4::from_scale(Vec3::splat(3.)),
-                ),
+        for scene in gltf_ferris.document.scenes() {
+            let scene_instances = gltf_ferris.scene_data(
+                scene,
+                Mat4::from_translation(vec3(-3., -3.5, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
+            );
+            instances.extend(scene_instances);
+        }
+        for scene in gltf_ferris.document.scenes() {
+            let scene_instances = gltf_ferris.scene_data(
+                scene,
+                Mat4::from_translation(vec3(2., -3.5, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
             );
             instances.extend(scene_instances);
         }
 
-        let sphere_mesh = models::sphere_mesh(self, 0.6, 30, 20);
+        let sphere_mesh = models::sphere_mesh(self, 0.9, 30, 20);
+
+        let mut instance_manager = self.world.get_mut::<InstanceManager>()?;
+        instance_manager.add(&instances);
+
+        let mut moving_instances = vec![];
         let mut rng = rand::thread_rng();
         let num = 10;
         for i in 0..num {
-            let r = 4.0;
+            let r = 3.5;
             let angle = std::f32::consts::TAU * (i as f32) / num as f32;
             let x = r * angle.cos();
             let y = r * angle.sin();
 
-            instances.push(instance::Instance {
+            moving_instances.push(instance::Instance {
                 transform: Mat4::from_translation(vec3(x, y, 2.)),
                 mesh: sphere_mesh,
                 material: MaterialId::new(
@@ -303,19 +285,19 @@ impl App {
                 ..Default::default()
             });
 
-            for (mesh, material) in &ferris {
-                instances.push(instance::Instance::new(
-                    Mat4::from_translation(vec3(x, y, -9.))
+            for scene in gltf_ferris.document.scenes() {
+                let scene_instances = gltf_ferris.scene_data(
+                    scene,
+                    Mat4::from_translation(vec3(x, y + 1., -9.))
                         * Mat4::from_rotation_z(angle)
-                        * Mat4::from_scale(Vec3::splat(3.)),
-                    *mesh,
-                    *material,
-                ));
+                        * Mat4::from_scale(Vec3::splat(2.5)),
+                );
+                moving_instances.extend(scene_instances);
             }
         }
 
-        let mut instance_manager = self.world.get_mut::<InstanceManager>()?;
-        instance_manager.add(&instances);
+        let moving_instances_id = instance_manager.add(&moving_instances);
+        self.moving_instances.push(&self.gpu, &moving_instances_id);
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
@@ -323,14 +305,12 @@ impl App {
             &mut encoder,
             instance_manager.count() as _,
         );
-        self.draw_cmd_bind_group = self.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Draw Commands Bind Group"),
-            layout: &self.draw_cmd_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: self.draw_cmd_buffer.as_entire_binding(),
-            }],
-        });
+        self.draw_cmd_bind_group = self
+            .draw_cmd_buffer
+            .create_storage_bind_group(self.device(), false);
+        self.moving_instances_bind_group = self
+            .moving_instances
+            .create_storage_bind_group(&self.gpu.device(), false);
 
         println!("Scene complete: {:?}", now.elapsed());
 
@@ -371,7 +351,7 @@ impl App {
         let resource = pass::postprocess::PostProcessResource {
             sampler: &self.default_sampler,
         };
-        self.postprocess_pipeline
+        self.postprocess_pass
             .record(&self.world, &mut encoder, &self.view_target, resource);
 
         self.blitter.blit_to_texture(
