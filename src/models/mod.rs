@@ -35,7 +35,7 @@ impl ObjModel {
         if let Ok(model_materials) = model_materials {
             for material in model_materials {
                 let base_color = Vec3::from_array(material.diffuse);
-                let material_id = app.get_material_manager_mut().add(Material {
+                let material_id = app.get_material_pool_mut().add(Material {
                     base_color: base_color.extend(0.5),
                     ..Default::default()
                 });
@@ -58,7 +58,7 @@ impl ObjModel {
             meshes.push((mesh_id, material_id));
         }
 
-        app.get_texture_manager_mut().update_bind_group();
+        app.get_texture_pool_mut().update_bind_group();
         Ok(meshes)
     }
 }

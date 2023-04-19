@@ -58,7 +58,7 @@ impl Instance {
     }
 }
 
-pub struct InstanceManager {
+pub struct InstancePool {
     pub instances_data: Vec<Instance>,
     pub(crate) instances: ResizableBuffer<Instance>,
 
@@ -67,7 +67,7 @@ pub struct InstanceManager {
     gpu: Arc<Gpu>,
 }
 
-impl InstanceManager {
+impl InstancePool {
     const LAYOUT: wgpu::BindGroupLayoutDescriptor<'static> = wgpu::BindGroupLayoutDescriptor {
         label: Some("Draw Instances Bind Group Layout"),
         entries: &[wgpu::BindGroupLayoutEntry {

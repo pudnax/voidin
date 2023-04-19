@@ -33,7 +33,7 @@ pub struct Material {
     pub emissive: TextureId,
 }
 
-pub struct MaterialManager {
+pub struct MaterialPool {
     pub(crate) buffer: ResizableBuffer<Material>,
 
     pub(crate) bind_group_layout: bind_group_layout::BindGroupLayout,
@@ -42,7 +42,7 @@ pub struct MaterialManager {
     gpu: Arc<Gpu>,
 }
 
-impl MaterialManager {
+impl MaterialPool {
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let buffer = gpu.device().create_resizable_buffer_init(
             wgpu::BufferUsages::STORAGE
@@ -57,7 +57,7 @@ impl MaterialManager {
         let bind_group_layout =
             gpu.device()
                 .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("MaterialManager: Bind Group Layout"),
+                    label: Some("MaterialPool: Bind Group Layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
@@ -72,7 +72,7 @@ impl MaterialManager {
                 });
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("MaterialManager: Bind Group"),
+            label: Some("MaterialPool: Bind Group"),
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -94,7 +94,7 @@ impl MaterialManager {
 
         if was_resized {
             let desc = &wgpu::BindGroupDescriptor {
-                label: Some("MaterialManager: Bind Group"),
+                label: Some("MaterialPool: Bind Group"),
                 layout: &self.bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,

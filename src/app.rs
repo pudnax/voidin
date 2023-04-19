@@ -38,13 +38,13 @@ mod view_target;
 pub(crate) use view_target::ViewTarget;
 
 use self::{
-    instance::{InstanceId, InstanceManager},
-    material::{MaterialId, MaterialManager},
-    mesh::{MeshId, MeshManager},
+    instance::{InstanceId, InstancePool},
+    material::{MaterialId, MaterialPool},
+    mesh::{MeshId, MeshPool},
     pipeline::PipelineArena,
     screenshot::ScreenshotCtx,
     state::{AppState, StateAction},
-    texture::TextureManager,
+    texture::TexturePool,
 };
 
 pub(crate) const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
@@ -267,10 +267,10 @@ impl App {
             ));
         }
 
-        let sphere_mesh = models::sphere_mesh(self, 0.9, 30, 20);
+        let sphere_mesh = models::sphere_mesh(self, 0.9, 40, 20);
 
-        let mut instance_manager = self.world.get_mut::<InstanceManager>()?;
-        instance_manager.add(&instances);
+        let mut instance_pool = self.world.get_mut::<InstancePool>()?;
+        instance_pool.add(&instances);
 
         let mut moving_instances = vec![];
         let mut rng = rand::thread_rng();
@@ -285,7 +285,7 @@ impl App {
                 transform: Mat4::from_translation(vec3(x, y, 2.)),
                 mesh: sphere_mesh,
                 material: MaterialId::new(
-                    rng.gen_range(0..self.get_material_manager().buffer.len() as u32),
+                    rng.gen_range(0..self.get_material_pool().buffer.len() as u32),
                 ),
                 ..Default::default()
             });
@@ -300,16 +300,16 @@ impl App {
             }
         }
 
-        let moving_instances_id = instance_manager.add(&moving_instances);
+        let moving_instances_id = instance_pool.add(&moving_instances);
         self.moving_instances.push(&self.gpu, &moving_instances_id);
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,
             &mut encoder,
-            instance_manager.count() as _,
+            instance_pool.count() as _,
         );
-        drop(instance_manager);
+        drop(instance_pool);
 
         self.draw_cmd_bind_group = self
             .draw_cmd_buffer
@@ -493,41 +493,41 @@ impl App {
         indices: &[u32],
     ) -> MeshId {
         self.world
-            .get_mut::<MeshManager>()
+            .get_mut::<MeshPool>()
             .unwrap()
             .add(vertices, normals, tex_coords, indices)
     }
 
-    pub fn get_material_manager(&self) -> Read<MaterialManager> {
-        self.world.get::<MaterialManager>().unwrap()
+    pub fn get_material_pool(&self) -> Read<MaterialPool> {
+        self.world.get::<MaterialPool>().unwrap()
     }
 
-    pub fn get_material_manager_mut(&self) -> Write<MaterialManager> {
-        self.world.get_mut::<MaterialManager>().unwrap()
+    pub fn get_material_pool_mut(&self) -> Write<MaterialPool> {
+        self.world.get_mut::<MaterialPool>().unwrap()
     }
 
-    pub fn get_texture_manager(&self) -> Read<TextureManager> {
-        self.world.get::<TextureManager>().unwrap()
+    pub fn get_texture_pool(&self) -> Read<TexturePool> {
+        self.world.get::<TexturePool>().unwrap()
     }
 
-    pub fn get_texture_manager_mut(&self) -> Write<TextureManager> {
-        self.world.get_mut::<TextureManager>().unwrap()
+    pub fn get_texture_pool_mut(&self) -> Write<TexturePool> {
+        self.world.get_mut::<TexturePool>().unwrap()
     }
 
-    pub fn get_mesh_manager(&self) -> Read<MeshManager> {
-        self.world.get::<MeshManager>().unwrap()
+    pub fn get_mesh_pool(&self) -> Read<MeshPool> {
+        self.world.get::<MeshPool>().unwrap()
     }
 
-    pub fn get_mesh_manager_mut(&self) -> Write<MeshManager> {
-        self.world.get_mut::<MeshManager>().unwrap()
+    pub fn get_mesh_pool_mut(&self) -> Write<MeshPool> {
+        self.world.get_mut::<MeshPool>().unwrap()
     }
 
-    pub fn get_instance_manager(&self) -> Read<InstanceManager> {
-        self.world.get::<InstanceManager>().unwrap()
+    pub fn get_instance_pool(&self) -> Read<InstancePool> {
+        self.world.get::<InstancePool>().unwrap()
     }
 
-    pub fn get_instance_manager_mut(&self) -> Write<InstanceManager> {
-        self.world.get_mut::<InstanceManager>().unwrap()
+    pub fn get_instance_pool_mut(&self) -> Write<InstancePool> {
+        self.world.get_mut::<InstancePool>().unwrap()
     }
 
     pub fn queue(&self) -> &wgpu::Queue {

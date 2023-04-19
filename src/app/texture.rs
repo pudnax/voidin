@@ -17,7 +17,7 @@ impl TextureId {
     }
 }
 
-pub struct TextureManager {
+pub struct TexturePool {
     pub views: Vec<wgpu::TextureView>,
 
     sampler: wgpu::Sampler,
@@ -29,7 +29,7 @@ pub struct TextureManager {
 
 const MAX_TEXTURES: u32 = 1 << 9;
 
-impl TextureManager {
+impl TexturePool {
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let views = vec![utils::create_solid_color_texture(
             gpu.device(),
@@ -41,7 +41,7 @@ impl TextureManager {
         let bind_group_layout =
             gpu.device()
                 .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("TextureManager: bind group layout"),
+                    label: Some("TexturePool: bind group layout"),
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
@@ -70,7 +70,7 @@ impl TextureManager {
             .collect::<Vec<_>>();
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("TextureManager: bind group"),
+            label: Some("TexturePool: bind group"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -109,7 +109,7 @@ impl TextureManager {
             .gpu
             .device()
             .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("TextureManager: bind group"),
+                label: Some("TexturePool: bind group"),
                 layout: &self.bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {

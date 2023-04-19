@@ -16,10 +16,10 @@ use crate::app::bind_group_layout::{
     StorageWriteBindGroupLayoutDyn,
 };
 use crate::app::global_ubo;
-use crate::app::instance::InstanceManager;
-use crate::app::material::MaterialManager;
-use crate::app::mesh::MeshManager;
-use crate::app::texture::TextureManager;
+use crate::app::instance::InstancePool;
+use crate::app::material::MaterialPool;
+use crate::app::mesh::MeshPool;
+use crate::app::texture::TexturePool;
 use crate::camera::CameraUniformBinding;
 use crate::Gpu;
 
@@ -101,10 +101,10 @@ impl World {
             resources: HashMap::new(),
             gpu: gpu.clone(),
         };
-        this.insert(TextureManager::new(gpu.clone()));
-        this.insert(MeshManager::new(gpu.clone()));
-        this.insert(MaterialManager::new(gpu.clone()));
-        this.insert(InstanceManager::new(gpu.clone()));
+        this.insert(TexturePool::new(gpu.clone()));
+        this.insert(MeshPool::new(gpu.clone()));
+        this.insert(MaterialPool::new(gpu.clone()));
+        this.insert(InstancePool::new(gpu.clone()));
         this.insert(global_ubo::GlobalUniformBinding::new(gpu.device()));
         this.insert(CameraUniformBinding::new(gpu.device()));
         this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));

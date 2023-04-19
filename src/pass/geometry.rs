@@ -10,14 +10,14 @@ use crate::{
     app::{
         bind_group_layout::StorageWriteBindGroupLayout,
         global_ubo::GlobalUniformBinding,
-        instance::InstanceManager,
-        material::MaterialManager,
-        mesh::MeshManager,
+        instance::InstancePool,
+        material::MaterialPool,
+        mesh::MeshPool,
         pipeline::{
             self, ComputeHandle, ComputePipelineDescriptor, PipelineArena, RenderHandle,
             RenderPipelineDescriptor,
         },
-        texture::TextureManager,
+        texture::TexturePool,
         ViewTarget,
     },
     camera::CameraUniformBinding,
@@ -31,10 +31,10 @@ pub struct Geometry {
 impl Geometry {
     pub fn new(world: &World) -> Result<Self> {
         let path = Path::new("shaders").join("draw_indirect.wgsl");
-        let textures = world.get::<TextureManager>()?;
-        let meshes = world.get::<MeshManager>()?;
-        let materials = world.get::<MaterialManager>()?;
-        let instances = world.get::<InstanceManager>()?;
+        let textures = world.get::<TexturePool>()?;
+        let meshes = world.get::<MeshPool>()?;
+        let materials = world.get::<MaterialPool>()?;
+        let instances = world.get::<InstancePool>()?;
         let global_ubo = world.get::<GlobalUniformBinding>()?;
         let camera = world.get::<CameraUniformBinding>()?;
         let render_desc = RenderPipelineDescriptor {
@@ -98,10 +98,10 @@ impl Pass for Geometry {
         view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
-        let meshes = world.unwrap::<MeshManager>();
-        let textures = world.unwrap::<TextureManager>();
-        let materials = world.unwrap::<MaterialManager>();
-        let instances = world.unwrap::<InstanceManager>();
+        let meshes = world.unwrap::<MeshPool>();
+        let textures = world.unwrap::<TexturePool>();
+        let materials = world.unwrap::<MaterialPool>();
+        let instances = world.unwrap::<InstancePool>();
         let global_ubo = world.unwrap::<GlobalUniformBinding>();
         let arena = world.unwrap::<PipelineArena>();
         let camera = world.unwrap::<CameraUniformBinding>();
@@ -150,8 +150,8 @@ pub struct EmitDraws {
 
 impl EmitDraws {
     pub fn new(world: &World) -> Result<Self> {
-        let meshes = world.get::<MeshManager>()?;
-        let instances = world.get::<InstanceManager>()?;
+        let meshes = world.get::<MeshPool>()?;
+        let instances = world.get::<InstancePool>()?;
         let draw_cmd_layout = world.get::<StorageWriteBindGroupLayout<DrawIndexedIndirect>>()?;
         let path = Path::new("shaders").join("emit_draws.wgsl");
         let comp_desc = ComputePipelineDescriptor {
@@ -186,9 +186,9 @@ impl Pass for EmitDraws {
         _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
-        let meshes = world.unwrap::<MeshManager>();
+        let meshes = world.unwrap::<MeshPool>();
         let arena = world.unwrap::<PipelineArena>();
-        let instances = world.unwrap::<InstanceManager>();
+        let instances = world.unwrap::<InstancePool>();
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Emit Draws Pass"),
         });

@@ -7,7 +7,7 @@ use crate::{
     app::{
         bind_group_layout::StorageReadBindGroupLayout,
         global_ubo::GlobalUniformBinding,
-        instance::InstanceManager,
+        instance::InstancePool,
         pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
         ViewTarget,
     },
@@ -24,7 +24,7 @@ impl ComputeUpdate {
     pub fn new(world: &World, path: impl AsRef<Path>) -> Result<Self> {
         let global_ubo = world.get::<GlobalUniformBinding>()?;
         let read_idx_layout = world.get::<StorageReadBindGroupLayout<u32>>()?;
-        let instances = world.get::<InstanceManager>()?;
+        let instances = world.get::<InstancePool>()?;
         let desc = ComputePipelineDescriptor {
             label: Some("Compute Geometry Update Pass".into()),
             layout: vec![
@@ -58,7 +58,7 @@ impl Pass for ComputeUpdate {
         resources: Self::Resoutces<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();
-        let instances = world.unwrap::<InstanceManager>();
+        let instances = world.unwrap::<InstancePool>();
         let global_ubo = world.unwrap::<GlobalUniformBinding>();
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Compute Update Pass"),

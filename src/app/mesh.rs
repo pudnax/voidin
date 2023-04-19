@@ -40,7 +40,7 @@ pub struct MeshInfo {
     index_count: u32,
 }
 
-pub struct MeshManager {
+pub struct MeshPool {
     vertex_offset: AtomicU32,
     base_index: AtomicU32,
     mesh_index: AtomicU32,
@@ -58,7 +58,7 @@ pub struct MeshManager {
     gpu: Arc<Gpu>,
 }
 
-impl MeshManager {
+impl MeshPool {
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let mesh_info = gpu
             .device()
