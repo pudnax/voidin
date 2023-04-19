@@ -40,7 +40,7 @@ impl ResizableBufferExt for wgpu::Device {
 
 #[derive(Debug)]
 pub struct ResizableBuffer<T> {
-    pub buffer: Buffer,
+    buffer: Buffer,
     len: usize,
     cap: usize,
     _phantom: PhantomData<T>,

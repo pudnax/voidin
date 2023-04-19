@@ -124,7 +124,7 @@ impl MeshPool {
             layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: mesh_info.buffer.as_entire_binding(),
+                resource: mesh_info.as_entire_binding(),
             }],
         });
 
@@ -163,11 +163,11 @@ impl MeshPool {
             index_count,
         };
         self.mesh_cpu.push(mesh_info);
-        let was_resized = self.mesh_info.push(&self.gpu, &[mesh_info]);
-        if was_resized {
-            self.mesh_info_bind_group =
-                Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
-        }
+        self.mesh_info.push(&self.gpu, &[mesh_info]);
+        // FIXME: I should create new bind group only when resizing happens, but it leads to
+        // bugs in rendering and missing geometry. hint: look at the `push` function once again
+        self.mesh_info_bind_group =
+            Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
 
         log::info!("Added new mesh with id: {mesh_index}");
         MeshId(mesh_index)
