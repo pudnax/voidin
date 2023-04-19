@@ -13,7 +13,7 @@ use std::path::Path;
 pub use cube::cube_mesh;
 pub use gltf_model::*;
 pub use plane::plane_mesh;
-pub use sphere::sphere_mesh;
+pub use sphere::make_uv_sphere;
 
 use crate::app::{
     material::{Material, MaterialId},

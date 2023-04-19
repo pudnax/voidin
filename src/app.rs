@@ -267,7 +267,7 @@ impl App {
             ));
         }
 
-        let sphere_mesh = models::sphere_mesh(self, 0.9, 40, 20);
+        let sphere_mesh = models::make_uv_sphere(&mut self.get_mesh_pool_mut(), 0.9, 10);
 
         let mut instance_pool = self.world.get_mut::<InstancePool>()?;
         instance_pool.add(&instances);
