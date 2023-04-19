@@ -52,7 +52,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let albedo_tex = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
     let normal_tex = textureSample(texture_array[material.normal], tex_sampler, in.uv);
 
-    if material.base_color.w < 0.1 {
+    if material.base_color.w < material.base_color.w {
 	 	discard;
     }
 
