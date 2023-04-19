@@ -230,6 +230,11 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     }
 
     pub fn as_entire_binding(&self) -> wgpu::BindingResource {
+        // wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+        //     size: std::num::NonZeroU64::new(self.size_bytes()),
+        //     offset: 0,
+        //     buffer: &self.buffer,
+        // })
         self.buffer.as_entire_binding()
     }
 

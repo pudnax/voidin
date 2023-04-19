@@ -68,7 +68,7 @@ impl Pass for ComputeUpdate {
         cpass.set_bind_group(0, &global_ubo.binding, &[]);
         cpass.set_bind_group(1, resources.idx_bind_group, &[]);
         cpass.set_bind_group(2, &instances.bind_group, &[]);
-        let num_dispatches = align_to(resources.dispatch_size, 1) / 1;
+        let num_dispatches = align_to(resources.dispatch_size, 64) / 64;
         cpass.dispatch_workgroups(num_dispatches, 1, 1);
     }
 }

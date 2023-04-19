@@ -8,7 +8,7 @@ var<storage, read> indices: array<u32>;
 var<storage, read_write> instances: array<Instance>;
 
 @compute
-@workgroup_size(1, 1, 1)
+@workgroup_size(64, 1, 1)
 fn update(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if global_id.x >= arrayLength(&indices) {
         return;
