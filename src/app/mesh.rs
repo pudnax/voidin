@@ -92,14 +92,8 @@ impl MeshPool {
                         count: None,
                     }],
                 });
-        let mesh_info_bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Mesh Info Bind Group"),
-            layout: &mesh_info_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: mesh_info.as_entire_binding(),
-            }],
-        });
+        let mesh_info_bind_group =
+            Self::create_bind_group(gpu.device(), &mesh_info_layout, &mesh_info);
 
         Self {
             vertex_offset: AtomicU32::new(0),
@@ -118,6 +112,23 @@ impl MeshPool {
 
             gpu,
         }
+    }
+
+    pub fn create_bind_group(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        mesh_info: &ResizableBuffer<MeshInfo>,
+    ) -> wgpu::BindGroup {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Mesh Info Bind Group"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: mesh_info.buffer.as_entire_binding(),
+            }],
+        });
+
+        bind_group
     }
 
     pub fn count(&self) -> u32 {
@@ -154,15 +165,8 @@ impl MeshPool {
         self.mesh_cpu.push(mesh_info);
         let was_resized = self.mesh_info.push(&self.gpu, &[mesh_info]);
         if was_resized {
-            let desc = wgpu::BindGroupDescriptor {
-                label: Some("Mesh Info Bind Group"),
-                layout: &self.mesh_info_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.mesh_info.as_entire_binding(),
-                }],
-            };
-            self.mesh_info_bind_group = self.gpu.device().create_bind_group(&desc);
+            self.mesh_info_bind_group =
+                Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
         }
 
         log::info!("Added new mesh with id: {mesh_index}");

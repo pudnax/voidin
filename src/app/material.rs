@@ -71,14 +71,7 @@ impl MaterialPool {
                     }],
                 });
 
-        let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("MaterialPool: Bind Group"),
-            layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        });
+        let bind_group = Self::create_bind_group(gpu.device(), &bind_group_layout, &buffer);
 
         Self {
             buffer,
@@ -89,19 +82,29 @@ impl MaterialPool {
         }
     }
 
+    pub fn create_bind_group(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        materials: &ResizableBuffer<Material>,
+    ) -> wgpu::BindGroup {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("MaterialPool: Bind Group"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: materials.buffer.as_entire_binding(),
+            }],
+        });
+
+        bind_group
+    }
+
     pub fn add(&mut self, material: Material) -> MaterialId {
         let was_resized = self.buffer.push(&self.gpu, &[material]);
 
         if was_resized {
-            let desc = &wgpu::BindGroupDescriptor {
-                label: Some("MaterialPool: Bind Group"),
-                layout: &self.bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.buffer.as_entire_binding(),
-                }],
-            };
-            self.bind_group = self.gpu.device().create_bind_group(desc);
+            self.bind_group =
+                Self::create_bind_group(self.gpu.device(), &self.bind_group_layout, &self.buffer);
         }
 
         log::info!("Added material with id: {}", self.buffer.len() as u32 - 1);
