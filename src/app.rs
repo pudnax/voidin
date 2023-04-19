@@ -224,34 +224,34 @@ impl App {
         let now = std::time::Instant::now();
         let mut instances = vec![];
 
-        let gltf_scene = GltfDocument::import(
-            self,
-            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        )?;
+        // let gltf_scene = GltfDocument::import(
+        //     self,
+        //     "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
+        //     // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+        //     // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+        //     // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+        //     // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+        // )?;
+        //
+        // for scene in gltf_scene.document.scenes() {
+        //     instances.extend(gltf_scene.scene_data(
+        //         scene,
+        //         Mat4::from_rotation_y(std::f32::consts::PI / 2.)
+        //             * Mat4::from_translation(vec3(7., -4., 1.))
+        //             * Mat4::from_scale(Vec3::splat(3.)),
+        //     ));
+        // }
 
-        for scene in gltf_scene.document.scenes() {
-            instances.extend(gltf_scene.scene_data(
-                scene,
-                Mat4::from_rotation_y(std::f32::consts::PI / 2.)
-                    * Mat4::from_translation(vec3(7., -4., 1.))
-                    * Mat4::from_scale(Vec3::splat(3.)),
-            ));
-        }
-
-        let helmet = GltfDocument::import(
-            self,
-            "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        )?;
-        for scene in helmet.document.scenes() {
-            instances.extend(helmet.scene_data(
-                scene,
-                Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
-            ));
-        }
+        // let helmet = GltfDocument::import(
+        //     self,
+        //     "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+        // )?;
+        // for scene in helmet.document.scenes() {
+        //     instances.extend(helmet.scene_data(
+        //         scene,
+        //         Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
+        //     ));
+        // }
 
         let gltf_ferris = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
         for scene in gltf_ferris.document.scenes() {
@@ -304,11 +304,8 @@ impl App {
         self.moving_instances.push(&self.gpu, &moving_instances_id);
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
-        self.draw_cmd_buffer.set_len(
-            &self.gpu.device,
-            &mut encoder,
-            instance_pool.count() as _,
-        );
+        self.draw_cmd_buffer
+            .set_len(&self.gpu.device, &mut encoder, instance_pool.count() as _);
         drop(instance_pool);
 
         self.draw_cmd_bind_group = self

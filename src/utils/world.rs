@@ -1,8 +1,8 @@
+use ahash::AHashMap;
 use color_eyre::eyre::ContextCompat;
 use color_eyre::{eyre::eyre, Result};
 use pretty_type_name::pretty_type_name;
 use std::any::Any;
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -91,14 +91,14 @@ impl<R: Resource> AsRef<R> for Write<'_, R> {
 }
 
 pub struct World {
-    pub(crate) resources: HashMap<TypeId, RefCell<Box<dyn Resource>>>,
+    pub(crate) resources: AHashMap<TypeId, RefCell<Box<dyn Resource>>>,
     pub gpu: Arc<Gpu>,
 }
 
 impl World {
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let mut this = Self {
-            resources: HashMap::new(),
+            resources: AHashMap::new(),
             gpu: gpu.clone(),
         };
         this.insert(TexturePool::new(gpu.clone()));

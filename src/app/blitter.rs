@@ -1,9 +1,11 @@
-use std::{cell::RefCell, collections::HashMap, num::NonZeroU32};
+use std::{cell::RefCell, num::NonZeroU32};
+
+use ahash::AHashMap;
 
 use super::DEFAULT_SAMPLER_DESC;
 
 pub struct Blitter {
-    pipelines: RefCell<HashMap<wgpu::TextureFormat, wgpu::RenderPipeline>>,
+    pipelines: RefCell<AHashMap<wgpu::TextureFormat, wgpu::RenderPipeline>>,
     shader: wgpu::ShaderModule,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
@@ -40,7 +42,7 @@ impl Blitter {
                 },
             ],
         });
-        let pipelines = RefCell::new(HashMap::from([(
+        let pipelines = RefCell::new(AHashMap::from([(
             wgpu::TextureFormat::Bgra8UnormSrgb,
             Self::create_pipeline(device, &shader, wgpu::TextureFormat::Bgra8UnormSrgb),
         )]));

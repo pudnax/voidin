@@ -1,9 +1,9 @@
 // Simplified version of: https://github.com/rerun-io/rerun/blob/43aa22c426ba845ed9384db7b07d5ca0de85581f/crates/re_renderer/src/file_resolver.rs
 
+use ahash::{AHashMap, AHashSet};
 use clean_path::Clean;
 use color_eyre::eyre::{self, bail, eyre, Context};
 use std::{
-    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     rc::Rc,
 };
@@ -68,7 +68,7 @@ impl std::fmt::Display for ImportClause {
 #[derive(Clone, Debug, Default)]
 pub struct ResolvedFile {
     pub contents: String,
-    pub imports: HashSet<PathBuf>,
+    pub imports: AHashSet<PathBuf>,
 }
 
 #[derive(Default)]
@@ -88,15 +88,15 @@ impl ImportResolver {
 
     pub fn populate(&mut self, path: impl AsRef<Path>) -> color_eyre::Result<ResolvedFile> {
         let mut path_stack = Vec::new();
-        let mut visited_stack = HashSet::new();
-        let mut resolved_files = HashMap::default();
+        let mut visited_stack = AHashSet::new();
+        let mut resolved_files = AHashMap::default();
 
         fn populate_impl(
             this: &mut ImportResolver,
             path: impl AsRef<Path>,
-            resolved_files: &mut HashMap<PathBuf, Rc<ResolvedFile>>,
+            resolved_files: &mut AHashMap<PathBuf, Rc<ResolvedFile>>,
             path_stack: &mut Vec<PathBuf>,
-            visited_stack: &mut HashSet<PathBuf>,
+            visited_stack: &mut AHashSet<PathBuf>,
         ) -> color_eyre::Result<Rc<ResolvedFile>> {
             let path = path.as_ref().clean();
 
@@ -114,7 +114,7 @@ impl ImportResolver {
 
             let contents = std::fs::read_to_string(&path)?;
 
-            let mut imports = HashSet::new();
+            let mut imports = AHashSet::new();
 
             let children: Result<Vec<_>, _> = contents
                 .lines()

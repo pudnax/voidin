@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-
+use ahash::AHashMap;
 use glam::{vec2, Vec2};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
@@ -17,7 +16,7 @@ pub struct KeyState {
 
 #[derive(Default, Clone, Debug)]
 pub struct KeyboardState {
-    keys_down: HashMap<VirtualKeyCode, KeyState>,
+    keys_down: AHashMap<VirtualKeyCode, KeyState>,
 }
 
 impl KeyboardState {
@@ -133,8 +132,8 @@ impl KeyboardMap {
         self
     }
 
-    pub fn map(&mut self, keyboard: &KeyboardState) -> HashMap<Action, f32> {
-        let mut result: HashMap<Action, f32> = HashMap::new();
+    pub fn map(&mut self, keyboard: &KeyboardState) -> AHashMap<Action, f32> {
+        let mut result: AHashMap<Action, f32> = AHashMap::new();
 
         for (key, s) in &mut self.bindings {
             let activation = if keyboard.is_down(*key) { 1.0 } else { 0.0 };

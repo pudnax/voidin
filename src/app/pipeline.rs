@@ -1,11 +1,11 @@
 use std::{
     borrow::Cow,
-    collections::{HashMap, HashSet},
     num::NonZeroU32,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
+use ahash::{AHashMap, AHashSet};
 use color_eyre::Result;
 use either::Either::{self, Left, Right};
 use pollster::FutureExt;
@@ -27,7 +27,7 @@ slotmap::new_key_type! {
 pub struct PipelineArena {
     render: RenderArena,
     compute: ComputeArena,
-    path_mapping: HashMap<PathBuf, HashSet<Either<RenderHandle, ComputeHandle>>>,
+    path_mapping: AHashMap<PathBuf, AHashSet<Either<RenderHandle, ComputeHandle>>>,
     file_watcher: Watcher,
     gpu: Arc<Gpu>,
 }
@@ -35,7 +35,7 @@ pub struct PipelineArena {
 struct RenderArena {
     pipelines: SlotMap<RenderHandle, wgpu::RenderPipeline>,
     descriptors: SecondaryMap<RenderHandle, RenderPipelineDescriptor>,
-    cached: HashMap<RenderPipelineDescriptor, RenderHandle>,
+    cached: AHashMap<RenderPipelineDescriptor, RenderHandle>,
 }
 
 impl RenderArena {
@@ -68,7 +68,7 @@ impl RenderArena {
 struct ComputeArena {
     pipelines: SlotMap<ComputeHandle, wgpu::ComputePipeline>,
     descriptors: SecondaryMap<ComputeHandle, ComputePipelineDescriptor>,
-    cached: HashMap<ComputePipelineDescriptor, ComputeHandle>,
+    cached: AHashMap<ComputePipelineDescriptor, ComputeHandle>,
 }
 
 impl ComputeArena {
@@ -136,14 +136,14 @@ impl PipelineArena {
             render: RenderArena {
                 pipelines: SlotMap::with_key(),
                 descriptors: SecondaryMap::new(),
-                cached: HashMap::new(),
+                cached: AHashMap::new(),
             },
             compute: ComputeArena {
                 pipelines: SlotMap::with_key(),
                 descriptors: SecondaryMap::new(),
-                cached: HashMap::new(),
+                cached: AHashMap::new(),
             },
-            path_mapping: HashMap::new(),
+            path_mapping: AHashMap::new(),
             file_watcher,
             gpu,
         }
