@@ -21,11 +21,12 @@ use wgpu_profiler::GpuTimerScopeResult;
 use crate::SHADER_FOLDER;
 
 pub trait NonZeroSized: Sized {
-    const NSIZE: NonZeroU64 = {
+    const NSIZE: NonZeroU64 = { unsafe { NonZeroU64::new_unchecked(Self::SIZE as _) } };
+    const SIZE: usize = {
         if std::mem::size_of::<Self>() == 0 {
             panic!("type is zero-sized");
         }
-        unsafe { NonZeroU64::new_unchecked(std::mem::size_of::<Self>() as _) }
+        std::mem::size_of::<Self>()
     };
 }
 impl<T> NonZeroSized for T where T: Sized {}

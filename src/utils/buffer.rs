@@ -3,7 +3,7 @@ use crate::{
     Gpu,
 };
 
-use std::{marker::PhantomData, mem::size_of, ops::RangeBounds};
+use std::{marker::PhantomData, ops::RangeBounds};
 
 use bytemuck::Pod;
 use pretty_type_name::pretty_type_name;
@@ -12,7 +12,7 @@ use wgpu::{
     CommandEncoder, CommandEncoderDescriptor, Device,
 };
 
-use super::world::World;
+use super::{world::World, NonZeroSized};
 
 pub trait ResizableBufferExt {
     fn create_resizable_buffer<T: Pod>(&self, usages: BufferUsages) -> ResizableBuffer<T>;
@@ -54,12 +54,12 @@ impl<T> std::ops::Deref for ResizableBuffer<T> {
     }
 }
 
-impl<T: bytemuck::Pod> ResizableBuffer<T> {
+impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
     pub fn new(device: &Device, usages: BufferUsages) -> Self {
         let default_cap = 32;
         let buffer = device.create_buffer(&BufferDescriptor {
             label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
-            size: (size_of::<T>() * default_cap) as u64,
+            size: (T::SIZE * default_cap) as u64,
             usage: usages | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -104,10 +104,10 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
         let new_cap = (new_len + 1)
             .checked_next_power_of_two()
             .unwrap_or(new_len)
-            .min(max_buffer_size as usize / size_of::<T>());
+            .min(max_buffer_size as usize / T::SIZE);
         let new_buf = device.create_buffer(&BufferDescriptor {
             label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
-            size: (size_of::<T>() * new_cap) as u64,
+            size: (T::SIZE * new_cap) as u64,
             usage: self.usages(),
             mapped_at_creation: false,
         });
@@ -157,7 +157,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
         assert!(index < self.len());
         gpu.queue.write_buffer(
             &self.buffer,
-            (index * size_of::<T>()) as BufferAddress,
+            (index * T::SIZE) as BufferAddress,
             bytemuck::bytes_of(&value),
         );
     }
@@ -166,7 +166,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
         assert!(index + values.len() <= self.len());
         gpu.queue.write_buffer(
             &self.buffer,
-            (index * size_of::<T>()) as BufferAddress,
+            (index * T::SIZE) as BufferAddress,
             bytemuck::cast_slice(values),
         );
     }
@@ -255,7 +255,7 @@ impl<T: bytemuck::Pod> ResizableBuffer<T> {
     }
 
     pub fn size_bytes(&self) -> BufferAddress {
-        (size_of::<T>() * self.len) as BufferAddress
+        (T::SIZE * self.len) as BufferAddress
     }
 
     pub fn slice<S: RangeBounds<BufferAddress>>(&self, bounds: S) -> BufferSlice {
