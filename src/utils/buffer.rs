@@ -208,7 +208,7 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
             layout: &layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: self.as_entire_binding(),
+                resource: self.as_tight_binding(),
             }],
         })
     }
@@ -224,18 +224,33 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
             layout: &layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: self.as_entire_binding(),
+                resource: self.as_tight_binding(),
             }],
         })
     }
 
+    pub fn as_tight_binding(&self) -> wgpu::BindingResource {
+        wgpu::BindingResource::Buffer(self.as_tight_buffer_binding())
+    }
+
     pub fn as_entire_binding(&self) -> wgpu::BindingResource {
-        wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-            size: std::num::NonZeroU64::new(self.size_bytes()),
-            offset: 0,
+        wgpu::BindingResource::Buffer(self.as_entire_buffer_binding())
+    }
+
+    pub fn as_tight_buffer_binding(&self) -> wgpu::BufferBinding {
+        wgpu::BufferBinding {
             buffer: &self.buffer,
-        })
-        // self.buffer.as_entire_binding()
+            offset: 0,
+            size: std::num::NonZeroU64::new(self.size_bytes()),
+        }
+    }
+
+    pub fn as_entire_buffer_binding(&self) -> wgpu::BufferBinding {
+        wgpu::BufferBinding {
+            buffer: &self.buffer,
+            offset: 0,
+            size: None,
+        }
     }
 
     pub fn usages(&self) -> BufferUsages {

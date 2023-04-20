@@ -100,12 +100,12 @@ impl MaterialPool {
     }
 
     pub fn add(&mut self, material: Material) -> MaterialId {
-        self.buffer.push(&self.gpu, &[material]);
+        let was_resized = self.buffer.push(&self.gpu, &[material]);
 
-        // FIXME: I should create new bind group only when resizing happens, but it leads to
-        // bugs in rendering and missing geometry. hint: look at the `push` function once again
-        self.bind_group =
-            Self::create_bind_group(self.gpu.device(), &self.bind_group_layout, &self.buffer);
+        if was_resized {
+            self.bind_group =
+                Self::create_bind_group(self.gpu.device(), &self.bind_group_layout, &self.buffer);
+        }
 
         log::info!("Added material with id: {}", self.buffer.len() as u32 - 1);
         MaterialId(self.buffer.len() as u32 - 1)

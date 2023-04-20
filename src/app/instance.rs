@@ -110,7 +110,7 @@ impl InstancePool {
             layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: instances.as_entire_binding(),
+                resource: instances.as_tight_binding(),
             }],
         });
 
