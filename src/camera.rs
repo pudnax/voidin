@@ -124,6 +124,7 @@ impl Camera {
         let (projection, view) = self.build_projection_view_matrix();
         let proj_view = projection * view;
 
+        // https://github.com/zeux/niagara/blob/3fafe000ba8fe6e309b41e915b81242b4ca3db28/src/niagara.cpp#L836-L852
         let perspective_t = projection.transpose();
         // x + w < 0
         let frustum_x = (perspective_t.col(3) + perspective_t.col(0)).normalize();

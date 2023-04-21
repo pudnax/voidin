@@ -7,7 +7,7 @@ use color_eyre::{
 
 mod conversions;
 pub use conversions::*;
-use glam::Vec4;
+use glam::{Mat4, Vec4};
 
 use crate::{
     app::{
@@ -239,15 +239,27 @@ impl GltfDocument {
     fn nodes_data<'a>(
         &self,
         nodes: impl Iterator<Item = gltf::Node<'a>>,
-        transform: glam::Mat4,
+        transform: Mat4,
     ) -> Vec<Instance> {
         let mut instances = vec![];
 
-        traverse_nodes_tree(
+        pub fn traverse_nodes<'a, T>(
+            nodes: impl Iterator<Item = gltf::Node<'a>>,
+            visitor: &mut impl FnMut(&T, &gltf::Node) -> Option<T>,
+            acc: T,
+        ) {
+            for node in nodes {
+                if let Some(res) = visitor(&acc, &node) {
+                    traverse_nodes(node.children(), visitor, res);
+                }
+            }
+        }
+
+        traverse_nodes(
             nodes,
-            &mut |parent_transform, node| {
+            &mut |&parent_transform, node| {
                 let transform =
-                    *parent_transform * glam::Mat4::from_cols_array_2d(&node.transform().matrix());
+                    parent_transform * Mat4::from_cols_array_2d(&node.transform().matrix());
 
                 let mesh_instances = node
                     .mesh()
@@ -267,14 +279,14 @@ impl GltfDocument {
         instances
     }
 
-    pub fn node_instances(&self, node: gltf::Node, transform: Option<glam::Mat4>) -> Vec<Instance> {
+    pub fn node_instances(&self, node: gltf::Node, transform: Option<Mat4>) -> Vec<Instance> {
         let transform = transform.unwrap_or_default()
-            * glam::Mat4::from_cols_array_2d(&node.transform().matrix()).inverse();
+            * Mat4::from_cols_array_2d(&node.transform().matrix()).inverse();
 
         self.nodes_data(std::iter::once(node), transform)
     }
 
-    pub fn scene_data(&self, scene: gltf::Scene, transform: glam::Mat4) -> Vec<Instance> {
+    pub fn scene_data(&self, scene: gltf::Scene, transform: Mat4) -> Vec<Instance> {
         self.nodes_data(scene.nodes(), transform)
     }
 
@@ -294,16 +306,4 @@ pub fn data_of_accessor<'a>(
     let accessor_data =
         &buffer_view_data[accessor.offset()..][..accessor.count() * accessor.size()];
     Some(accessor_data)
-}
-
-pub fn traverse_nodes_tree<'a, T>(
-    nodes: impl Iterator<Item = gltf::Node<'a>>,
-    visitor: &mut dyn FnMut(&T, &gltf::Node) -> Option<T>,
-    acc: T,
-) {
-    for node in nodes {
-        if let Some(res) = visitor(&acc, &node) {
-            traverse_nodes_tree(node.children(), visitor, res);
-        }
-    }
 }

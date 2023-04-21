@@ -30,7 +30,7 @@ pub struct Geometry {
 
 impl Geometry {
     pub fn new(world: &World) -> Result<Self> {
-        let path = Path::new("shaders").join("draw_indirect.wgsl");
+        let path = Path::new("shaders").join("geometry.wgsl");
         let textures = world.get::<TexturePool>()?;
         let meshes = world.get::<MeshPool>()?;
         let materials = world.get::<MaterialPool>()?;
