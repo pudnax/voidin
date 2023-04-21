@@ -14,11 +14,11 @@ pub use buffer::{ResizableBuffer, ResizableBufferExt};
 pub use import_resolver::ImportResolver;
 
 use either::Either;
-use glam::Vec4;
+use glam::{Vec3, Vec4};
 use wgpu::util::{align_to, DeviceExt};
 use wgpu_profiler::GpuTimerScopeResult;
 
-use crate::SHADER_FOLDER;
+use crate::{app::mesh::BoundingSphere, SHADER_FOLDER};
 
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = { unsafe { NonZeroU64::new_unchecked(Self::SIZE as _) } };
@@ -115,6 +115,17 @@ pub fn create_solid_color_texture(
         },
         bytemuck::bytes_of(&color),
     )
+}
+
+pub fn mesh_bounding_sphere(positions: &[Vec3]) -> BoundingSphere {
+    let (min, max) = positions.iter().fold(
+        (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
+        |(min, max), &pos| (min.min(pos), max.max(pos)),
+    );
+    let center = (min + max) / 2.;
+    let radius = center.distance(max);
+
+    BoundingSphere { center, radius }
 }
 
 pub trait DeviceShaderExt {

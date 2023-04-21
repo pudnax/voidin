@@ -40,7 +40,7 @@ pub(crate) use view_target::ViewTarget;
 use self::{
     instance::{InstanceId, InstancePool},
     material::{MaterialId, MaterialPool},
-    mesh::{MeshId, MeshPool},
+    mesh::{BoundingSphere, MeshId, MeshPool},
     pipeline::PipelineArena,
     screenshot::ScreenshotCtx,
     state::{AppState, StateAction},
@@ -237,7 +237,7 @@ impl App {
             instances.extend(gltf_scene.scene_data(
                 scene,
                 Mat4::from_rotation_y(std::f32::consts::PI / 2.)
-                    * Mat4::from_translation(vec3(7., -4., 1.))
+                    * Mat4::from_translation(vec3(7., -5., 1.))
                     * Mat4::from_scale(Vec3::splat(3.)),
             ));
         }
@@ -257,13 +257,13 @@ impl App {
         for scene in gltf_ferris.document.scenes() {
             instances.extend(gltf_ferris.scene_data(
                 scene,
-                Mat4::from_translation(vec3(-3., -3.5, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
+                Mat4::from_translation(vec3(-3., -5.0, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
             ));
         }
         for scene in gltf_ferris.document.scenes() {
             instances.extend(gltf_ferris.scene_data(
                 scene,
-                Mat4::from_translation(vec3(2., -3.5, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
+                Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
             ));
         }
 
@@ -282,7 +282,7 @@ impl App {
             let y = r * angle.sin();
 
             moving_instances.push(instance::Instance {
-                transform: Mat4::from_translation(vec3(x, y, 2.)),
+                transform: Mat4::from_translation(vec3(x, y, -17.)),
                 mesh: sphere_mesh,
                 material: MaterialId::new(
                     rng.gen_range(0..self.get_material_pool().buffer.len() as u32),
@@ -293,7 +293,7 @@ impl App {
             for scene in gltf_ferris.document.scenes() {
                 moving_instances.extend(gltf_ferris.scene_data(
                     scene,
-                    Mat4::from_translation(vec3(x, y + 1., -9.))
+                    Mat4::from_translation(vec3(x, y + 0., -9.))
                         * Mat4::from_rotation_z(angle)
                         * Mat4::from_scale(Vec3::splat(2.5)),
                 ));
@@ -488,11 +488,15 @@ impl App {
         normals: &[Vec3],
         tex_coords: &[Vec2],
         indices: &[u32],
+        bounding_sphere: BoundingSphere,
     ) -> MeshId {
-        self.world
-            .get_mut::<MeshPool>()
-            .unwrap()
-            .add(vertices, normals, tex_coords, indices)
+        self.world.get_mut::<MeshPool>().unwrap().add(
+            vertices,
+            normals,
+            tex_coords,
+            indices,
+            bounding_sphere,
+        )
     }
 
     pub fn get_material_pool(&self) -> Read<MaterialPool> {

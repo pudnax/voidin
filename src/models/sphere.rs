@@ -1,7 +1,7 @@
-use glam::{vec2, vec3};
+use glam::{vec2, vec3, Vec3};
 use std::f32::consts::PI;
 
-use crate::app::mesh::{MeshId, MeshPool};
+use crate::app::mesh::{BoundingSphere, MeshId, MeshPool};
 
 pub fn make_uv_sphere(mesh_pool: &mut MeshPool, radius: f32, resolution: usize) -> MeshId {
     let vside = 4 * resolution; // stack
@@ -53,5 +53,9 @@ pub fn make_uv_sphere(mesh_pool: &mut MeshPool, radius: f32, resolution: usize) 
         }
     }
 
-    mesh_pool.add(&vertices, &normals, &uv, &indices)
+    let bounding_sphere = BoundingSphere {
+        center: Vec3::ZERO,
+        radius,
+    };
+    mesh_pool.add(&vertices, &normals, &uv, &indices, bounding_sphere)
 }

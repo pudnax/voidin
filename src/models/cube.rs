@@ -1,6 +1,9 @@
 use glam::{Vec2, Vec3};
 
-use crate::app::{mesh::MeshId, App};
+use crate::app::{
+    mesh::{BoundingSphere, MeshId},
+    App,
+};
 
 pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
     let vertices = [
@@ -99,5 +102,9 @@ pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
         20, 21, 22, 20, 22, 23, // left
     ];
 
-    app.add_mesh(&vertices, &normals, &tex_coords, &indices)
+    let bounding_sphere = BoundingSphere {
+        center: Vec3::ZERO,
+        radius: scale * 3f32.sqrt(),
+    };
+    app.add_mesh(&vertices, &normals, &tex_coords, &indices, bounding_sphere)
 }

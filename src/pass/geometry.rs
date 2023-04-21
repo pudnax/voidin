@@ -170,6 +170,7 @@ pub struct EmitDraws {
 
 impl EmitDraws {
     pub fn new(world: &World) -> Result<Self> {
+        let camera = world.get::<CameraUniformBinding>()?;
         let meshes = world.get::<MeshPool>()?;
         let instances = world.get::<InstancePool>()?;
         let draw_cmd_layout = world.get::<StorageWriteBindGroupLayout<DrawIndexedIndirect>>()?;
@@ -177,6 +178,7 @@ impl EmitDraws {
         let comp_desc = ComputePipelineDescriptor {
             label: Some("Emit Draws Pipeline".into()),
             layout: vec![
+                camera.bind_group_layout.clone(),
                 meshes.mesh_info_layout.clone(),
                 instances.bind_group_layout.clone(),
                 draw_cmd_layout.layout.clone(),
@@ -206,6 +208,7 @@ impl Pass for EmitDraws {
         _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
+        let camera = world.unwrap::<CameraUniformBinding>();
         let meshes = world.unwrap::<MeshPool>();
         let arena = world.unwrap::<PipelineArena>();
         let instances = world.unwrap::<InstancePool>();
@@ -214,9 +217,10 @@ impl Pass for EmitDraws {
         });
 
         cpass.set_pipeline(arena.get_pipeline(self.pipeline));
-        cpass.set_bind_group(0, &meshes.mesh_info_bind_group, &[]);
-        cpass.set_bind_group(1, &instances.bind_group, &[]);
-        cpass.set_bind_group(2, resources.draw_cmd_bind_group, &[]);
+        cpass.set_bind_group(0, &camera.binding, &[]);
+        cpass.set_bind_group(1, &meshes.mesh_info_bind_group, &[]);
+        cpass.set_bind_group(2, &instances.bind_group, &[]);
+        cpass.set_bind_group(3, resources.draw_cmd_bind_group, &[]);
         let num_dispatches = align_to(resources.draw_cmd_buffer.len() as _, 64) / 64;
         cpass.dispatch_workgroups(num_dispatches, 1, 1);
     }

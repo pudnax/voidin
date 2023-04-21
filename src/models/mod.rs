@@ -15,10 +15,13 @@ pub use gltf_model::*;
 pub use plane::plane_mesh;
 pub use sphere::make_uv_sphere;
 
-use crate::app::{
-    material::{Material, MaterialId},
-    mesh::MeshId,
-    App,
+use crate::{
+    app::{
+        material::{Material, MaterialId},
+        mesh::MeshId,
+        App,
+    },
+    utils::mesh_bounding_sphere,
 };
 
 pub struct ObjModel;
@@ -50,6 +53,7 @@ impl ObjModel {
                 bytemuck::cast_slice(&mesh.normals),
                 bytemuck::cast_slice(&mesh.texcoords),
                 bytemuck::cast_slice(&mesh.indices),
+                mesh_bounding_sphere(bytemuck::cast_slice(&mesh.positions)),
             );
             let material_id = match mesh.material_id {
                 Some(id) => materials[id],

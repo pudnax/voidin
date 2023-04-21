@@ -6,16 +6,24 @@ struct Globals {
 };
 
 struct Camera {
-	position: vec3<f32>,
+	position: vec4<f32>,
 	proj: mat4x4<f32>,
 	view: mat4x4<f32>,
 	inv_proj: mat4x4<f32>,
+	frustum: vec4<f32>,
 };
 
+struct BoundingSphere {
+	center: vec3<f32>,
+	radius: f32,
+}
+
 struct MeshInfo {
-    vertex_offset: i32,
-	base_index: u32,
 	index_count: u32,
+	base_index: u32,
+    vertex_offset: i32,
+	paddingg: f32,
+	bounding_sphere: BoundingSphere,
 }
 
 struct Instance {

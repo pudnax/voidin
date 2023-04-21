@@ -68,3 +68,25 @@ fn from_rotation_z(angle: f32) -> mat4x4<f32> {
         vec4(0., 0., 0., 1.),
     );
 }
+
+fn extract_translation(mat: mat4x4<f32>) -> vec3<f32> {
+    return mat[3].xyz;
+}
+
+fn extract_scale(mat: mat4x4<f32>) -> vec3<f32> {
+    return vec3(
+        length(mat[0].xyz),
+        length(mat[1].xyz),
+        length(mat[2].xyz),
+    );
+}
+
+fn extract_rotation(mat: mat4x4<f32>) -> mat4x4<f32> {
+    let scale = extract_scale(mat);
+    return mat4x4(
+        vec4(vec3(mat[0].xyz / scale), 0.),
+        vec4(vec3(mat[1].xyz / scale), 0.),
+        vec4(vec3(mat[2].xyz / scale), 0.),
+        vec4(0., 0., 0., 1.),
+    );
+}

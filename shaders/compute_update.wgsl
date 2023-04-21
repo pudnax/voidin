@@ -15,14 +15,14 @@ fn update(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
     var idx = indices[global_id.x];
     let instance = &instances[idx - 0u];
-    let transform = (*instance).transform;
+    var transform = (*instance).transform;
 
-    var speed = 1.0;
-    if transform[3][2] > 0.01 {
+    var speed = 2.0 * sin(un.time * 0.5);
+    if transform[3][2] > -15.0 {
         speed *= 1.0;
     } else {
         speed *= -1.0;
     }
-    let rot = from_rotation_z(speed * un.dt);
-    (*instance).transform = rot * transform;
+    let rotz = from_rotation_z(speed * un.dt);
+    (*instance).transform = rotz * transform;
 }

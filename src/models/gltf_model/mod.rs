@@ -17,7 +17,7 @@ use crate::{
         texture::TextureId,
         App,
     },
-    utils::{FormatConversions, UnwrapRepeat},
+    utils::{mesh_bounding_sphere, FormatConversions, UnwrapRepeat},
 };
 
 pub struct GltfDocument {
@@ -226,6 +226,7 @@ impl GltfDocument {
                     bytemuck::cast_slice(normals),
                     bytemuck::cast_slice(&tex_coords),
                     &indices,
+                    mesh_bounding_sphere(vertices),
                 );
                 primitives.push(mesh);
             }
@@ -275,22 +276,6 @@ impl GltfDocument {
 
     pub fn scene_data(&self, scene: gltf::Scene, transform: glam::Mat4) -> Vec<Instance> {
         self.nodes_data(scene.nodes(), transform)
-    }
-
-    pub fn scene_instances(
-        &self,
-        scene_name: Option<&str>,
-        transform: Option<glam::Mat4>,
-    ) -> Option<Vec<Instance>> {
-        let scene = if let Some(scene_name) = scene_name {
-            self.document
-                .scenes()
-                .find(|scene| scene.name() == Some(scene_name))?
-        } else {
-            self.document.default_scene()?
-        };
-
-        Some(self.scene_data(scene, transform.unwrap_or_default()))
     }
 
     pub fn get_node(&self, name: &str) -> Option<gltf::Node> {

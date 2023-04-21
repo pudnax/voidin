@@ -33,11 +33,20 @@ impl MeshId {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
+pub struct BoundingSphere {
+    pub center: Vec3,
+    pub radius: f32,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
 pub struct MeshInfo {
-    vertex_offset: i32,
-    base_index: u32,
     index_count: u32,
+    base_index: u32,
+    vertex_offset: i32,
+    _padding: f32,
+    bounding_sphere: BoundingSphere,
 }
 
 pub struct MeshPool {
@@ -141,6 +150,7 @@ impl MeshPool {
         normals: &[Vec3],
         tex_coords: &[Vec2],
         indices: &[u32],
+        bounding_sphere: BoundingSphere,
     ) -> MeshId {
         let vertex_count = vertices.len() as u32;
         let vertex_offset = self
@@ -161,6 +171,8 @@ impl MeshPool {
             vertex_offset: vertex_offset as i32,
             base_index,
             index_count,
+            _padding: 0.,
+            bounding_sphere,
         };
         self.mesh_cpu.push(mesh_info);
         let was_resized = self.mesh_info.push(&self.gpu, &[mesh_info]);

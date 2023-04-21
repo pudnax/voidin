@@ -1,13 +1,14 @@
-use std::num::NonZeroU64;
-
 use dolly::{
     prelude::{Position, Smooth, YawPitch},
     rig::CameraRig,
 };
-use glam::{Mat4, Quat, Vec3, Vec4};
+use glam::{vec4, Mat4, Quat, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
-use crate::app::bind_group_layout::{self, WrappedBindGroupLayout};
+use crate::{
+    app::bind_group_layout::{self, WrappedBindGroupLayout},
+    utils::NonZeroSized,
+};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -16,6 +17,7 @@ pub struct CameraUniform {
     pub projection: [[f32; 4]; 4],
     pub view: [[f32; 4]; 4],
     pub inv_proj: [[f32; 4]; 4],
+    frustum: [f32; 4],
 }
 
 impl Default for CameraUniform {
@@ -25,6 +27,7 @@ impl Default for CameraUniform {
             projection: Mat4::IDENTITY.to_cols_array_2d(),
             view: Mat4::IDENTITY.to_cols_array_2d(),
             inv_proj: Mat4::IDENTITY.to_cols_array_2d(),
+            frustum: [0.; 4],
         }
     }
 }
@@ -44,7 +47,7 @@ impl CameraUniformBinding {
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Uniform,
                 has_dynamic_offset: false,
-                min_binding_size: NonZeroU64::new(std::mem::size_of::<CameraUniform>() as _),
+                min_binding_size: Some(CameraUniform::NSIZE),
             },
             count: None,
         }],
@@ -74,11 +77,7 @@ impl CameraUniformBinding {
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera) {
-        queue.write_buffer(
-            &self.buffer,
-            0,
-            bytemuck::bytes_of(&camera.get_proj_view_matrix()),
-        );
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&camera.get_uniform()));
     }
 }
 
@@ -120,15 +119,24 @@ impl Camera {
         (proj, view)
     }
 
-    pub fn get_proj_view_matrix(&self) -> CameraUniform {
+    pub fn get_uniform(&self) -> CameraUniform {
+        let pos = Vec4::from((self.rig.final_transform.position, 1.));
         let (projection, view) = self.build_projection_view_matrix();
         let proj_view = projection * view;
-        let pos = Vec4::from((self.rig.final_transform.position, 1.));
+
+        let perspective_t = projection.transpose();
+        // x + w < 0
+        let frustum_x = (perspective_t.col(3) + perspective_t.col(0)).normalize();
+        // y + w < 0
+        let frustum_y = (perspective_t.col(3) + perspective_t.col(1)).normalize();
+        let frustum = vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z);
+
         CameraUniform {
             view_position: pos.to_array(),
             projection: projection.to_cols_array_2d(),
             view: view.to_cols_array_2d(),
             inv_proj: proj_view.inverse().to_cols_array_2d(),
+            frustum: frustum.to_array(),
         }
     }
 }
