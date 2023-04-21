@@ -150,7 +150,11 @@ pub fn wrappping_to_address_mode(mode: gltf::texture::WrappingMode) -> wgpu::Add
 
 pub fn convert_to_rgba(
     image: &gltf::image::Data,
-) -> Result<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>> {
+    srgb: bool,
+) -> Result<(
+    image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    wgpu::TextureFormat,
+)> {
     let (width, height) = (image.width, image.height);
     let buf = image.pixels.as_slice();
     let format = image.format;
@@ -188,7 +192,12 @@ pub fn convert_to_rgba(
                 .map(|image| image.convert())
         }
     };
-    image_image.context(eyre!(
+    let format = if srgb {
+        wgpu::TextureFormat::Rgba8UnormSrgb
+    } else {
+        wgpu::TextureFormat::Rgba8Unorm
+    };
+    image_image.map(|img| (img, format)).context(eyre!(
         "Failed to convert {format:?} image with size ({}, {}) to RGBA8",
         width,
         height

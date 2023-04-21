@@ -34,7 +34,7 @@ impl TexturePool {
         let views = vec![utils::create_solid_color_texture(
             gpu.device(),
             gpu.queue(),
-            glam::Vec4::splat(1.),
+            glam::Vec4::splat(0.),
         )
         .create_view(&Default::default())];
 

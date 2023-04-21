@@ -1,5 +1,6 @@
 use std::{num::NonZeroU32, path::Path, vec};
 
+use ahash::AHashMap;
 use color_eyre::{
     eyre::{eyre, Context},
     Result,
@@ -34,8 +35,7 @@ impl GltfDocument {
         log::info!("Started processing model: {name:?}",);
         let (document, buffers, images) = gltf::import(&path)
             .with_context(|| eyre!("Failed to open file: {}", path.as_ref().display()))?;
-        let textures = Self::make_textures(app, &document, &images)?;
-        let materials = Self::make_materials(app, &document, &textures)?;
+        let materials = Self::make_materials(app, &document, &images)?;
         let meshes = Self::make_meshes(app, &document, &buffers)?;
 
         let mut instances = vec![];
@@ -70,85 +70,13 @@ impl GltfDocument {
         })
     }
 
-    fn make_textures(
-        app: &mut App,
-        document: &gltf::Document,
-        images: &[gltf::image::Data],
-    ) -> Result<Vec<TextureId>> {
-        let mut encoder = app.device().create_command_encoder(&Default::default());
-        let mut textures = vec![];
-        for image in document.images() {
-            let name = image.name().unwrap_or("");
-            let image = images
-                .get(image.index())
-                .ok_or_else(|| eyre!("Invalid image index"))?;
-            let (width, height) = (image.width, image.height);
-            let image = convert_to_rgba(image)?;
-            let size = wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            };
-            let mip_level_count = size.max_mips(wgpu::TextureDimension::D2);
-
-            let format = wgpu::TextureFormat::Rgba8Unorm;
-            let desc = wgpu::TextureDescriptor {
-                label: None,
-                size,
-                mip_level_count,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT,
-
-                view_formats: &[format, format.swap_srgb_suffix()],
-            };
-            let texture = app.device().create_texture(&desc);
-            app.queue().write_texture(
-                wgpu::ImageCopyTextureBase {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image.as_raw(),
-                wgpu::ImageDataLayout {
-                    offset: 0,
-                    bytes_per_row: NonZeroU32::new(width * 4),
-                    rows_per_image: None,
-                },
-                size,
-            );
-            let texture_view = texture.create_view(&Default::default());
-
-            app.blitter
-                .generate_mipmaps(&mut encoder, app.device(), &texture);
-
-            let texture_id = app.get_texture_pool_mut().add(texture_view);
-            log::info!("Inserted texture {name} with id: {}", texture_id.id());
-            textures.push(texture_id);
-        }
-
-        app.queue().submit(Some(encoder.finish()));
-
-        document
-            .textures()
-            .map(|texture| {
-                textures
-                    .get(texture.source().index())
-                    .copied()
-                    .ok_or_else(|| eyre!("Invalid texture image index"))
-            })
-            .collect()
-    }
-
     fn make_materials(
         app: &mut App,
         document: &gltf::Document,
-        textures: &[TextureId],
+        images: &[gltf::image::Data],
     ) -> Result<Vec<MaterialId>> {
+        let mut image_map = AHashMap::new();
+        let mut encoder = app.device().create_command_encoder(&Default::default());
         let mut materials = vec![];
         for material in document.materials() {
             let name = material.name().unwrap_or("");
@@ -156,25 +84,32 @@ impl GltfDocument {
             let mut color: Vec4 = pbr.base_color_factor().into();
             color.w = material.alpha_cutoff().unwrap_or(0.5);
 
+            let mut process = |img, srgb| {
+                process_texture_cached(app, &mut image_map, images, img, srgb, &mut encoder)
+            };
+
             let albedo = pbr
                 .base_color_texture()
-                .and_then(|t| textures.get(t.texture().index()).copied())
-                .unwrap_or_default();
+                .map(|t| process(t.texture().source(), true))
+                .transpose()?
+                .unwrap_or(TextureId::default());
 
             let normal = material
                 .normal_texture()
-                .and_then(|t| textures.get(t.texture().index()).copied())
-                .unwrap_or_default();
-
-            let metallic_roughness = material
-                .pbr_metallic_roughness()
-                .metallic_roughness_texture()
-                .and_then(|t| textures.get(t.texture().index()).copied())
+                .map(|t| process(t.texture().source(), false))
+                .transpose()?
                 .unwrap_or_default();
 
             let emissive = material
                 .emissive_texture()
-                .and_then(|t| textures.get(t.texture().index()).copied())
+                .map(|t| process(t.texture().source(), true))
+                .transpose()?
+                .unwrap_or_default();
+
+            let metallic_roughness = pbr
+                .metallic_roughness_texture()
+                .map(|t| process(t.texture().source(), false))
+                .transpose()?
                 .unwrap_or_default();
 
             let material = Material {
@@ -188,6 +123,8 @@ impl GltfDocument {
             log::info!("Inserted material {name} with id: {:?}", id);
             materials.push(id);
         }
+
+        app.queue().submit(Some(encoder.finish()));
 
         Ok(materials)
     }
@@ -306,4 +243,87 @@ pub fn data_of_accessor<'a>(
     let accessor_data =
         &buffer_view_data[accessor.offset()..][..accessor.count() * accessor.size()];
     Some(accessor_data)
+}
+
+type TexKey = (usize, bool);
+
+fn process_texture_cached(
+    app: &mut App,
+    image_map: &mut AHashMap<TexKey, TextureId>,
+    images: &[gltf::image::Data],
+    image: gltf::image::Image<'_>,
+    srgb: bool,
+    encoder: &mut wgpu::CommandEncoder,
+) -> Result<TextureId> {
+    let key: TexKey = (image.index(), srgb);
+
+    let entry = match image_map.entry(key) {
+        std::collections::hash_map::Entry::Occupied(handle) => return Ok(handle.get().clone()),
+        std::collections::hash_map::Entry::Vacant(v) => v,
+    };
+
+    let handle = process_texture(app, images, image, srgb, encoder)?;
+
+    entry.insert(handle.clone());
+
+    Ok(handle)
+}
+
+fn process_texture(
+    app: &mut App,
+    images: &[gltf::image::Data],
+    image: gltf::image::Image<'_>,
+    srgb: bool,
+    encoder: &mut wgpu::CommandEncoder,
+) -> Result<TextureId> {
+    let name = image.name().unwrap_or("");
+    let image = images
+        .get(image.index())
+        .ok_or_else(|| eyre!("Invalid image index: {}", image.index()))?;
+    let (width, height) = (image.width, image.height);
+    let (image, format) = convert_to_rgba(image, srgb)?;
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let mip_level_count = size.max_mips(wgpu::TextureDimension::D2);
+
+    let desc = wgpu::TextureDescriptor {
+        label: None,
+        size,
+        mip_level_count,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::RENDER_ATTACHMENT,
+
+        view_formats: &[format, format.swap_srgb_suffix()],
+    };
+    let texture = app.device().create_texture(&desc);
+    app.queue().write_texture(
+        wgpu::ImageCopyTextureBase {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        image.as_raw(),
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: NonZeroU32::new(width * 4),
+            rows_per_image: None,
+        },
+        size,
+    );
+    let texture_view = texture.create_view(&Default::default());
+
+    app.blitter
+        .generate_mipmaps(encoder, app.device(), &texture);
+
+    let texture_id = app.get_texture_pool_mut().add(texture_view);
+    log::info!("Inserted texture {name} with id: {}", texture_id.id());
+    Ok(texture_id)
 }
