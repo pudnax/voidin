@@ -18,6 +18,9 @@ pub struct CameraUniform {
     pub view: [[f32; 4]; 4],
     pub inv_proj: [[f32; 4]; 4],
     frustum: [f32; 4],
+    zfar: f32,
+    znear: f32,
+    _padding: [f32; 2],
 }
 
 impl Default for CameraUniform {
@@ -28,6 +31,9 @@ impl Default for CameraUniform {
             view: Mat4::IDENTITY.to_cols_array_2d(),
             inv_proj: Mat4::IDENTITY.to_cols_array_2d(),
             frustum: [0.; 4],
+            zfar: f32::INFINITY,
+            znear: Camera::ZNEAR,
+            _padding: [0.; 2],
         }
     }
 }
@@ -138,6 +144,9 @@ impl Camera {
             view: view.to_cols_array_2d(),
             inv_proj: proj_view.inverse().to_cols_array_2d(),
             frustum: frustum.to_array(),
+            zfar: f32::INFINITY,
+            znear: Camera::ZNEAR,
+            _padding: [0.; 2],
         }
     }
 }

@@ -11,6 +11,7 @@ struct Camera {
 	view: mat4x4<f32>,
 	inv_proj: mat4x4<f32>,
 	frustum: vec4<f32>,
+	zfar: f32, znear: f32,
 };
 
 struct Light {

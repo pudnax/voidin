@@ -15,12 +15,16 @@ fn is_visible(sphere: BoundingSphere, transform: mat4x4<f32>, scale: vec3<f32>) 
 
     let abs_scale = abs(scale);
     let max_scale = max(max(abs_scale.x, abs_scale.y), abs_scale.z);
-    let radius = sphere.radius ;
+    let radius = sphere.radius * max_scale;
 
     if center.z * camera.frustum.y - abs(center.x) * camera.frustum.x < -radius {
         return false;
     }
     if center.z * camera.frustum.w - abs(center.y) * camera.frustum.z < -radius {
+        return false;
+    }
+
+    if center.z + sphere.radius > camera.znear && center.z - radius > camera.zfar {
         return false;
     }
 
