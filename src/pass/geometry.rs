@@ -9,6 +9,7 @@ use super::Pass;
 use crate::{
     app::{
         bind_group_layout::StorageWriteBindGroupLayout,
+        gbuffer::GBuffer,
         global_ubo::GlobalUniformBinding,
         instance::InstancePool,
         material::MaterialPool,
@@ -21,7 +22,7 @@ use crate::{
         ViewTarget,
     },
     camera::CameraUniformBinding,
-    utils::{world::World, DrawIndexedIndirect, ResizableBuffer},
+    utils::{world::World, DrawIndexedIndirect, NonZeroSized, ResizableBuffer},
 };
 
 pub struct Geometry {
@@ -52,19 +53,19 @@ impl Geometry {
                 buffers: vec![
                     // Positions
                     pipeline::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vec3>() as _,
+                        array_stride: Vec3::SIZE as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: wgpu::vertex_attr_array![0 => Float32x3].to_vec(),
                     },
                     // Normals
                     pipeline::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vec3>() as _,
+                        array_stride: Vec3::SIZE as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: wgpu::vertex_attr_array![1 => Float32x3].to_vec(),
                     },
                     // UVs
                     pipeline::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vec2>() as _,
+                        array_stride: Vec2::SIZE as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: wgpu::vertex_attr_array![2 => Float32x2].to_vec(),
                     },
@@ -72,23 +73,11 @@ impl Geometry {
             },
             fragment: Some(pipeline::FragmentState {
                 entry_point: "fs_main".into(),
-                targets: vec![Some(wgpu::ColorTargetState {
-                    format: ViewTarget::FORMAT,
-                    blend: Some(wgpu::BlendState {
-                        color: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        alpha: wgpu::BlendComponent {
-                            src_factor: wgpu::BlendFactor::One,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                    }),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                ..Default::default()
+                targets: vec![
+                    Some(GBuffer::ALBEDO_FORMAT.into()),
+                    Some(GBuffer::NORMAL_FORMAT.into()),
+                    Some(GBuffer::EMISSIVE_FORMAT.into()),
+                ],
             }),
             primitive: wgpu::PrimitiveState {
                 cull_mode: Some(wgpu::Face::Back),
@@ -104,7 +93,7 @@ impl Geometry {
 }
 
 pub struct GeometryResource<'a> {
-    pub depth_texture: &'a wgpu::TextureView,
+    pub gbuffer: &'a GBuffer,
 
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
 }
@@ -115,7 +104,7 @@ impl Pass for Geometry {
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        view_target: &ViewTarget,
+        _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
         let meshes = world.unwrap::<MeshPool>();
@@ -128,14 +117,9 @@ impl Pass for Geometry {
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Geometry Pass"),
-            color_attachments: &[Some(view_target.get_color_attachment(wgpu::Color {
-                r: 0.13,
-                g: 0.13,
-                b: 0.13,
-                a: 0.0,
-            }))],
+            color_attachments: &resources.gbuffer.color_target_attachment(),
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: resources.depth_texture,
+                view: &resources.gbuffer.depth,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(0.0),
                     store: true,

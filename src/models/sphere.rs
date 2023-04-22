@@ -1,9 +1,18 @@
-use glam::{vec2, vec3, Vec3};
+use glam::{vec2, vec3, Vec2, Vec3};
 use std::f32::consts::PI;
 
-use crate::app::mesh::{BoundingSphere, MeshId, MeshPool};
+use crate::app::mesh::BoundingSphere;
 
-pub fn make_uv_sphere(mesh_pool: &mut MeshPool, radius: f32, resolution: usize) -> MeshId {
+// TODO: Add Mesh/Builder struct
+pub struct SphereMesh {
+    pub vertices: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
+    pub tex_coords: Vec<Vec2>,
+    pub indices: Vec<u32>,
+    pub bounding_sphere: BoundingSphere,
+}
+
+pub fn make_uv_sphere(radius: f32, resolution: usize) -> SphereMesh {
     let vside = 4 * resolution; // stack
     let uside = vside * 2; // sector
 
@@ -57,5 +66,11 @@ pub fn make_uv_sphere(mesh_pool: &mut MeshPool, radius: f32, resolution: usize) 
         center: Vec3::ZERO,
         radius,
     };
-    mesh_pool.add(&vertices, &normals, &uv, &indices, bounding_sphere)
+    SphereMesh {
+        vertices,
+        normals,
+        tex_coords: uv,
+        indices,
+        bounding_sphere,
+    }
 }

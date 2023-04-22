@@ -11,6 +11,7 @@ mod buffer;
 mod import_resolver;
 pub mod world;
 pub use buffer::{ResizableBuffer, ResizableBufferExt};
+use color_eyre::eyre::{eyre, Context};
 pub use import_resolver::ImportResolver;
 
 use either::Either;
@@ -141,7 +142,10 @@ impl DeviceShaderExt for wgpu::Device {
         path: impl AsRef<Path>,
     ) -> color_eyre::Result<wgpu::ShaderModule> {
         let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
-        let source = resolver.populate(&path)?.contents;
+        let source = resolver
+            .populate(&path)
+            .with_context(|| eyre!("Failed to process file: {}", path.as_ref().display()))?
+            .contents;
 
         let module = self.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: path.as_ref().to_str(),

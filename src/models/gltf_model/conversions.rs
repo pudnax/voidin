@@ -148,17 +148,17 @@ pub fn wrappping_to_address_mode(mode: gltf::texture::WrappingMode) -> wgpu::Add
     }
 }
 
+type RgbaImage = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
+
 pub fn convert_to_rgba(
     image: &gltf::image::Data,
     srgb: bool,
-) -> Result<(
-    image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
-    wgpu::TextureFormat,
-)> {
+) -> Result<(RgbaImage, wgpu::TextureFormat)> {
     let (width, height) = (image.width, image.height);
     let buf = image.pixels.as_slice();
     let format = image.format;
     let image_image = match format {
+        // TODO: convert to R8Unorm
         Format::R8 => ImageBuffer::<image::Luma<u8>, _>::from_raw(width, height, buf)
             .map(|image| image.convert()),
         Format::R8G8 => ImageBuffer::<image::LumaA<u8>, _>::from_raw(width, height, buf)

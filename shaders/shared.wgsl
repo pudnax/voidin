@@ -13,6 +13,12 @@ struct Camera {
 	frustum: vec4<f32>,
 };
 
+struct Light {
+	position: vec3<f32>,
+	radius: f32,
+	color: vec3<f32>
+}
+
 struct BoundingSphere {
 	center: vec3<f32>,
 	radius: f32,

@@ -258,13 +258,13 @@ fn process_texture_cached(
     let key: TexKey = (image.index(), srgb);
 
     let entry = match image_map.entry(key) {
-        std::collections::hash_map::Entry::Occupied(handle) => return Ok(handle.get().clone()),
+        std::collections::hash_map::Entry::Occupied(handle) => return Ok(*handle.get()),
         std::collections::hash_map::Entry::Vacant(v) => v,
     };
 
     let handle = process_texture(app, images, image, srgb, encoder)?;
 
-    entry.insert(handle.clone());
+    entry.insert(handle);
 
     Ok(handle)
 }

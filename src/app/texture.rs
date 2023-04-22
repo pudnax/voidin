@@ -27,7 +27,7 @@ pub struct TexturePool {
     gpu: Arc<Gpu>,
 }
 
-const MAX_TEXTURES: u32 = 1 << 9;
+const MAX_TEXTURES: u32 = 1 << 10;
 
 impl TexturePool {
     pub fn new(gpu: Arc<Gpu>) -> Self {
@@ -101,9 +101,7 @@ impl TexturePool {
     }
 
     pub fn update_bind_group(&mut self) {
-        let views = (0..MAX_TEXTURES as _)
-            .map(|i| self.views.get(i).unwrap_or(&self.views[0]))
-            .collect::<Vec<_>>();
+        let views: Vec<_> = self.views.iter().collect();
 
         self.bind_group = self
             .gpu

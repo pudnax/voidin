@@ -25,6 +25,7 @@ use crate::{
 
 pub mod bind_group_layout;
 pub mod blitter;
+pub mod gbuffer;
 pub mod global_ubo;
 pub mod instance;
 pub mod material;
@@ -38,6 +39,7 @@ mod view_target;
 pub(crate) use view_target::ViewTarget;
 
 use self::{
+    gbuffer::GBuffer,
     instance::{InstanceId, InstancePool},
     material::{MaterialId, MaterialPool},
     mesh::{BoundingSphere, MeshId, MeshPool},
@@ -66,7 +68,7 @@ pub struct App {
     pub gpu: Arc<Gpu>,
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
-    depth_texture: wgpu::TextureView,
+    gbuffer: GBuffer,
     view_target: view_target::ViewTarget,
 
     global_uniform: global_ubo::Uniform,
@@ -82,6 +84,9 @@ pub struct App {
     geometry_pass: pass::geometry::Geometry,
     emit_draws_pass: pass::geometry::EmitDraws,
 
+    ambient_pass: pass::ambient::AmbientPass,
+
+    // light_pass: pass::light::LightPass,
     postprocess_pass: pass::postprocess::PostProcess,
 
     update_pass: pass::compute_update::ComputeUpdate,
@@ -96,7 +101,6 @@ pub struct App {
 }
 
 impl App {
-    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SAMPLE_COUNT: u32 = 1;
 
     pub fn new(window: &Window, file_watcher: Watcher) -> Result<Self> {
@@ -141,7 +145,7 @@ impl App {
             .get_default_config(gpu.adapter(), width, height)
             .context("Surface in not supported")?;
         surface.configure(gpu.device(), &surface_config);
-        let depth_texture = Self::create_depth_texture(gpu.device(), &surface_config);
+        let gbuffer = GBuffer::new(&gpu, surface_config.width, surface_config.height);
 
         let view_target = view_target::ViewTarget::new(gpu.device(), width, height);
 
@@ -168,8 +172,11 @@ impl App {
         let path = Path::new("shaders").join("postprocess.wgsl");
         let postprocess_pass = pass::postprocess::PostProcess::new(&mut world, path)?;
 
-        let geometry_pass = pass::geometry::Geometry::new(&mut world)?;
-        let emit_draws_pass = pass::geometry::EmitDraws::new(&mut world)?;
+        let geometry_pass = pass::geometry::Geometry::new(&world)?;
+        let emit_draws_pass = pass::geometry::EmitDraws::new(&world)?;
+
+        let ambient_pass = pass::ambient::AmbientPass::new(&world, &gbuffer)?;
+        // let light_pass = pass::light::LightPass::ner(&world, &gbuffer)?;
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
@@ -189,7 +196,7 @@ impl App {
         Ok(Self {
             surface,
             surface_config,
-            depth_texture,
+            gbuffer,
             view_target,
 
             default_sampler,
@@ -209,6 +216,9 @@ impl App {
             geometry_pass,
             emit_draws_pass,
 
+            ambient_pass,
+
+            // light_pass,
             update_pass,
 
             profiler,
@@ -267,7 +277,14 @@ impl App {
             ));
         }
 
-        let sphere_mesh = models::make_uv_sphere(&mut self.get_mesh_pool_mut(), 0.9, 10);
+        let sphere_mesh = models::make_uv_sphere(1.0, 10);
+        let sphere_mesh_id = self.get_mesh_pool_mut().add(
+            &sphere_mesh.vertices,
+            &sphere_mesh.normals,
+            &sphere_mesh.tex_coords,
+            &sphere_mesh.indices,
+            sphere_mesh.bounding_sphere,
+        );
 
         let mut instance_pool = self.world.get_mut::<InstancePool>()?;
         instance_pool.add(&instances);
@@ -283,7 +300,7 @@ impl App {
 
             moving_instances.push(instance::Instance {
                 transform: Mat4::from_translation(vec3(x, y, -17.)),
-                mesh: sphere_mesh,
+                mesh: sphere_mesh_id,
                 material: MaterialId::new(
                     rng.gen_range(0..self.get_material_pool().buffer.len() as u32),
                 ),
@@ -341,7 +358,7 @@ impl App {
             .record(&self.world, &mut encoder, &self.view_target, emit_resource);
 
         let geometry_resource = pass::geometry::GeometryResource {
-            depth_texture: &self.depth_texture,
+            gbuffer: &self.gbuffer,
             draw_cmd_buffer: &self.draw_cmd_buffer,
         };
         self.geometry_pass.record(
@@ -350,6 +367,26 @@ impl App {
             &self.view_target,
             geometry_resource,
         );
+
+        let ambient_resources = pass::ambient::AmbientResource {
+            gbuffer: &self.gbuffer,
+        };
+        self.ambient_pass.record(
+            &self.world,
+            &mut encoder,
+            &self.view_target,
+            ambient_resources,
+        );
+
+        // let light_resources = pass::light::LightingResource {
+        //     gbuffer: &self.gbuffer,
+        // };
+        // self.light_pass.record(
+        //     &self.world,
+        //     &mut encoder,
+        //     &self.view_target,
+        //     light_resources,
+        // );
 
         let resource = pass::postprocess::PostProcessResource {
             sampler: &self.default_sampler,
@@ -390,7 +427,7 @@ impl App {
         self.surface_config.height = height;
         self.surface
             .configure(self.gpu.device(), &self.surface_config);
-        self.depth_texture = Self::create_depth_texture(self.gpu.device(), &self.surface_config);
+        self.gbuffer.resize(&self.gpu, width, height);
         self.view_target = view_target::ViewTarget::new(self.gpu.device(), width, height);
         self.global_uniform.resolution = [width as f32, height as f32];
 
@@ -537,29 +574,6 @@ impl App {
 
     pub fn device(&self) -> &wgpu::Device {
         self.gpu.device()
-    }
-
-    fn create_depth_texture(
-        device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-    ) -> wgpu::TextureView {
-        let size = wgpu::Extent3d {
-            width: config.width,
-            height: config.height,
-            depth_or_array_layers: 1,
-        };
-        let desc = wgpu::TextureDescriptor {
-            label: Some("Depth Texture"),
-            size,
-            mip_level_count: 1,
-            sample_count: Self::SAMPLE_COUNT,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let tex = device.create_texture(&desc);
-        tex.create_view(&Default::default())
     }
 
     pub fn get_info(&self) -> RendererInfo {

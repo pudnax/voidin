@@ -26,8 +26,6 @@ struct VertexOutput {
     @location(4) @interpolate(flat) material_id: u32,
 }
 
-const LIGTH_POS = vec3<f32>(15., 10.5, 15.);
-
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     let instance = instances[in.instance_index];
@@ -46,23 +44,27 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     return out;
 }
 
+struct FragmentOutput {
+    @location(0) albedo_metallic: vec4<f32>,
+    @location(1) normal: vec4<f32>,
+    @location(2) emissive_rough: vec4<f32>,
+}
+
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOutput) -> FragmentOutput {
     let material = materials[in.material_id];
     let albedo_tex = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
     let normal_tex = textureSample(texture_array[material.normal], tex_sampler, in.uv);
+    let emissive_tex = textureSample(texture_array[material.emissive], tex_sampler, in.uv);
+    let metal_rough_tex = textureSample(texture_array[material.metallic_roughness], tex_sampler, in.uv).bg;
 
-    if material.base_color.w < material.base_color.w {
-	 	discard;
+    if material.base_color.w < 0.5 || albedo_tex.a < 0.5 {
+     	discard;
     }
 
-    var albedo = albedo_tex.rgb + material.base_color.rgb * 0.1;
-    let nor = normalize(in.normal);
-    let ligth_dir = normalize(LIGTH_POS - in.position);
-
-    let ndotl = dot(nor, ligth_dir);
-    let dif = mix(max(0., ndotl), ndotl * 0.5 + 0.5, 0.5);
-
-    let color = dif * albedo + hash13(f32(in.material_id)) * 0.01;
-    return vec4(color, 1.0);
+    return FragmentOutput(
+        vec4(albedo_tex.rgb, metal_rough_tex.x),
+        vec4(normal_tex.rgb, 1.0),
+        vec4(emissive_tex.rgb, metal_rough_tex.y),
+    );
 }

@@ -17,7 +17,7 @@ use wgpu::{
 
 use crate::{app::App, utils::DeviceShaderExt, watcher::Watcher, Gpu};
 
-use super::{bind_group_layout, view_target};
+use super::{bind_group_layout, gbuffer::GBuffer, view_target};
 
 slotmap::new_key_type! {
     pub struct RenderHandle;
@@ -338,7 +338,7 @@ impl Default for RenderPipelineDescriptor {
             primitive: wgpu::PrimitiveState::default(),
             push_constant_ranges: vec![],
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: App::DEPTH_FORMAT,
+                format: GBuffer::DEPTH_FORMAT,
                 depth_write_enabled: true,
                 depth_compare: wgpu::CompareFunction::GreaterEqual,
                 stencil: wgpu::StencilState::default(),

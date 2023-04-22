@@ -1,7 +1,9 @@
 use crate::utils::world::World;
 
 pub mod compute_update;
+pub mod ambient;
 pub mod geometry;
+pub mod light;
 pub mod postprocess;
 
 pub trait Pass {
