@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, path::Path, sync::Arc};
 
 use color_eyre::{eyre::ContextCompat, Result};
-use glam::{vec3, vec4, Mat4, Vec2, Vec3};
+use glam::{vec3, vec4, Mat4, Vec3};
 
 use pollster::FutureExt;
 use rand::Rng;
@@ -42,7 +42,7 @@ use self::{
     gbuffer::GBuffer,
     instance::{InstanceId, InstancePool},
     material::{MaterialId, MaterialPool},
-    mesh::{BoundingSphere, MeshId, MeshPool},
+    mesh::{MeshId, MeshPool, MeshRef},
     pipeline::PipelineArena,
     screenshot::ScreenshotCtx,
     state::{AppState, StateAction},
@@ -278,13 +278,7 @@ impl App {
         }
 
         let sphere_mesh = models::make_uv_sphere(1.0, 10);
-        let sphere_mesh_id = self.get_mesh_pool_mut().add(
-            &sphere_mesh.vertices,
-            &sphere_mesh.normals,
-            &sphere_mesh.tex_coords,
-            &sphere_mesh.indices,
-            sphere_mesh.bounding_sphere,
-        );
+        let sphere_mesh_id = self.get_mesh_pool_mut().add(sphere_mesh.as_ref());
 
         let mut instance_pool = self.world.get_mut::<InstancePool>()?;
         instance_pool.add(&instances);
@@ -519,21 +513,8 @@ impl App {
         callback(frame, dims)
     }
 
-    pub fn add_mesh(
-        &mut self,
-        vertices: &[Vec3],
-        normals: &[Vec3],
-        tex_coords: &[Vec2],
-        indices: &[u32],
-        bounding_sphere: BoundingSphere,
-    ) -> MeshId {
-        self.world.get_mut::<MeshPool>().unwrap().add(
-            vertices,
-            normals,
-            tex_coords,
-            indices,
-            bounding_sphere,
-        )
+    pub fn add_mesh(&mut self, mesh: MeshRef) -> MeshId {
+        self.world.get_mut::<MeshPool>().unwrap().add(mesh)
     }
 
     pub fn get_material_pool(&self) -> Read<MaterialPool> {

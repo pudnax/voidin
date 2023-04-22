@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use color_eyre::Result;
-use glam::{Vec2, Vec3};
+use glam::{Vec2, Vec3, Vec4};
 use wgpu::{util::align_to, IndexFormat};
 
 use super::Pass;
@@ -63,11 +63,17 @@ impl Geometry {
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: wgpu::vertex_attr_array![1 => Float32x3].to_vec(),
                     },
+                    // Tangents
+                    pipeline::VertexBufferLayout {
+                        array_stride: Vec4::SIZE as _,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: wgpu::vertex_attr_array![2 => Float32x4].to_vec(),
+                    },
                     // UVs
                     pipeline::VertexBufferLayout {
                         array_stride: Vec2::SIZE as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: wgpu::vertex_attr_array![2 => Float32x2].to_vec(),
+                        attributes: wgpu::vertex_attr_array![3 => Float32x2].to_vec(),
                     },
                 ],
             },
@@ -138,7 +144,8 @@ impl Pass for Geometry {
 
         rpass.set_vertex_buffer(0, meshes.vertices.full_slice());
         rpass.set_vertex_buffer(1, meshes.normals.full_slice());
-        rpass.set_vertex_buffer(2, meshes.tex_coords.full_slice());
+        rpass.set_vertex_buffer(2, meshes.tangents.full_slice());
+        rpass.set_vertex_buffer(3, meshes.tex_coords.full_slice());
         rpass.set_index_buffer(meshes.indices.full_slice(), IndexFormat::Uint32);
         rpass.multi_draw_indexed_indirect(
             resources.draw_cmd_buffer,

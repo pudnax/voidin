@@ -2,7 +2,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Vec2, Vec3};
+use glam::{Vec2, Vec3, Vec4};
 
 use crate::{
     utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
@@ -49,6 +49,37 @@ pub struct MeshInfo {
     bounding_sphere: BoundingSphere,
 }
 
+pub struct Mesh {
+    pub vertices: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
+    pub tangents: Vec<Vec4>,
+    pub tex_coords: Vec<Vec2>,
+    pub indices: Vec<u32>,
+    pub bounding_sphere: BoundingSphere,
+}
+
+impl Mesh {
+    pub fn as_ref(&self) -> MeshRef {
+        MeshRef {
+            vertices: &self.normals,
+            normals: &self.normals,
+            tangents: &self.tangents,
+            tex_coords: &self.tex_coords,
+            indices: &self.indices,
+            bounding_sphere: self.bounding_sphere,
+        }
+    }
+}
+
+pub struct MeshRef<'a> {
+    pub vertices: &'a [Vec3],
+    pub normals: &'a [Vec3],
+    pub tangents: &'a [Vec4],
+    pub tex_coords: &'a [Vec2],
+    pub indices: &'a [u32],
+    pub bounding_sphere: BoundingSphere,
+}
+
 pub struct MeshPool {
     vertex_offset: AtomicU32,
     base_index: AtomicU32,
@@ -61,6 +92,7 @@ pub struct MeshPool {
 
     pub vertices: ResizableBuffer<Vec3>,
     pub normals: ResizableBuffer<Vec3>,
+    pub tangents: ResizableBuffer<Vec4>,
     pub tex_coords: ResizableBuffer<Vec2>,
     pub indices: ResizableBuffer<u32>,
 
@@ -76,6 +108,9 @@ impl MeshPool {
             .device()
             .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
         let normals = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
+        let tangents = gpu
             .device()
             .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
         let tex_coords = gpu
@@ -116,6 +151,7 @@ impl MeshPool {
 
             vertices,
             normals,
+            tangents,
             tex_coords,
             indices,
 
@@ -144,27 +180,21 @@ impl MeshPool {
         self.mesh_index.load(Ordering::Relaxed)
     }
 
-    pub fn add(
-        &mut self,
-        vertices: &[Vec3],
-        normals: &[Vec3],
-        tex_coords: &[Vec2],
-        indices: &[u32],
-        bounding_sphere: BoundingSphere,
-    ) -> MeshId {
-        let vertex_count = vertices.len() as u32;
+    pub fn add(&mut self, mesh: MeshRef) -> MeshId {
+        let vertex_count = mesh.vertices.len() as u32;
         let vertex_offset = self
             .vertex_offset
             .fetch_add(vertex_count, Ordering::Relaxed);
 
-        self.vertices.push(&self.gpu, vertices);
-        self.normals.push(&self.gpu, normals);
-        self.tex_coords.push(&self.gpu, tex_coords);
+        self.vertices.push(&self.gpu, mesh.vertices);
+        self.normals.push(&self.gpu, mesh.normals);
+        self.tangents.push(&self.gpu, mesh.tangents);
+        self.tex_coords.push(&self.gpu, mesh.tex_coords);
 
-        let index_count = indices.len() as u32;
+        let index_count = mesh.indices.len() as u32;
         let base_index = self.base_index.fetch_add(index_count, Ordering::Relaxed);
 
-        self.indices.push(&self.gpu, indices);
+        self.indices.push(&self.gpu, mesh.indices);
         let mesh_index = self.mesh_index.fetch_add(1, Ordering::Relaxed);
 
         let mesh_info = MeshInfo {
@@ -172,7 +202,7 @@ impl MeshPool {
             base_index,
             index_count,
             _padding: 0.,
-            bounding_sphere,
+            bounding_sphere: mesh.bounding_sphere,
         };
         self.mesh_cpu.push(mesh_info);
         let was_resized = self.mesh_info.push(&self.gpu, &[mesh_info]);

@@ -1,11 +1,8 @@
-use glam::{Vec2, Vec3};
+use glam::{vec4, Vec2, Vec3};
 
-use crate::app::{
-    mesh::{BoundingSphere, MeshId},
-    App,
-};
+use crate::app::mesh::{BoundingSphere, Mesh};
 
-pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
+pub fn cube_mesh(scale: f32) -> Mesh {
     let vertices = [
         // Front face
         [-scale, -scale, scale],
@@ -38,7 +35,8 @@ pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
         [-scale, scale, scale],
         [-scale, scale, -scale],
     ]
-    .map(Vec3::from);
+    .map(Vec3::from)
+    .to_vec();
     let normals = [
         [0.0, 0.0, 1.0],
         [0.0, 0.0, -1.0],
@@ -65,7 +63,8 @@ pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
         [0.0, 1.0, 0.0],
         [0.0, -1.0, 0.0],
     ]
-    .map(Vec3::from);
+    .map(Vec3::from)
+    .to_vec();
     let tex_coords = [
         [0.0, 0.0],
         [1.0, 0.0],
@@ -92,8 +91,9 @@ pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
         [1.0, 1.0],
         [0.0, 1.0],
     ]
-    .map(Vec2::from);
-    let indices = [
+    .map(Vec2::from)
+    .to_vec();
+    let indices = vec![
         0, 1, 2, 0, 2, 3, // front
         4, 5, 6, 4, 6, 7, // back
         8, 9, 10, 8, 10, 11, // top
@@ -101,10 +101,18 @@ pub fn cube_mesh(app: &mut App, scale: f32) -> MeshId {
         16, 17, 18, 16, 18, 19, // right
         20, 21, 22, 20, 22, 23, // left
     ];
+    let tangents = vec![vec4(1., 0., 0., -1.); vertices.len()];
 
     let bounding_sphere = BoundingSphere {
         center: Vec3::ZERO,
         radius: scale * 3f32.sqrt(),
     };
-    app.add_mesh(&vertices, &normals, &tex_coords, &indices, bounding_sphere)
+    Mesh {
+        vertices,
+        normals,
+        tangents,
+        tex_coords,
+        indices,
+        bounding_sphere,
+    }
 }

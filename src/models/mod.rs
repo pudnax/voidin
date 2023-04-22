@@ -7,7 +7,7 @@ use color_eyre::{
     eyre::{eyre, Context},
     Result,
 };
-use glam::Vec3;
+use glam::{Vec3, Vec4};
 use std::path::Path;
 
 pub use cube::cube_mesh;
@@ -18,7 +18,7 @@ pub use sphere::make_uv_sphere;
 use crate::{
     app::{
         material::{Material, MaterialId},
-        mesh::MeshId,
+        mesh::{MeshId, MeshRef},
         App,
     },
     utils::mesh_bounding_sphere,
@@ -48,13 +48,14 @@ impl ObjModel {
 
         let mut meshes = vec![];
         for mesh in model_meshes.iter().map(|m| &m.mesh) {
-            let mesh_id = app.add_mesh(
-                bytemuck::cast_slice(&mesh.positions),
-                bytemuck::cast_slice(&mesh.normals),
-                bytemuck::cast_slice(&mesh.texcoords),
-                bytemuck::cast_slice(&mesh.indices),
-                mesh_bounding_sphere(bytemuck::cast_slice(&mesh.positions)),
-            );
+            let mesh_id = app.add_mesh(MeshRef {
+                vertices: bytemuck::cast_slice(&mesh.positions),
+                normals: bytemuck::cast_slice(&mesh.normals),
+                tangents: &vec![Vec4::ZERO; mesh.positions.len()],
+                tex_coords: bytemuck::cast_slice(&mesh.texcoords),
+                indices: bytemuck::cast_slice(&mesh.indices),
+                bounding_sphere: mesh_bounding_sphere(bytemuck::cast_slice(&mesh.positions)),
+            });
             let material_id = match mesh.material_id {
                 Some(id) => materials[id],
                 None => MaterialId::default(),

@@ -14,7 +14,7 @@ use crate::{
     app::{
         instance::Instance,
         material::{Material, MaterialId},
-        mesh::MeshId,
+        mesh::{MeshId, MeshRef},
         texture::TextureId,
         App,
     },
@@ -135,6 +135,7 @@ impl GltfDocument {
         buffers: &[gltf::buffer::Data],
     ) -> Result<Vec<Vec<MeshId>>> {
         let mut meshes = vec![];
+        let mut zeros = vec![0u8; 1 << 10];
         for mesh in document.meshes() {
             let mut primitives = vec![];
             for primitive in mesh.primitives() {
@@ -145,9 +146,16 @@ impl GltfDocument {
                         .and_then(|sem| data_of_accessor(buffers, &sem))
                 };
                 let Some(vertices) = get_data(&gltf::Semantic::Positions) else { continue; };
-                let zeros = vec![0u8; vertices.len()];
-                let vertices = bytemuck::cast_slice(vertices);
+                if vertices.len() > zeros.len() {
+                    zeros.extend(std::iter::repeat(0).take(vertices.len() - zeros.len()))
+                }
                 let normals = get_data(&gltf::Semantic::Normals).unwrap_or(&zeros);
+                let vertices = bytemuck::cast_slice(vertices);
+                let tangents: Vec<[f32; 4]> = reader
+                    .read_tangents()
+                    .unwrap_repeat()
+                    .take(vertices.len())
+                    .collect();
                 let tex_coords: Vec<[f32; 2]> = reader
                     .read_tex_coords(0)
                     .map(|uv| uv.into_f32())
@@ -158,13 +166,15 @@ impl GltfDocument {
                     Some(indices) => indices.into_u32().collect(),
                     None => (0..vertices.len() as u32).collect(),
                 };
-                let mesh = app.add_mesh(
+                let mesh = MeshRef {
                     vertices,
-                    bytemuck::cast_slice(normals),
-                    bytemuck::cast_slice(&tex_coords),
-                    &indices,
-                    mesh_bounding_sphere(vertices),
-                );
+                    normals: bytemuck::cast_slice(&normals),
+                    tangents: bytemuck::cast_slice(&tangents),
+                    tex_coords: bytemuck::cast_slice(&tex_coords),
+                    indices: &indices,
+                    bounding_sphere: mesh_bounding_sphere(vertices),
+                };
+                let mesh = app.add_mesh(mesh);
                 primitives.push(mesh);
             }
             meshes.push(primitives);
