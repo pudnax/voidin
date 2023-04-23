@@ -21,10 +21,9 @@ use crate::app::material::MaterialPool;
 use crate::app::mesh::MeshPool;
 use crate::app::texture::TexturePool;
 use crate::camera::CameraUniformBinding;
-use crate::pass::light::Light;
 use crate::Gpu;
 
-use super::{DrawIndexedIndirect, ResizableBuffer};
+use super::DrawIndexedIndirect;
 
 // Thanks Ralith from Rust Gamedev discord
 pub trait Resource: 'static {
@@ -115,10 +114,6 @@ impl World {
         this.insert(StorageReadBindGroupLayout::<DrawIndexedIndirect>::new(&gpu));
         this.insert(StorageWriteBindGroupLayout::<DrawIndexedIndirect>::new(
             &gpu,
-        ));
-        this.insert(ResizableBuffer::<Light>::new(
-            gpu.device(),
-            wgpu::BufferUsages::VERTEX,
         ));
         this
     }

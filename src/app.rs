@@ -12,7 +12,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::{
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
-    pass::{self, Pass},
+    pass::{self, light::Light, Pass},
     recorder::Recorder,
     utils::{
         self, create_solid_color_texture,
@@ -86,7 +86,8 @@ pub struct App {
 
     ambient_pass: pass::ambient::AmbientPass,
 
-    // light_pass: pass::light::LightPass,
+    light_pass: pass::light::LightPass,
+    lights: ResizableBuffer<Light>,
     postprocess_pass: pass::postprocess::PostProcess,
 
     update_pass: pass::compute_update::ComputeUpdate,
@@ -176,7 +177,8 @@ impl App {
         let emit_draws_pass = pass::geometry::EmitDraws::new(&world)?;
 
         let ambient_pass = pass::ambient::AmbientPass::new(&world, &gbuffer)?;
-        // let light_pass = pass::light::LightPass::ner(&world, &gbuffer)?;
+        let light_pass = pass::light::LightPass::ner(&world, &gbuffer)?;
+        let lights = ResizableBuffer::new(gpu.device(), wgpu::BufferUsages::VERTEX);
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
@@ -218,7 +220,9 @@ impl App {
 
             ambient_pass,
 
-            // light_pass,
+            light_pass,
+            lights,
+
             update_pass,
 
             profiler,
@@ -314,6 +318,11 @@ impl App {
         let moving_instances_id = instance_pool.add(&moving_instances);
         self.moving_instances.push(&self.gpu, &moving_instances_id);
 
+        self.lights.push(
+            &self.gpu,
+            &[Light::new(vec3(0., 5., 0.), 0.25, vec3(1., 1., 1.))],
+        );
+
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer
             .set_len(&self.gpu.device, &mut encoder, instance_pool.count() as _);
@@ -372,15 +381,16 @@ impl App {
             ambient_resources,
         );
 
-        // let light_resources = pass::light::LightingResource {
-        //     gbuffer: &self.gbuffer,
-        // };
-        // self.light_pass.record(
-        //     &self.world,
-        //     &mut encoder,
-        //     &self.view_target,
-        //     light_resources,
-        // );
+        let light_resources = pass::light::LightingResource {
+            gbuffer: &self.gbuffer,
+            lights: &self.lights,
+        };
+        self.light_pass.record(
+            &self.world,
+            &mut encoder,
+            &self.view_target,
+            light_resources,
+        );
 
         let resource = pass::postprocess::PostProcessResource {
             sampler: &self.default_sampler,

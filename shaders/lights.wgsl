@@ -1,5 +1,6 @@
-@group(0) @binding(0) var<uniform> camera: Camera;
+#import <shared.wgsl>
 
+@group(0) @binding(0) var<uniform> camera: Camera;
 
 struct LightInstance {
     @location(0) position: vec3<f32>,
@@ -13,11 +14,11 @@ struct VertexInput {
 
 @vertex
 fn vs_main_stencil(
-    instance: LightInstance,
+    light: LightInstance,
     in: VertexInput,
 ) -> @builtin(position) vec4<f32> {
-    let world_pos = in.position * instance.radius + instance.position;
-    return camera.proj * camera.view * vec4<f32>(world_pos, 1.0);
+    let world_pos = in.position * light.radius + light.position;
+    return camera.proj * camera.view * vec4(world_pos, 1.0);
 }
 
 
@@ -33,19 +34,19 @@ struct VertexOutput {
 
 @vertex
 fn vs_main_lighting(
-    instance: LightInstance,
+    light: LightInstance,
     in: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
 
-    let world_pos = in.position * instance.radius + instance.position;
-    out.position = camera.proj * camera.view * vec4<f32>(world_pos, 1.0);
+    let world_pos = in.position * light.radius + light.position;
+    out.position = camera.proj * camera.view * vec4(world_pos, 1.0);
     out.ndc = out.position.xy / out.position.w;
-    out.uv = out.ndc * vec2<f32>(0.5, -0.5) + 0.5;
+    out.uv = out.ndc * vec2(0.5, -0.5) + 0.5;
 
-    out.l_position = (camera.view * vec4<f32>(instance.position, 1.0)).xyz;
-    out.l_inv_square_radius = 1.0 / (instance.radius * instance.radius);
-    out.l_color = instance.color;
+    out.l_position = (camera.view * vec4(light.position, 1.0)).xyz;
+    out.l_inv_square_radius = 1.0 / (light.radius * light.radius);
+    out.l_color = light.color;
 
     return out;
 }
@@ -57,6 +58,6 @@ fn vs_main_lighting(
 
 @fragment
 fn fs_main_lighting(in: VertexOutput) -> @location(0) vec4<f32> {
-    let color = vec3(0.);
-    return vec4<f32>(color, 1.0);
+    let color = vec3(1., 1., 0.);
+    return vec4(color, 1.0);
 }

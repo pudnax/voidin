@@ -29,11 +29,21 @@ pub struct Light {
     pub color: glam::Vec3,
 }
 
+impl Light {
+    pub fn new(position: glam::Vec3, radius: f32, color: glam::Vec3) -> Self {
+        Self {
+            position,
+            radius,
+            color,
+        }
+    }
+}
+
 pub struct LightPass {
     stencil_pipeline: RenderHandle,
     lighting_pipeline: RenderHandle,
 
-    vertex_count: u32,
+    draw_count: u32,
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
 }
@@ -75,15 +85,16 @@ impl LightPass {
             },
         ];
 
-        let stensil_desc = RenderPipelineDescriptor {
-            label: Some("Light: stensil pipeline".into()),
+        let stencil_desc = RenderPipelineDescriptor {
+            label: Some("Light: stencil pipeline".into()),
             layout: vec![camera.bind_group_layout.clone()],
             vertex: pipeline::VertexState {
-                entry_point: "vs_main_stensil".into(),
+                entry_point: "vs_main_stencil".into(),
                 buffers: vertex_buffers_layouts.clone(),
             },
             fragment: None,
             primitive: PrimitiveState {
+                // TODO: cull mode?
                 unclipped_depth: true,
                 ..Default::default()
             },
@@ -113,7 +124,7 @@ impl LightPass {
         };
         let stencil_pipeline = world
             .get_mut::<PipelineArena>()?
-            .process_render_pipeline_from_path(&shader_path, stensil_desc)?;
+            .process_render_pipeline_from_path(&shader_path, stencil_desc)?;
 
         let lighting_desc = RenderPipelineDescriptor {
             label: Some("Light: render pipeline".into()),
@@ -177,7 +188,7 @@ impl LightPass {
             stencil_pipeline,
             lighting_pipeline,
 
-            vertex_count: sphere.indices.len() as _,
+            draw_count: sphere.indices.len() as _,
             vertices,
             indices,
         })
@@ -186,6 +197,7 @@ impl LightPass {
 
 pub struct LightingResource<'a> {
     pub gbuffer: &'a GBuffer,
+    pub lights: &'a ResizableBuffer<Light>,
 }
 
 impl Pass for LightPass {
@@ -200,10 +212,9 @@ impl Pass for LightPass {
     ) {
         let arena = world.unwrap::<PipelineArena>();
         let camera = world.unwrap::<CameraUniformBinding>();
-        let lights = world.unwrap::<ResizableBuffer<Light>>();
 
         let mut stencil_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Ligts Stensil Pass"),
+            label: Some("Ligts Stencil Pass"),
             color_attachments: &[],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &resources.gbuffer.depth,
@@ -218,11 +229,11 @@ impl Pass for LightPass {
         stencil_pass.set_pipeline(arena.get_pipeline(self.stencil_pipeline));
         stencil_pass.set_bind_group(0, &camera.binding, &[]);
 
-        stencil_pass.set_vertex_buffer(0, lights.full_slice());
+        stencil_pass.set_vertex_buffer(0, resources.lights.full_slice());
         stencil_pass.set_vertex_buffer(1, self.vertices.slice(..));
         stencil_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
 
-        stencil_pass.draw_indexed(0..self.vertex_count, 0, 0..lights.len() as _);
+        stencil_pass.draw_indexed(0..self.draw_count, 0, 0..resources.lights.len() as _);
         drop(stencil_pass);
 
         let mut lighting_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -246,12 +257,11 @@ impl Pass for LightPass {
         lighting_pass.set_bind_group(0, &camera.binding, &[]);
         lighting_pass.set_bind_group(1, &resources.gbuffer.bind_group, &[]);
 
-        lighting_pass.set_vertex_buffer(0, lights.full_slice());
+        lighting_pass.set_vertex_buffer(0, resources.lights.full_slice());
         lighting_pass.set_vertex_buffer(1, self.vertices.slice(..));
         lighting_pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint16);
 
-        lighting_pass.draw_indexed(0..self.vertex_count, 0, 0..lights.len() as _);
-
+        lighting_pass.draw_indexed(0..self.draw_count, 0, 0..resources.lights.len() as _);
         drop(lighting_pass);
     }
 }
