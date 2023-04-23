@@ -15,7 +15,7 @@ struct VertexInput {
 	@builtin(instance_index) instance_index: u32,
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) tangents: vec4<f32>,
+    @location(2) tangent: vec4<f32>,
     @location(3) tex_coords: vec2<f32>,
 }
 
@@ -23,8 +23,10 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(3) uv: vec2<f32>,
-    @location(4) @interpolate(flat) material_id: u32,
+    @location(2) tangent: vec3<f32>,
+    @location(3) bitangent: vec3<f32>,
+    @location(4) uv: vec2<f32>,
+    @location(5) @interpolate(flat) material_id: u32,
 }
 
 @vertex
@@ -38,7 +40,12 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     out.clip_position = camera.proj * view_pos;
     out.position = view_pos.xyz / view_pos.w;
-    out.normal = mat4_to_mat3(instance.transform) * in.normal;
+
+    let transform = mat4_to_mat3(instance.transform);
+    out.normal = transform * in.normal;
+    out.tangent = transform * in.tangent.xyz;
+    out.bitangent = cross(out.normal, out.tangent) * in.tangent.w;
+
     out.uv = in.tex_coords;
     out.material_id = instance.material_id;
 
@@ -49,6 +56,15 @@ struct FragmentOutput {
     @location(0) albedo_metallic: vec4<f32>,
     @location(1) normal: vec4<f32>,
     @location(2) emissive_rough: vec4<f32>,
+}
+
+
+fn get_tbn(normal: vec3<f32>, tangent: vec3<f32>, bitangent: vec3<f32>) -> mat3x3<f32> {
+    return mat3x3<f32>(
+        normalize(tangent),
+        normalize(bitangent),
+        normalize(normal)
+    );
 }
 
 @fragment
@@ -63,9 +79,17 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
      	discard;
     }
 
+    var normal = vec3(0.);
+    if material.normal == 0u || in.tangent.x == 0. {
+        normal = in.normal;
+    } else {
+        let tbn = get_tbn(in.normal, in.tangent, in.bitangent);
+        normal = normalize(tbn * normal_tex.rgb);
+    }
+
     return FragmentOutput(
         vec4(albedo_tex.rgb, metal_rough_tex.x),
-        vec4(normal_tex.rgb, 1.0),
+        vec4(normal, 1.0),
         vec4(emissive_tex.rgb, metal_rough_tex.y),
     );
 }

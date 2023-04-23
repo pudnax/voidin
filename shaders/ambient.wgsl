@@ -18,8 +18,8 @@ fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    var ambient = textureSample(t_albedo_metallic, t_sampler, in.uv).rgb;
-    var emissive = textureSample(t_emissive_rough, t_sampler, in.uv).rgb;
+    let ambient = textureSample(t_albedo_metallic, t_sampler, in.uv).rgb;
+    let emissive = textureSample(t_emissive_rough, t_sampler, in.uv).rgb;
 
     return vec4(ambient + emissive, 1.0);
 }
