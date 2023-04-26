@@ -24,8 +24,8 @@ notify-debouncer-mini = "0.2.1"
 slotmap = "1.0.6"
 indexmap = "1.9.3"
 pollster = { version = "0.3.0", features = ["macro"] }
-wgpu = { version = "0.15.1", features = ["spirv", "naga"] }
-wgpu-profiler = "0.11.0"
+wgpu = { version = "0.16.0", features = ["spirv", "naga"] }
+wgpu-profiler = "0.12.1"
 winit = "0.28.3"
 parking_lot = "0.12.1"
 chrono = "0.4.24"

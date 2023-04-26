@@ -1,4 +1,4 @@
-use std::{cell::RefCell, num::NonZeroU32};
+use std::cell::RefCell;
 
 use ahash::AHashMap;
 
@@ -120,17 +120,17 @@ impl Blitter {
                 let src_view = texture.create_view(&wgpu::TextureViewDescriptor {
                     label: Some("Blit: Src View"),
                     base_mip_level: mip_from,
-                    mip_level_count: NonZeroU32::new(1),
+                    mip_level_count: Some(1),
                     base_array_layer: array_layer,
-                    array_layer_count: NonZeroU32::new(1),
+                    array_layer_count: Some(1),
                     ..Default::default()
                 });
                 let dst_view = texture.create_view(&wgpu::TextureViewDescriptor {
                     label: Some("Blit: Dst View"),
                     base_mip_level: mip_to,
-                    mip_level_count: NonZeroU32::new(1),
+                    mip_level_count: Some(1),
                     base_array_layer: array_layer,
-                    array_layer_count: NonZeroU32::new(1),
+                    array_layer_count: Some(1),
                     ..Default::default()
                 });
 

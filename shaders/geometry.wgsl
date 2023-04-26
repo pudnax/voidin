@@ -60,7 +60,7 @@ struct FragmentOutput {
 
 
 fn get_tbn(normal: vec3<f32>, tangent: vec3<f32>, bitangent: vec3<f32>) -> mat3x3<f32> {
-    return mat3x3<f32>(
+    return mat3x3(
         normalize(tangent),
         normalize(bitangent),
         normalize(normal)
@@ -80,7 +80,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
 
     var normal = vec3(0.);
-    if material.normal == 0u || in.tangent.x == 0. {
+    if material.normal == 0u {
         normal = in.normal;
     } else {
         let tbn = get_tbn(in.normal, in.tangent, in.bitangent);

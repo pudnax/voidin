@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, path::Path, vec};
+use std::{path::Path, vec};
 
 use ahash::AHashMap;
 use color_eyre::{
@@ -153,7 +153,9 @@ impl GltfDocument {
                 let vertices = bytemuck::cast_slice(vertices);
                 let tangents: Vec<[f32; 4]> = reader
                     .read_tangents()
-                    .unwrap_repeat()
+                    .into_iter()
+                    .flatten()
+                    .chain(std::iter::repeat([0., 1., 0., 1.]))
                     .take(vertices.len())
                     .collect();
                 let tex_coords: Vec<[f32; 2]> = reader
@@ -168,7 +170,7 @@ impl GltfDocument {
                 };
                 let mesh = MeshRef {
                     vertices,
-                    normals: bytemuck::cast_slice(&normals),
+                    normals: bytemuck::cast_slice(normals),
                     tangents: bytemuck::cast_slice(&tangents),
                     tex_coords: bytemuck::cast_slice(&tex_coords),
                     indices: &indices,
@@ -323,7 +325,7 @@ fn process_texture(
         image.as_raw(),
         wgpu::ImageDataLayout {
             offset: 0,
-            bytes_per_row: NonZeroU32::new(width * 4),
+            bytes_per_row: Some(width * 4),
             rows_per_image: None,
         },
         size,

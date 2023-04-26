@@ -1,5 +1,3 @@
-use std::num::NonZeroU32;
-
 use wgpu::MapMode;
 
 use crate::{utils::ImageDimentions, Gpu};
@@ -100,7 +98,7 @@ impl ScreenshotCtx {
                 buffer: &self.data,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: NonZeroU32::new(self.image_dimentions.padded_bytes_per_row),
+                    bytes_per_row: Some(self.image_dimentions.padded_bytes_per_row),
                     rows_per_image: None,
                 },
             },

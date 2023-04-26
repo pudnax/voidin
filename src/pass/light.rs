@@ -99,9 +99,9 @@ impl LightPass {
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24PlusStencil8,
+                format: GBuffer::DEPTH_FORMAT,
                 depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_compare: wgpu::CompareFunction::GreaterEqual,
                 stencil: wgpu::StencilState {
                     front: wgpu::StencilFaceState {
                         compare: wgpu::CompareFunction::Always,
@@ -157,7 +157,7 @@ impl LightPass {
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth24PlusStencil8,
+                format: GBuffer::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Always,
                 stencil: wgpu::StencilState {
@@ -239,7 +239,7 @@ impl Pass for LightPass {
         let mut lighting_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Lights Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view_target.main_view(),
+                view: view_target.main_view(),
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
