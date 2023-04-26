@@ -86,7 +86,7 @@ pub struct App {
 
     ambient_pass: pass::ambient::AmbientPass,
 
-    light_pass: pass::light::LightPass,
+    _light_pass: pass::light::LightPass,
     lights: ResizableBuffer<Light>,
     postprocess_pass: pass::postprocess::PostProcess,
 
@@ -220,7 +220,7 @@ impl App {
 
             ambient_pass,
 
-            light_pass,
+            _light_pass: light_pass,
             lights,
 
             update_pass,
@@ -380,15 +380,15 @@ impl App {
             },
         );
 
-        self.light_pass.record(
-            &self.world,
-            &mut encoder,
-            pass::light::LightingResource {
-                gbuffer: &self.gbuffer,
-                lights: &self.lights,
-                view_target: &self.view_target,
-            },
-        );
+        // self.light_pass.record(
+        //     &self.world,
+        //     &mut encoder,
+        //     pass::light::LightingResource {
+        //         gbuffer: &self.gbuffer,
+        //         lights: &self.lights,
+        //         view_target: &self.view_target,
+        //     },
+        // );
 
         self.postprocess_pass.record(
             &self.world,

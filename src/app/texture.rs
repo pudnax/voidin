@@ -59,7 +59,7 @@ impl TexturePool {
                             visibility: wgpu::ShaderStages::VERTEX_FRAGMENT
                                 | wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                            count: core::num::NonZeroU32::new(MAX_TEXTURES),
+                            count: None,
                         },
                     ],
                 });

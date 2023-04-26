@@ -5,7 +5,9 @@ use color_eyre::Result;
 use crate::{
     app::{
         gbuffer::GBuffer,
+        material::MaterialPool,
         pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
+        texture::TexturePool,
     },
     utils::world::World,
 };
@@ -18,10 +20,16 @@ pub struct AmbientPass {
 
 impl AmbientPass {
     pub fn new(world: &World, gbuffer: &GBuffer) -> Result<Self> {
+        let materials = world.get::<MaterialPool>()?;
+        let textures = world.get::<TexturePool>()?;
         let shader_path = Path::new("shaders").join("ambient.wgsl");
         let desc = RenderPipelineDescriptor {
             label: Some("Ambient Light Pipeline".into()),
-            layout: vec![gbuffer.bind_group_layout.clone()],
+            layout: vec![
+                gbuffer.bind_group_layout.clone(),
+                textures.bind_group_layout.clone(),
+                materials.bind_group_layout.clone(),
+            ],
             depth_stencil: None,
             ..Default::default()
         };
@@ -47,6 +55,8 @@ impl Pass for AmbientPass {
         resources: Self::Resoutces<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();
+        let textures = world.unwrap::<TexturePool>();
+        let materials = world.unwrap::<MaterialPool>();
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Ambient Light"),
@@ -63,6 +73,8 @@ impl Pass for AmbientPass {
 
         rpass.set_pipeline(arena.get_pipeline(self.pipeline));
         rpass.set_bind_group(0, &resources.gbuffer.bind_group, &[]);
+        rpass.set_bind_group(1, &textures.bind_group, &[]);
+        rpass.set_bind_group(2, &materials.bind_group, &[]);
 
         rpass.draw(0..3, 0..1);
     }

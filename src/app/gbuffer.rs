@@ -3,9 +3,9 @@ use crate::Gpu;
 use super::bind_group_layout::{self, WrappedBindGroupLayout};
 
 pub struct GBuffer {
-    pub albedo_metallic: wgpu::TextureView,
-    pub normal: wgpu::TextureView,
-    pub emissive_rough: wgpu::TextureView,
+    pub positions_u: wgpu::TextureView,
+    pub normal_v: wgpu::TextureView,
+    pub material: wgpu::TextureView,
     pub depth: wgpu::TextureView,
 
     pub bind_group: wgpu::BindGroup,
@@ -13,14 +13,14 @@ pub struct GBuffer {
 }
 
 impl GBuffer {
-    pub const ALBEDO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
-    pub const EMISSIVE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+    pub const POSITIONS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
     pub const NORMAL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+    pub const MATERIAL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Uint;
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
     pub const fn color_target_state() -> &'static [Option<wgpu::ColorTargetState>] {
         &[
             Some(wgpu::ColorTargetState {
-                format: Self::ALBEDO_FORMAT,
+                format: Self::POSITIONS_FORMAT,
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             }),
@@ -30,7 +30,7 @@ impl GBuffer {
                 write_mask: wgpu::ColorWrites::ALL,
             }),
             Some(wgpu::ColorTargetState {
-                format: Self::EMISSIVE_FORMAT,
+                format: Self::MATERIAL_FORMAT,
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             }),
@@ -38,7 +38,7 @@ impl GBuffer {
     }
 
     pub fn color_target_attachment(&self) -> [Option<wgpu::RenderPassColorAttachment>; 3] {
-        [&self.albedo_metallic, &self.normal, &self.emissive_rough].map(|view| {
+        [&self.positions_u, &self.normal_v, &self.material].map(|view| {
             Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
@@ -77,7 +77,7 @@ impl GBuffer {
                 binding: 2,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    sample_type: wgpu::TextureSampleType::Uint,
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -99,6 +99,12 @@ impl GBuffer {
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
+            wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                count: None,
+            },
         ],
     };
 
@@ -109,24 +115,24 @@ impl GBuffer {
             depth_or_array_layers: 1,
         };
         let mut desc = wgpu::TextureDescriptor {
-            label: Some("GBuffer: albedo"),
+            label: Some("GBuffer: positions and u"),
             size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: Self::ALBEDO_FORMAT,
+            format: Self::POSITIONS_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
-        let albedo = create_view(gpu, &desc);
+        let positions = create_view(gpu, &desc);
 
-        desc.label = Some("GBuffer: normal");
+        desc.label = Some("GBuffer: normal and v");
         desc.format = Self::NORMAL_FORMAT;
         let normal = create_view(gpu, &desc);
 
-        desc.label = Some("GBuffer: emissive");
-        desc.format = Self::EMISSIVE_FORMAT;
-        let emissive = create_view(gpu, &desc);
+        desc.label = Some("GBuffer: material");
+        desc.format = Self::MATERIAL_FORMAT;
+        let material = create_view(gpu, &desc);
 
         desc.label = Some("GBuffer: depth");
         desc.format = Self::DEPTH_FORMAT;
@@ -140,13 +146,24 @@ impl GBuffer {
         let sampler = gpu
             .device()
             .create_sampler(&crate::app::DEFAULT_SAMPLER_DESC);
+        let integer_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Integer Sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("GBuffer: bind group"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&albedo),
+                    resource: wgpu::BindingResource::TextureView(&positions),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -154,7 +171,7 @@ impl GBuffer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&emissive),
+                    resource: wgpu::BindingResource::TextureView(&material),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -169,13 +186,17 @@ impl GBuffer {
                     binding: 4,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&integer_sampler),
+                },
             ],
         });
 
         Self {
-            albedo_metallic: albedo,
-            normal,
-            emissive_rough: emissive,
+            positions_u: positions,
+            normal_v: normal,
+            material,
             depth,
 
             bind_group_layout,

@@ -1,15 +1,15 @@
 #import <shared.wgsl>
 #import <utils.wgsl>
+#import <encoding.wgsl>
 
-@group(0) @binding(0) var<uniform> un: Globals;
-@group(1) @binding(0) var<uniform> camera: Camera;
-@group(2) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
-@group(2) @binding(1) var tex_sampler: sampler;
+@group(0) @binding(0) var<uniform> camera: Camera;
+@group(1) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
+@group(1) @binding(1) var tex_sampler: sampler;
+@group(1) @binding(2) var tex_int_sampler: sampler;
 
-@group(3) @binding(0) var<storage, read> meshes: array<MeshInfo>;
 // FIXME: add more bind groups for only read storage
-@group(4) @binding(0) var<storage, read_write> instances: array<Instance>;
-@group(5) @binding(0) var<storage, read> materials: array<Material>;
+@group(2) @binding(0) var<storage, read_write> instances: array<Instance>;
+@group(3) @binding(0) var<storage, read> materials: array<Material>;
 
 struct VertexInput {
 	@builtin(instance_index) instance_index: u32,
@@ -39,7 +39,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     out.clip_position = camera.proj * view_pos;
-    out.position = view_pos.xyz / view_pos.w;
+    out.position = world_pos.xyz;
 
     let transform = mat4_to_mat3(instance.transform);
     out.normal = transform * in.normal;
@@ -55,7 +55,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 struct FragmentOutput {
     @location(0) albedo_metallic: vec4<f32>,
     @location(1) normal: vec4<f32>,
-    @location(2) emissive_rough: vec4<f32>,
+    @location(2) @interpolate(flat)  material: u32,
 }
 
 
@@ -70,10 +70,9 @@ fn get_tbn(normal: vec3<f32>, tangent: vec3<f32>, bitangent: vec3<f32>) -> mat3x
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
     let material = materials[in.material_id];
-    let albedo_tex = textureSample(texture_array[material.albedo], tex_sampler, in.uv);
-    let normal_tex = textureSample(texture_array[material.normal], tex_sampler, in.uv);
-    let emissive_tex = textureSample(texture_array[material.emissive], tex_sampler, in.uv);
-    let metal_rough_tex = textureSample(texture_array[material.metallic_roughness], tex_sampler, in.uv).bg;
+    let uv = in.uv;
+    let albedo_tex = textureSample(texture_array[material.albedo], tex_sampler, uv);
+    let normal_tex = textureSample(texture_array[material.normal], tex_sampler, uv);
 
     if material.base_color.w < 0.5 || albedo_tex.a < 0.5 {
      	discard;
@@ -88,8 +87,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     }
 
     return FragmentOutput(
-        vec4(albedo_tex.rgb, metal_rough_tex.x),
-        vec4(normal, 1.0),
-        vec4(emissive_tex.rgb, metal_rough_tex.y),
+        vec4(in.position, uv.x),
+        vec4(normal, uv.y),
+        in.material_id
     );
 }

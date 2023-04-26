@@ -10,7 +10,6 @@ use crate::{
     app::{
         bind_group_layout::StorageWriteBindGroupLayout,
         gbuffer::GBuffer,
-        global_ubo::GlobalUniformBinding,
         instance::InstancePool,
         material::MaterialPool,
         mesh::MeshPool,
@@ -32,18 +31,14 @@ impl Geometry {
     pub fn new(world: &World) -> Result<Self> {
         let path = Path::new("shaders").join("geometry.wgsl");
         let textures = world.get::<TexturePool>()?;
-        let meshes = world.get::<MeshPool>()?;
         let materials = world.get::<MaterialPool>()?;
         let instances = world.get::<InstancePool>()?;
-        let global_ubo = world.get::<GlobalUniformBinding>()?;
         let camera = world.get::<CameraUniformBinding>()?;
         let render_desc = RenderPipelineDescriptor {
             label: Some("Geometry Pipeline".into()),
             layout: vec![
-                global_ubo.layout.clone(),
                 camera.bind_group_layout.clone(),
                 textures.bind_group_layout.clone(),
-                meshes.mesh_info_layout.clone(),
                 instances.bind_group_layout.clone(),
                 materials.bind_group_layout.clone(),
             ],
@@ -79,9 +74,9 @@ impl Geometry {
             fragment: Some(pipeline::FragmentState {
                 entry_point: "fs_main".into(),
                 targets: vec![
-                    Some(GBuffer::ALBEDO_FORMAT.into()),
+                    Some(GBuffer::POSITIONS_FORMAT.into()),
                     Some(GBuffer::NORMAL_FORMAT.into()),
-                    Some(GBuffer::EMISSIVE_FORMAT.into()),
+                    Some(GBuffer::MATERIAL_FORMAT.into()),
                 ],
             }),
             primitive: wgpu::PrimitiveState {
@@ -115,7 +110,6 @@ impl Pass for Geometry {
         let textures = world.unwrap::<TexturePool>();
         let materials = world.unwrap::<MaterialPool>();
         let instances = world.unwrap::<InstancePool>();
-        let global_ubo = world.unwrap::<GlobalUniformBinding>();
         let arena = world.unwrap::<PipelineArena>();
         let camera = world.unwrap::<CameraUniformBinding>();
 
@@ -133,12 +127,10 @@ impl Pass for Geometry {
         });
 
         rpass.set_pipeline(arena.get_pipeline(self.pipeline));
-        rpass.set_bind_group(0, &global_ubo.binding, &[]);
-        rpass.set_bind_group(1, &camera.binding, &[]);
-        rpass.set_bind_group(2, &textures.bind_group, &[]);
-        rpass.set_bind_group(3, &meshes.mesh_info_bind_group, &[]);
-        rpass.set_bind_group(4, &instances.bind_group, &[]);
-        rpass.set_bind_group(5, &materials.bind_group, &[]);
+        rpass.set_bind_group(0, &camera.binding, &[]);
+        rpass.set_bind_group(1, &textures.bind_group, &[]);
+        rpass.set_bind_group(2, &instances.bind_group, &[]);
+        rpass.set_bind_group(3, &materials.bind_group, &[]);
 
         rpass.set_vertex_buffer(0, meshes.vertices.full_slice());
         rpass.set_vertex_buffer(1, meshes.normals.full_slice());
