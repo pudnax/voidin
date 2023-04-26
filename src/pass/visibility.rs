@@ -23,19 +23,19 @@ use crate::{
     utils::{world::World, DrawIndexedIndirect, NonZeroSized, ResizableBuffer},
 };
 
-pub struct Geometry {
+pub struct Visibility {
     pipeline: RenderHandle,
 }
 
-impl Geometry {
+impl Visibility {
     pub fn new(world: &World) -> Result<Self> {
-        let path = Path::new("shaders").join("geometry.wgsl");
+        let path = Path::new("shaders").join("visibility.wgsl");
         let textures = world.get::<TexturePool>()?;
         let materials = world.get::<MaterialPool>()?;
         let instances = world.get::<InstancePool>()?;
         let camera = world.get::<CameraUniformBinding>()?;
         let render_desc = RenderPipelineDescriptor {
-            label: Some("Geometry Pipeline".into()),
+            label: Some("Visibilty Pipeline".into()),
             layout: vec![
                 camera.bind_group_layout.clone(),
                 textures.bind_group_layout.clone(),
@@ -92,14 +92,14 @@ impl Geometry {
     }
 }
 
-pub struct GeometryResource<'a> {
+pub struct VisibilityResource<'a> {
     pub gbuffer: &'a GBuffer,
 
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
 }
 
-impl Pass for Geometry {
-    type Resoutces<'a> = GeometryResource<'a>;
+impl Pass for Visibility {
+    type Resoutces<'a> = VisibilityResource<'a>;
     fn record(
         &self,
         world: &World,
@@ -114,7 +114,7 @@ impl Pass for Geometry {
         let camera = world.unwrap::<CameraUniformBinding>();
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Geometry Pass"),
+            label: Some("Visibility Pass"),
             color_attachments: &resources.gbuffer.color_target_attachment(),
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &resources.gbuffer.depth,

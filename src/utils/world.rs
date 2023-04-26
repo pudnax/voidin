@@ -17,6 +17,7 @@ use crate::app::bind_group_layout::{
 };
 use crate::app::global_ubo;
 use crate::app::instance::InstancePool;
+use crate::app::light::LightPool;
 use crate::app::material::MaterialPool;
 use crate::app::mesh::MeshPool;
 use crate::app::texture::TexturePool;
@@ -105,6 +106,7 @@ impl World {
         this.insert(MeshPool::new(gpu.clone()));
         this.insert(MaterialPool::new(gpu.clone()));
         this.insert(InstancePool::new(gpu.clone()));
+        this.insert(LightPool::new(gpu.clone()));
         this.insert(global_ubo::GlobalUniformBinding::new(gpu.device()));
         this.insert(CameraUniformBinding::new(gpu.device()));
         this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));

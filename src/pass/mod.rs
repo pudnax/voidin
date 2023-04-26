@@ -1,10 +1,9 @@
 use crate::utils::world::World;
 
-pub mod ambient;
 pub mod compute_update;
-pub mod geometry;
-pub mod light;
 pub mod postprocess;
+pub mod shading;
+pub mod visibility;
 
 pub trait Pass {
     type Resoutces<'a>;

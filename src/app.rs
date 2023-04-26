@@ -10,9 +10,10 @@ use wgpu_profiler::GpuProfiler;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
+    app::light::Light,
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
-    pass::{self, light::Light, Pass},
+    pass::{self, Pass},
     recorder::Recorder,
     utils::{
         self, create_solid_color_texture,
@@ -28,6 +29,7 @@ pub mod blitter;
 pub mod gbuffer;
 pub mod global_ubo;
 pub mod instance;
+pub mod light;
 pub mod material;
 pub mod mesh;
 pub mod pipeline;
@@ -41,6 +43,7 @@ pub(crate) use view_target::ViewTarget;
 use self::{
     gbuffer::GBuffer,
     instance::{InstanceId, InstancePool},
+    light::LightPool,
     material::{MaterialId, MaterialPool},
     mesh::{MeshId, MeshPool, MeshRef},
     pipeline::PipelineArena,
@@ -81,13 +84,11 @@ pub struct App {
     moving_instances: ResizableBuffer<InstanceId>,
     moving_instances_bind_group: wgpu::BindGroup,
 
-    geometry_pass: pass::geometry::Geometry,
-    emit_draws_pass: pass::geometry::EmitDraws,
+    visibility_pass: pass::visibility::Visibility,
+    emit_draws_pass: pass::visibility::EmitDraws,
 
-    ambient_pass: pass::ambient::AmbientPass,
+    shading_pass: pass::shading::ShadingPass,
 
-    _light_pass: pass::light::LightPass,
-    lights: ResizableBuffer<Light>,
     postprocess_pass: pass::postprocess::PostProcess,
 
     update_pass: pass::compute_update::ComputeUpdate,
@@ -173,12 +174,10 @@ impl App {
         let path = Path::new("shaders").join("postprocess.wgsl");
         let postprocess_pass = pass::postprocess::PostProcess::new(&mut world, path)?;
 
-        let geometry_pass = pass::geometry::Geometry::new(&world)?;
-        let emit_draws_pass = pass::geometry::EmitDraws::new(&world)?;
+        let visibility_pass = pass::visibility::Visibility::new(&world)?;
+        let emit_draws_pass = pass::visibility::EmitDraws::new(&world)?;
 
-        let ambient_pass = pass::ambient::AmbientPass::new(&world, &gbuffer)?;
-        let light_pass = pass::light::LightPass::ner(&world, &gbuffer)?;
-        let lights = ResizableBuffer::new(gpu.device(), wgpu::BufferUsages::VERTEX);
+        let shading_pass = pass::shading::ShadingPass::new(&world, &gbuffer)?;
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
@@ -215,13 +214,10 @@ impl App {
             moving_instances,
             moving_instances_bind_group,
 
-            geometry_pass,
+            visibility_pass,
             emit_draws_pass,
 
-            ambient_pass,
-
-            _light_pass: light_pass,
-            lights,
+            shading_pass,
 
             update_pass,
 
@@ -237,6 +233,12 @@ impl App {
     pub fn setup_scene(&mut self) -> Result<()> {
         let now = std::time::Instant::now();
         let mut instances = vec![];
+
+        self.world.get_mut::<LightPool>()?.add(&[Light::new(
+            vec3(0., 0.5, 0.),
+            10.,
+            vec3(1., 1., 1.),
+        )]);
 
         let gltf_scene = GltfDocument::import(
             self,
@@ -283,7 +285,6 @@ impl App {
 
         let sphere_mesh = models::make_uv_sphere(1.0, 10);
         let sphere_mesh_id = self.get_mesh_pool_mut().add(sphere_mesh.as_ref());
-
         let mut instance_pool = self.world.get_mut::<InstancePool>()?;
         instance_pool.add(&instances);
 
@@ -318,11 +319,6 @@ impl App {
         let moving_instances_id = instance_pool.add(&moving_instances);
         self.moving_instances.push(&self.gpu, &moving_instances_id);
 
-        self.lights.push(
-            &self.gpu,
-            &[Light::new(vec3(0., 5., 0.), 0.25, vec3(1., 1., 1.))],
-        );
-
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer
             .set_len(&self.gpu.device, &mut encoder, instance_pool.count() as _);
@@ -356,40 +352,29 @@ impl App {
         self.emit_draws_pass.record(
             &self.world,
             &mut encoder,
-            pass::geometry::EmitDrawsResource {
+            pass::visibility::EmitDrawsResource {
                 draw_cmd_bind_group: &self.draw_cmd_bind_group,
                 draw_cmd_buffer: &self.draw_cmd_buffer,
             },
         );
 
-        self.geometry_pass.record(
+        self.visibility_pass.record(
             &self.world,
             &mut encoder,
-            pass::geometry::GeometryResource {
+            pass::visibility::VisibilityResource {
                 gbuffer: &self.gbuffer,
                 draw_cmd_buffer: &self.draw_cmd_buffer,
             },
         );
 
-        self.ambient_pass.record(
+        self.shading_pass.record(
             &self.world,
             &mut encoder,
-            pass::ambient::AmbientResource {
+            pass::shading::ShadingResource {
                 gbuffer: &self.gbuffer,
                 view_target: &self.view_target,
             },
         );
-
-        // self.light_pass.record(
-        //     &self.world,
-        //     &mut encoder,
-        //     pass::light::LightingResource {
-        //         gbuffer: &self.gbuffer,
-        //         lights: &self.lights,
-        //         view_target: &self.view_target,
-        //     },
-        // );
-
         self.postprocess_pass.record(
             &self.world,
             &mut encoder,

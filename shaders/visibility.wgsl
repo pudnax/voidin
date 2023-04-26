@@ -41,7 +41,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     out.clip_position = camera.proj * view_pos;
     out.position = world_pos.xyz;
 
-    let transform = mat4_to_mat3(instance.transform);
+    let transform = transpose(mat4_to_mat3(instance.inv_transform));
     out.normal = transform * in.normal;
     out.tangent = transform * in.tangent.xyz;
     out.bitangent = cross(out.normal, out.tangent) * in.tangent.w;
@@ -80,10 +80,10 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     var normal = vec3(0.);
     if material.normal == 0u {
-        normal = in.normal;
+        normal = normalize(in.normal);
     } else {
         let tbn = get_tbn(in.normal, in.tangent, in.bitangent);
-        normal = normalize(tbn * normal_tex.rgb);
+        normal = normalize(tbn * (normal_tex.rgb * 2.0 - 1.0));
     }
 
     return FragmentOutput(

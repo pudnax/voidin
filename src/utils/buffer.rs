@@ -153,6 +153,11 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
         was_reallocated
     }
 
+    pub fn pop(&mut self) {
+        assert!(!self.is_empty(), "Attempted to pop empty buffer");
+        self.len -= 1;
+    }
+
     pub fn write(&mut self, gpu: &Gpu, index: usize, value: T) {
         assert!(index < self.len());
         gpu.queue.write_buffer(
