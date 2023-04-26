@@ -7,6 +7,9 @@ use super::{
     DEFAULT_SAMPLER_DESC,
 };
 
+pub const WHITE_TEXTURE: TextureId = TextureId(0);
+pub const BLACK_TEXTURE: TextureId = TextureId(1);
+
 #[repr(C)]
 #[derive(Debug, Copy, Default, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct TextureId(u32);
@@ -31,12 +34,13 @@ const MAX_TEXTURES: u32 = 1 << 10;
 
 impl TexturePool {
     pub fn new(gpu: Arc<Gpu>) -> Self {
-        let views = vec![utils::create_solid_color_texture(
-            gpu.device(),
-            gpu.queue(),
-            glam::Vec4::splat(0.),
-        )
-        .create_view(&Default::default())];
+        let white =
+            utils::create_solid_color_texture(gpu.device(), gpu.queue(), glam::Vec4::splat(1.))
+                .create_view(&Default::default());
+        let black =
+            utils::create_solid_color_texture(gpu.device(), gpu.queue(), glam::Vec4::splat(0.))
+                .create_view(&Default::default());
+        let views = vec![white, black];
 
         let bind_group_layout =
             gpu.device()

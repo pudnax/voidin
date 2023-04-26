@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
-use glam::{vec4, Vec4};
+use glam::Vec4;
 
 use crate::{
     utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
@@ -10,7 +10,7 @@ use crate::{
 
 use super::{
     bind_group_layout::{self, WrappedBindGroupLayout},
-    texture::TextureId,
+    texture::{TextureId, BLACK_TEXTURE, WHITE_TEXTURE},
 };
 
 #[repr(C)]
@@ -24,13 +24,25 @@ impl MaterialId {
 }
 
 #[repr(C)]
-#[derive(Copy, Clone, Default, Pod, Zeroable)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Material {
     pub base_color: Vec4,
     pub albedo: TextureId,
     pub normal: TextureId,
     pub metallic_roughness: TextureId,
     pub emissive: TextureId,
+}
+
+impl Default for Material {
+    fn default() -> Self {
+        Self {
+            base_color: Vec4::splat(1.),
+            albedo: WHITE_TEXTURE,
+            emissive: BLACK_TEXTURE,
+            metallic_roughness: BLACK_TEXTURE,
+            normal: WHITE_TEXTURE,
+        }
+    }
 }
 
 pub struct MaterialPool {
@@ -48,10 +60,7 @@ impl MaterialPool {
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
-            &[Material {
-                base_color: vec4(1., 1., 1., 1.),
-                ..Default::default()
-            }],
+            &[Material::default()],
         );
 
         let bind_group_layout =

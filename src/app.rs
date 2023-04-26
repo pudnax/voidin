@@ -6,7 +6,7 @@ use glam::{vec3, vec4, Mat4, Vec3};
 use pollster::FutureExt;
 use rand::Rng;
 use wgpu::FilterMode;
-use wgpu_profiler::GpuProfiler;
+use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
@@ -349,6 +349,8 @@ impl App {
 
         profiler.begin_scope("Main Render Scope ", &mut encoder, self.device());
 
+        wgpu_profiler!("Visibility", profiler, &mut encoder, self.device(), {
+            wgpu_profiler!("Emit Draws", profiler, &mut encoder, self.device(), {
         self.emit_draws_pass.record(
             &self.world,
             &mut encoder,
@@ -357,7 +359,9 @@ impl App {
                 draw_cmd_buffer: &self.draw_cmd_buffer,
             },
         );
+            });
 
+            wgpu_profiler!("Geometry", profiler, &mut encoder, self.device(), {
         self.visibility_pass.record(
             &self.world,
             &mut encoder,
@@ -366,7 +370,10 @@ impl App {
                 draw_cmd_buffer: &self.draw_cmd_buffer,
             },
         );
+            });
+        });
 
+        wgpu_profiler!("Shading", profiler, &mut encoder, self.device(), {
         self.shading_pass.record(
             &self.world,
             &mut encoder,
@@ -375,6 +382,9 @@ impl App {
                 view_target: &self.view_target,
             },
         );
+        });
+
+        wgpu_profiler!("Postprocess", profiler, &mut encoder, self.device(), {
         self.postprocess_pass.record(
             &self.world,
             &mut encoder,
@@ -383,7 +393,9 @@ impl App {
                 view_target: &self.view_target,
             },
         );
+        });
 
+        wgpu_profiler!("Blitting", profiler, &mut encoder, self.device(), {
         self.blitter.blit_to_texture(
             &mut encoder,
             self.gpu.device(),
@@ -391,6 +403,7 @@ impl App {
             &target_view,
             self.surface_config.format,
         );
+        });
 
         profiler.end_scope(&mut encoder);
         profiler.resolve_queries(&mut encoder);

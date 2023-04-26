@@ -15,7 +15,7 @@ use crate::{
         instance::Instance,
         material::{Material, MaterialId},
         mesh::{MeshId, MeshRef},
-        texture::TextureId,
+        texture::{TextureId, BLACK_TEXTURE, WHITE_TEXTURE},
         App,
     },
     utils::{mesh_bounding_sphere, FormatConversions, UnwrapRepeat},
@@ -92,25 +92,25 @@ impl GltfDocument {
                 .base_color_texture()
                 .map(|t| process(t.texture().source(), true))
                 .transpose()?
-                .unwrap_or(TextureId::default());
+                .unwrap_or(WHITE_TEXTURE);
 
             let normal = material
                 .normal_texture()
                 .map(|t| process(t.texture().source(), false))
                 .transpose()?
-                .unwrap_or_default();
+                .unwrap_or(WHITE_TEXTURE);
 
             let emissive = material
                 .emissive_texture()
                 .map(|t| process(t.texture().source(), true))
                 .transpose()?
-                .unwrap_or_default();
+                .unwrap_or(BLACK_TEXTURE);
 
             let metallic_roughness = pbr
                 .metallic_roughness_texture()
                 .map(|t| process(t.texture().source(), false))
                 .transpose()?
-                .unwrap_or_default();
+                .unwrap_or(BLACK_TEXTURE);
 
             let material = Material {
                 base_color: color,

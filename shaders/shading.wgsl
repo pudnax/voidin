@@ -61,7 +61,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var color = vec3(0.);
 
-    color = albedo.rgb * 0.05 + emissive;
+    color = albedo.rgb * 0.01 + emissive;
 
     let light_count = arrayLength(&lights);
     for (var i = 0u; i < light_count; i += 1u) {
@@ -70,14 +70,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let light_vec = light.position - pos;
         let dist = length(light_vec);
 
-        let atten = attenuation(1., 1., dist, light.radius + 2.);
+        let atten = attenuation(1., 1., dist, light.radius);
 
         let light_dir = normalize(light_vec);
         let shade = max(0., dot(normal_tex.rgb, light_dir));
         let diff = light.color * albedo.rgb * shade * atten;
 
         let refl = reflect(-light_dir, view);
-        let covr = max(0., dot(refl, view));
+        let covr = max(0., dot(-view, nor));
         let spec = light.color * albedo.a * pow(covr, 16.) * atten;
 
         color += diff + spec;
