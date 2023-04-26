@@ -9,7 +9,6 @@ use crate::{
         global_ubo::GlobalUniformBinding,
         instance::InstancePool,
         pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
-        ViewTarget,
     },
     utils::world::World,
 };
@@ -54,7 +53,6 @@ impl Pass for ComputeUpdate {
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();

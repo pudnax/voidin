@@ -19,7 +19,6 @@ use crate::{
             RenderPipelineDescriptor,
         },
         texture::TexturePool,
-        ViewTarget,
     },
     camera::CameraUniformBinding,
     utils::{world::World, DrawIndexedIndirect, NonZeroSized, ResizableBuffer},
@@ -110,7 +109,6 @@ impl Pass for Geometry {
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
         let meshes = world.unwrap::<MeshPool>();
@@ -196,7 +194,6 @@ impl Pass for EmitDraws {
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        _view_target: &ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
         let camera = world.unwrap::<CameraUniformBinding>();

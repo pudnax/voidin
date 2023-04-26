@@ -353,50 +353,51 @@ impl App {
 
         profiler.begin_scope("Main Render Scope ", &mut encoder, self.device());
 
-        let emit_resource = pass::geometry::EmitDrawsResource {
-            draw_cmd_bind_group: &self.draw_cmd_bind_group,
-            draw_cmd_buffer: &self.draw_cmd_buffer,
-        };
-        self.emit_draws_pass
-            .record(&self.world, &mut encoder, &self.view_target, emit_resource);
+        self.emit_draws_pass.record(
+            &self.world,
+            &mut encoder,
+            pass::geometry::EmitDrawsResource {
+                draw_cmd_bind_group: &self.draw_cmd_bind_group,
+                draw_cmd_buffer: &self.draw_cmd_buffer,
+            },
+        );
 
-        let geometry_resource = pass::geometry::GeometryResource {
-            gbuffer: &self.gbuffer,
-            draw_cmd_buffer: &self.draw_cmd_buffer,
-        };
         self.geometry_pass.record(
             &self.world,
             &mut encoder,
-            &self.view_target,
-            geometry_resource,
+            pass::geometry::GeometryResource {
+                gbuffer: &self.gbuffer,
+                draw_cmd_buffer: &self.draw_cmd_buffer,
+            },
         );
 
-        let ambient_resources = pass::ambient::AmbientResource {
-            gbuffer: &self.gbuffer,
-        };
         self.ambient_pass.record(
             &self.world,
             &mut encoder,
-            &self.view_target,
-            ambient_resources,
+            pass::ambient::AmbientResource {
+                gbuffer: &self.gbuffer,
+                view_target: &self.view_target,
+            },
         );
 
-        let light_resources = pass::light::LightingResource {
-            gbuffer: &self.gbuffer,
-            lights: &self.lights,
-        };
         self.light_pass.record(
             &self.world,
             &mut encoder,
-            &self.view_target,
-            light_resources,
+            pass::light::LightingResource {
+                gbuffer: &self.gbuffer,
+                lights: &self.lights,
+                view_target: &self.view_target,
+            },
         );
 
-        let resource = pass::postprocess::PostProcessResource {
-            sampler: &self.default_sampler,
-        };
-        self.postprocess_pass
-            .record(&self.world, &mut encoder, &self.view_target, resource);
+        self.postprocess_pass.record(
+            &self.world,
+            &mut encoder,
+            pass::postprocess::PostProcessResource {
+                sampler: &self.default_sampler,
+                view_target: &self.view_target,
+            },
+        );
 
         self.blitter.blit_to_texture(
             &mut encoder,
@@ -463,7 +464,7 @@ impl App {
             dispatch_size: self.moving_instances.len() as u32,
         };
         self.update_pass
-            .record(&self.world, &mut encoder, &self.view_target, resources);
+            .record(&self.world, &mut encoder, resources);
         self.gpu.queue().submit(Some(encoder.finish()));
 
         if state.frame_count % 500 == 0 && std::env::var("GPU_PROFILING").is_ok() {

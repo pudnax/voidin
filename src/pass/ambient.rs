@@ -34,6 +34,7 @@ impl AmbientPass {
 
 pub struct AmbientResource<'a> {
     pub gbuffer: &'a GBuffer,
+    pub view_target: &'a crate::app::ViewTarget,
 }
 
 impl Pass for AmbientPass {
@@ -43,7 +44,6 @@ impl Pass for AmbientPass {
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        view_target: &crate::app::ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();
@@ -51,7 +51,7 @@ impl Pass for AmbientPass {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Ambient Light"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: view_target.main_view(),
+                view: resources.view_target.main_view(),
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,

@@ -61,20 +61,15 @@ impl PostProcess {
 
 pub struct PostProcessResource<'a> {
     pub sampler: &'a wgpu::Sampler,
+    pub view_target: &'a ViewTarget,
 }
 
 impl Pass for PostProcess {
     type Resoutces<'a> = PostProcessResource<'a>;
 
-    fn record(
-        &self,
-        world: &World,
-        encoder: &mut CommandEncoder,
-        view_target: &ViewTarget,
-        resource: Self::Resoutces<'_>,
-    ) {
+    fn record(&self, world: &World, encoder: &mut CommandEncoder, resource: Self::Resoutces<'_>) {
         let global_ubo = world.unwrap::<GlobalUniformBinding>();
-        let post_process_target = view_target.post_process_write();
+        let post_process_target = resource.view_target.post_process_write();
         let arena = world.unwrap::<PipelineArena>();
         let tex_bind_group = arena
             .device()

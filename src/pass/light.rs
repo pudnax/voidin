@@ -198,6 +198,7 @@ impl LightPass {
 pub struct LightingResource<'a> {
     pub gbuffer: &'a GBuffer,
     pub lights: &'a ResizableBuffer<Light>,
+    pub view_target: &'a crate::app::ViewTarget,
 }
 
 impl Pass for LightPass {
@@ -207,7 +208,6 @@ impl Pass for LightPass {
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        view_target: &crate::app::ViewTarget,
         resources: Self::Resoutces<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();
@@ -239,7 +239,7 @@ impl Pass for LightPass {
         let mut lighting_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Lights Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: view_target.main_view(),
+                view: resources.view_target.main_view(),
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
