@@ -57,7 +57,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let pos = positions_tex.xyz;
     let nor = normal_tex.rgb;
-    let view = normalize(camera.position.xyz - pos);
+    let rd = -normalize(camera.position.xyz - pos);
 
     var color = vec3(0.);
 
@@ -76,9 +76,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let shade = max(0., dot(normal_tex.rgb, light_dir));
         let diff = light.color * albedo.rgb * shade * atten;
 
-        let refl = reflect(-light_dir, view);
-        let covr = max(0., dot(-view, nor));
-        let spec = light.color * albedo.a * pow(covr, 16.) * atten;
+        let refl = reflect(-light_dir, rd);
+        let covr = max(0., dot(-rd, nor));
+        let spec = light.color * metallic_roughness.z * pow(covr, 16.) * atten;
 
         color += diff + spec;
     }

@@ -4,10 +4,10 @@ use crate::app::mesh::{BoundingSphere, Mesh};
 
 pub fn plane_mesh(scale: f32) -> Mesh {
     let vertices = [
-        [-scale, -scale, scale],
-        [scale, -scale, scale],
-        [scale, scale, scale],
-        [-scale, scale, scale],
+        [-scale, -scale, 0.],
+        [-scale, scale, 0.],
+        [scale, scale, 0.],
+        [scale, -scale, 0.],
     ]
     .map(Vec3::from)
     .to_vec();
