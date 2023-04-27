@@ -30,7 +30,7 @@ pub struct Instance {
     pub inv_transform: glam::Mat4,
     pub mesh: MeshId,
     pub material: MaterialId,
-    pub junk: [u32; 2],
+    junk: [u32; 2],
 }
 
 impl Default for Instance {

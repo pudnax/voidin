@@ -249,39 +249,30 @@ impl App {
             // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
 
-        for scene in gltf_scene.document.scenes() {
-            instances.extend(gltf_scene.scene_data(
-                scene,
-                Mat4::from_rotation_y(std::f32::consts::PI / 2.)
-                    * Mat4::from_translation(vec3(7., -5., 1.))
-                    * Mat4::from_scale(Vec3::splat(3.)),
-            ));
-        }
+        instances.extend(gltf_scene.get_scene_instances(
+            Mat4::from_rotation_y(std::f32::consts::PI / 2.)
+                * Mat4::from_translation(vec3(7., -5., 1.))
+                * Mat4::from_scale(Vec3::splat(3.)),
+        ));
 
         let helmet = GltfDocument::import(
             self,
             "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
         )?;
-        for scene in helmet.document.scenes() {
-            instances.extend(helmet.scene_data(
-                scene,
-                Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
-            ));
-        }
+        instances.extend(helmet.get_scene_instances(
+            Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
+        ));
 
         let gltf_ferris = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
-        for scene in gltf_ferris.document.scenes() {
-            instances.extend(gltf_ferris.scene_data(
-                scene,
-                Mat4::from_translation(vec3(-3., -5.0, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
-            ));
-        }
-        for scene in gltf_ferris.document.scenes() {
-            instances.extend(gltf_ferris.scene_data(
-                scene,
-                Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
-            ));
-        }
+        instances.extend(gltf_ferris.get_scene_instances(
+            Mat4::from_translation(vec3(-3., -5.0, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
+        ));
+        instances.extend(gltf_ferris.get_scene_instances(
+            Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
+        ));
+        gltf_ferris.get_scene_instances(
+            Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
+        );
 
         let sphere_mesh = models::make_uv_sphere(1.0, 10);
         let sphere_mesh_id = self.get_mesh_pool_mut().add(sphere_mesh.as_ref());
@@ -297,23 +288,17 @@ impl App {
             let x = r * angle.cos();
             let y = r * angle.sin();
 
-            moving_instances.push(instance::Instance {
-                transform: Mat4::from_translation(vec3(x, y, -17.)),
-                mesh: sphere_mesh_id,
-                material: MaterialId::new(
-                    rng.gen_range(0..self.get_material_pool().buffer.len() as u32),
-                ),
-                ..Default::default()
-            });
+            moving_instances.push(instance::Instance::new(
+                Mat4::from_translation(vec3(x, y, -17.)),
+                sphere_mesh_id,
+                MaterialId::new(rng.gen_range(0..self.get_material_pool().buffer.len() as u32)),
+            ));
 
-            for scene in gltf_ferris.document.scenes() {
-                moving_instances.extend(gltf_ferris.scene_data(
-                    scene,
-                    Mat4::from_translation(vec3(x, y + 0., -9.))
-                        * Mat4::from_rotation_z(angle)
-                        * Mat4::from_scale(Vec3::splat(2.5)),
-                ));
-            }
+            moving_instances.extend(gltf_ferris.get_scene_instances(
+                Mat4::from_translation(vec3(x, y + 0., -9.))
+                    * Mat4::from_rotation_z(angle)
+                    * Mat4::from_scale(Vec3::splat(2.5)),
+            ));
         }
 
         let moving_instances_id = instance_pool.add(&moving_instances);
@@ -351,58 +336,58 @@ impl App {
 
         wgpu_profiler!("Visibility", profiler, &mut encoder, self.device(), {
             wgpu_profiler!("Emit Draws", profiler, &mut encoder, self.device(), {
-        self.emit_draws_pass.record(
-            &self.world,
-            &mut encoder,
-            pass::visibility::EmitDrawsResource {
-                draw_cmd_bind_group: &self.draw_cmd_bind_group,
-                draw_cmd_buffer: &self.draw_cmd_buffer,
-            },
-        );
+                self.emit_draws_pass.record(
+                    &self.world,
+                    &mut encoder,
+                    pass::visibility::EmitDrawsResource {
+                        draw_cmd_bind_group: &self.draw_cmd_bind_group,
+                        draw_cmd_buffer: &self.draw_cmd_buffer,
+                    },
+                );
             });
 
             wgpu_profiler!("Geometry", profiler, &mut encoder, self.device(), {
-        self.visibility_pass.record(
-            &self.world,
-            &mut encoder,
-            pass::visibility::VisibilityResource {
-                gbuffer: &self.gbuffer,
-                draw_cmd_buffer: &self.draw_cmd_buffer,
-            },
-        );
+                self.visibility_pass.record(
+                    &self.world,
+                    &mut encoder,
+                    pass::visibility::VisibilityResource {
+                        gbuffer: &self.gbuffer,
+                        draw_cmd_buffer: &self.draw_cmd_buffer,
+                    },
+                );
             });
         });
 
         wgpu_profiler!("Shading", profiler, &mut encoder, self.device(), {
-        self.shading_pass.record(
-            &self.world,
-            &mut encoder,
-            pass::shading::ShadingResource {
-                gbuffer: &self.gbuffer,
-                view_target: &self.view_target,
-            },
-        );
+            self.shading_pass.record(
+                &self.world,
+                &mut encoder,
+                pass::shading::ShadingResource {
+                    gbuffer: &self.gbuffer,
+                    view_target: &self.view_target,
+                },
+            );
         });
 
         wgpu_profiler!("Postprocess", profiler, &mut encoder, self.device(), {
-        self.postprocess_pass.record(
-            &self.world,
-            &mut encoder,
-            pass::postprocess::PostProcessResource {
-                sampler: &self.default_sampler,
-                view_target: &self.view_target,
-            },
-        );
+            self.postprocess_pass.record(
+                &self.world,
+                &mut encoder,
+                pass::postprocess::PostProcessResource {
+                    sampler: &self.default_sampler,
+                    view_target: &self.view_target,
+                },
+            );
         });
 
         wgpu_profiler!("Blitting", profiler, &mut encoder, self.device(), {
-        self.blitter.blit_to_texture(
-            &mut encoder,
-            self.gpu.device(),
-            self.view_target.main_view(),
-            &target_view,
-            self.surface_config.format,
-        );
+            self.blitter.blit_to_texture(
+                &mut encoder,
+                self.gpu.device(),
+                self.view_target.main_view(),
+                &target_view,
+                self.surface_config.format,
+            );
         });
 
         profiler.end_scope(&mut encoder);

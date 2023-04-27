@@ -23,10 +23,9 @@ use crate::{
 
 pub struct GltfDocument {
     pub document: gltf::Document,
-    pub buffers: Vec<gltf::buffer::Data>,
-    pub images: Vec<gltf::image::Data>,
 
-    pub instances: Vec<Vec<Instance>>,
+    meshes: AHashMap<(usize, usize), MeshId>,
+    materials: Vec<MaterialId>,
 }
 
 impl GltfDocument {
@@ -38,35 +37,12 @@ impl GltfDocument {
         let materials = Self::make_materials(app, &document, &images)?;
         let meshes = Self::make_meshes(app, &document, &buffers)?;
 
-        let mut instances = vec![];
-        for (mesh, mesh_ids) in document.meshes().zip(&meshes) {
-            let instance: Vec<_> = mesh
-                .primitives()
-                .zip(mesh_ids)
-                .map(|(primitive, &mesh_id)| {
-                    let material_id = primitive
-                        .material()
-                        .index()
-                        .and_then(|index| materials.get(index).copied())
-                        .unwrap_or_default();
-
-                    Instance {
-                        mesh: mesh_id,
-                        material: material_id,
-                        ..Default::default()
-                    }
-                })
-                .collect();
-            instances.push(instance);
-        }
-
         app.get_texture_pool_mut().update_bind_group();
 
         Ok(Self {
             document,
-            buffers,
-            images,
-            instances,
+            meshes,
+            materials,
         })
     }
 
@@ -133,11 +109,10 @@ impl GltfDocument {
         app: &mut App,
         document: &gltf::Document,
         buffers: &[gltf::buffer::Data],
-    ) -> Result<Vec<Vec<MeshId>>> {
-        let mut meshes = vec![];
-        let mut zeros = vec![0u8; 1 << 10];
+    ) -> Result<AHashMap<(usize, usize), MeshId>> {
+        let mut meshes = AHashMap::new();
         for mesh in document.meshes() {
-            let mut primitives = vec![];
+            let gltf_mesh_id = mesh.index();
             for primitive in mesh.primitives() {
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
                 let get_data = |semantic: &gltf::Semantic| -> Option<&[u8]> {
@@ -146,10 +121,7 @@ impl GltfDocument {
                         .and_then(|sem| data_of_accessor(buffers, &sem))
                 };
                 let Some(vertices) = get_data(&gltf::Semantic::Positions) else { continue; };
-                if vertices.len() > zeros.len() {
-                    zeros.extend(std::iter::repeat(0).take(vertices.len() - zeros.len()))
-                }
-                let normals = get_data(&gltf::Semantic::Normals).unwrap_or(&zeros);
+                let Some(normals) = get_data(&gltf::Semantic::Normals) else { continue; };
                 let vertices = bytemuck::cast_slice(vertices);
                 let tangents: Vec<[f32; 4]> = reader
                     .read_tangents()
@@ -177,70 +149,68 @@ impl GltfDocument {
                     bounding_sphere: mesh_bounding_sphere(vertices),
                 };
                 let mesh = app.add_mesh(mesh);
-                primitives.push(mesh);
+                meshes.insert((gltf_mesh_id, primitive.index()), mesh);
             }
-            meshes.push(primitives);
         }
 
         Ok(meshes)
     }
+    pub fn get_node(&self, name: &str) -> Option<gltf::Node> {
+        self.document.nodes().find(|node| node.name() == Some(name))
+    }
 
-    fn nodes_data<'a>(
+    pub fn nodes_data<'a>(
         &self,
         nodes: impl Iterator<Item = gltf::Node<'a>>,
         transform: Mat4,
-    ) -> Vec<Instance> {
-        let mut instances = vec![];
-
-        pub fn traverse_nodes<'a, T>(
-            nodes: impl Iterator<Item = gltf::Node<'a>>,
-            visitor: &mut impl FnMut(&T, &gltf::Node) -> Option<T>,
-            acc: T,
-        ) {
-            for node in nodes {
-                if let Some(res) = visitor(&acc, &node) {
-                    traverse_nodes(node.children(), visitor, res);
-                }
-            }
+        mut instances: &mut Vec<Instance>,
+    ) {
+        for node in nodes {
+            gather_instances_recursive(
+                &mut instances,
+                &node,
+                &transform,
+                &self.meshes,
+                &self.materials,
+            );
         }
+    }
 
-        traverse_nodes(
-            nodes,
-            &mut |&parent_transform, node| {
-                let transform =
-                    parent_transform * Mat4::from_cols_array_2d(&node.transform().matrix());
-
-                let mesh_instances = node
-                    .mesh()
-                    .and_then(|mesh| self.instances.get(mesh.index()));
-                if let Some(mesh_instances) = mesh_instances {
-                    instances.extend(mesh_instances.iter().map(|&instance| Instance {
-                        transform,
-                        ..instance
-                    }))
-                }
-
-                Some(transform)
-            },
-            transform,
-        );
-
+    pub fn get_scene_instances(&self, transform: glam::Mat4) -> Vec<Instance> {
+        let mut instances = Vec::new();
+        for scene in self.document.scenes() {
+            self.nodes_data(scene.nodes(), transform, &mut instances);
+        }
         instances
     }
+}
 
-    pub fn node_instances(&self, node: gltf::Node, transform: Option<Mat4>) -> Vec<Instance> {
-        let transform = transform.unwrap_or_default()
-            * Mat4::from_cols_array_2d(&node.transform().matrix()).inverse();
+fn gather_instances_recursive(
+    instances: &mut Vec<Instance>,
+    node: &gltf::Node<'_>,
+    transform: &glam::Mat4,
+    meshes: &AHashMap<(usize, usize), MeshId>,
+    materials: &[MaterialId],
+) {
+    let node_transform = glam::Mat4::from_cols_array_2d(&node.transform().matrix());
+    let transform = *transform * node_transform;
 
-        self.nodes_data(std::iter::once(node), transform)
+    for child in node.children() {
+        gather_instances_recursive(instances, &child, &transform, meshes, materials);
     }
 
-    pub fn scene_data(&self, scene: gltf::Scene, transform: Mat4) -> Vec<Instance> {
-        self.nodes_data(scene.nodes(), transform)
-    }
+    if let Some(mesh) = node.mesh() {
+        for primitive in mesh.primitives() {
+            if let Some(&mesh) = meshes.get(&(mesh.index(), primitive.index())) {
+                let material_id = primitive
+                    .material()
+                    .index()
+                    .and_then(|index| materials.get(index).copied())
+                    .unwrap_or_default();
 
-    pub fn get_node(&self, name: &str) -> Option<gltf::Node> {
-        self.document.nodes().find(|node| node.name() == Some(name))
+                instances.push(Instance::new(transform, mesh, material_id));
+            }
+        }
     }
 }
 
