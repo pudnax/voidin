@@ -7,8 +7,29 @@ use crate::{
 };
 
 use bytemuck::{Pod, Zeroable};
+use glam::Vec3;
 
 use super::bind_group_layout;
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default, Pod, Zeroable)]
+pub struct AreaLight {
+    pub color: Vec3,
+    pub intensity: f32,
+    pub points: [Vec3; 4],
+    padding: [f32; 4],
+}
+
+impl AreaLight {
+    pub fn new(color: Vec3, intensity: f32, points: [Vec3; 4]) -> Self {
+        Self {
+            color,
+            intensity,
+            points,
+            padding: Default::default(),
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, Pod, Zeroable)]
@@ -31,25 +52,32 @@ impl Light {
 }
 
 pub struct LightPool {
-    pub(crate) buffer: ResizableBuffer<Light>,
+    pub(crate) point_lights: ResizableBuffer<Light>,
+    pub(crate) point_bind_group_layout: bind_group_layout::BindGroupLayout,
+    pub(crate) point_bind_group: wgpu::BindGroup,
 
-    pub(crate) bind_group_layout: bind_group_layout::BindGroupLayout,
-    pub(crate) bind_group: wgpu::BindGroup,
+    pub(crate) area_lights: ResizableBuffer<AreaLight>,
+    pub(crate) area_bind_group_layout: bind_group_layout::BindGroupLayout,
+    pub(crate) area_bind_group: wgpu::BindGroup,
 
     gpu: Arc<Gpu>,
 }
 
 impl LightPool {
     pub fn new(gpu: Arc<Gpu>) -> Self {
-        let buffer = ResizableBuffer::new(
+        let point_lights = ResizableBuffer::new(
+            gpu.device(),
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
+        );
+        let area_lights = ResizableBuffer::new(
             gpu.device(),
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
         );
 
-        let bind_group_layout =
+        let point_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Light Pool Bind Group Layout"),
+                    label: Some("Point Light Bind Group Layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -61,24 +89,46 @@ impl LightPool {
                         count: None,
                     }],
                 });
-        let bind_group = Self::create_bind_group(&gpu, &bind_group_layout, &buffer);
+        let point_bind_group =
+            Self::create_point_bind_group(&gpu, &point_bind_group_layout, &point_lights);
+
+        let area_bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Area Light Bind Group Layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: Some(AreaLight::NSIZE),
+                        },
+                        count: None,
+                    }],
+                });
+        let area_bind_group =
+            Self::create_area_bind_group(&gpu, &area_bind_group_layout, &area_lights);
 
         Self {
-            buffer,
+            point_lights,
+            point_bind_group_layout,
+            point_bind_group,
 
-            bind_group_layout,
-            bind_group,
+            area_lights,
+            area_bind_group_layout,
+            area_bind_group,
             gpu: gpu.clone(),
         }
     }
 
-    fn create_bind_group(
+    fn create_point_bind_group(
         gpu: &Gpu,
         bind_group_layout: &wgpu::BindGroupLayout,
         lights: &ResizableBuffer<Light>,
     ) -> wgpu::BindGroup {
         gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Light Pool Bind Group"),
+            label: Some("Point Light Pool Bind Group"),
             layout: bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -87,8 +137,36 @@ impl LightPool {
         })
     }
 
-    pub fn add(&mut self, lights: &[Light]) {
-        self.buffer.push(&self.gpu, lights);
-        self.bind_group = Self::create_bind_group(&self.gpu, &self.bind_group_layout, &self.buffer);
+    fn create_area_bind_group(
+        gpu: &Gpu,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        lights: &ResizableBuffer<AreaLight>,
+    ) -> wgpu::BindGroup {
+        gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Area Light Pool Bind Group"),
+            layout: bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: lights.as_tight_binding(),
+            }],
+        })
+    }
+
+    pub fn add_point_light(&mut self, lights: &[Light]) {
+        self.point_lights.push(&self.gpu, lights);
+        self.point_bind_group = Self::create_point_bind_group(
+            &self.gpu,
+            &self.point_bind_group_layout,
+            &self.point_lights,
+        );
+    }
+
+    pub fn add_area_light(&mut self, lights: &[AreaLight]) {
+        self.area_lights.push(&self.gpu, lights);
+        self.area_bind_group = Self::create_area_bind_group(
+            &self.gpu,
+            &self.area_bind_group_layout,
+            &self.area_lights,
+        );
     }
 }

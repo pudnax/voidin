@@ -1,4 +1,5 @@
 #import <shared.wgsl>
+#import <ltc_utils.wgsl>
 
 @group(0) @binding(0) var<uniform> global: Globals;
 
@@ -13,10 +14,12 @@
 
 @group(3) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
 @group(3) @binding(1) var tex_sampler: sampler;
+@group(3) @binding(2) var tex_ltc_sampler: sampler;
 
 @group(4) @binding(0) var<storage, read> materials: array<Material>;
 
-@group(5) @binding(0) var<storage, read> lights: array<Light>;
+@group(5) @binding(0) var<storage, read> point_lights: array<Light>;
+@group(6) @binding(0) var<storage, read> area_lights: array<AreaLight>;
 
 struct VertexOutput {
   @builtin(position) pos: vec4<f32>,
@@ -61,11 +64,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var color = vec3(0.);
 
-    color = albedo.rgb * 0.01 + emissive;
+    color = albedo.rgb * 0.05 + emissive;
 
-    let light_count = arrayLength(&lights);
+    let light_count = arrayLength(&point_lights);
     for (var i = 0u; i < light_count; i += 1u) {
-        let light = lights[i];
+        let light = point_lights[i];
 
         let light_vec = light.position - pos;
         let dist = length(light_vec);
@@ -81,6 +84,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let spec = light.color * metallic_roughness.z * pow(covr, 16.) * atten;
 
         color += diff + spec;
+    }
+
+    let ltc = ltc_matrix(nor, rd, metallic_roughness.y);
+    let area_light_count = arrayLength(&area_lights);
+    for (var i = 0u; i < area_light_count; i += 1u) {
+        let light = area_lights[i];
+
+        let diff = get_area_light_diffuse(nor, rd, pos, light.points, true);
+        let spec = get_area_light_specular(nor, rd, pos, ltc, light.points, true, vec3(0.4, 0.2, 0.1));
+
+        color += light.color * (spec + albedo.rgb * diff);
     }
 
     return vec4(color, 1.0);

@@ -37,7 +37,8 @@ impl ShadingPass {
                 gbuffer.bind_group_layout.clone(),
                 textures.bind_group_layout.clone(),
                 materials.bind_group_layout.clone(),
-                lights.bind_group_layout.clone(),
+                lights.point_bind_group_layout.clone(),
+                lights.area_bind_group_layout.clone(),
             ],
             depth_stencil: None,
             ..Default::default()
@@ -89,7 +90,8 @@ impl Pass for ShadingPass {
         rpass.set_bind_group(2, &resources.gbuffer.bind_group, &[]);
         rpass.set_bind_group(3, &textures.bind_group, &[]);
         rpass.set_bind_group(4, &materials.bind_group, &[]);
-        rpass.set_bind_group(5, &lights.bind_group, &[]);
+        rpass.set_bind_group(5, &lights.point_bind_group, &[]);
+        rpass.set_bind_group(6, &lights.area_bind_group, &[]);
 
         rpass.draw(0..3, 0..1);
     }

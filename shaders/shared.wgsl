@@ -20,6 +20,12 @@ struct Light {
 	color: vec3<f32>
 }
 
+struct AreaLight {
+	color: vec3<f32>,
+	intensity: f32,
+	points: array<vec3<f32>, 4>,
+}
+
 struct BoundingSphere {
 	center: vec3<f32>,
 	radius: f32,

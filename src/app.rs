@@ -10,7 +10,7 @@ use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    app::light::Light,
+    app::light::{AreaLight, Light},
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
     pass::{self, Pass},
@@ -234,11 +234,28 @@ impl App {
         let now = std::time::Instant::now();
         let mut instances = vec![];
 
-        self.world.get_mut::<LightPool>()?.add(&[Light::new(
-            vec3(0., 0.5, 0.),
-            10.,
-            vec3(1., 1., 1.),
-        )]);
+        let light_points = [
+            vec3(-3., 2., -20.),
+            vec3(-3., 6., -20.),
+            vec3(3., 6., -20.),
+            vec3(3., 2., -20.),
+        ];
+        self.world
+            .get_mut::<LightPool>()?
+            .add_point_light(&[Light::new(vec3(0., 0.5, 0.), 10., vec3(1., 1., 1.))]);
+        self.world
+            .get_mut::<LightPool>()?
+            .add_area_light(&[AreaLight::new(vec3(1., 1., 1.), 10., light_points)]);
+        let light_mesh_id = self
+            .get_mesh_pool_mut()
+            .add(models::make_uv_sphere(0.1, 10).as_ref());
+        light_points.iter().for_each(|&p| {
+            instances.push(instance::Instance::new(
+                Mat4::from_translation(p) * Mat4::from_scale(Vec3::splat(0.25)),
+                light_mesh_id,
+                MaterialId::new(1),
+            ))
+        });
 
         let gltf_scene = GltfDocument::import(
             self,
