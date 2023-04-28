@@ -31,8 +31,8 @@ pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
         }
     }
 
-    let stack_count = vside as u32 - 1;
-    let sector_count = uside as u32 - 1;
+    let stack_count = vside as u32;
+    let sector_count = uside as u32;
     let mut indices = Vec::with_capacity(uside * vside * 6);
     // We create a triangle strip as we loop, with `k1` being the top vertices
     // and `k2` being the bottom vertices.
@@ -49,7 +49,7 @@ pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
                 indices.push(k1 + 1);
             }
 
-            if i != ((stack_count) - 1) {
+            if i != ((stack_count) - 0) {
                 indices.push(k1 + 1);
                 indices.push(k2);
                 indices.push(k2 + 1);

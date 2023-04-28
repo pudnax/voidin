@@ -22,7 +22,7 @@ use crate::app::material::MaterialPool;
 use crate::app::mesh::MeshPool;
 use crate::app::texture::TexturePool;
 use crate::camera::CameraUniformBinding;
-use crate::Gpu;
+use crate::{GlobalsBindGroup, Gpu};
 
 use super::DrawIndexedIndirect;
 
@@ -102,13 +102,16 @@ impl World {
             resources: AHashMap::new(),
             gpu: gpu.clone(),
         };
+        let camera = CameraUniformBinding::new(gpu.device());
+        let globals = global_ubo::GlobalUniformBinding::new(gpu.device());
         this.insert(TexturePool::new(gpu.clone()));
         this.insert(MeshPool::new(gpu.clone()));
         this.insert(MaterialPool::new(gpu.clone()));
         this.insert(InstancePool::new(gpu.clone()));
         this.insert(LightPool::new(gpu.clone()));
-        this.insert(global_ubo::GlobalUniformBinding::new(gpu.device()));
-        this.insert(CameraUniformBinding::new(gpu.device()));
+        this.insert(GlobalsBindGroup::new(&gpu, &globals, &camera));
+        this.insert(globals);
+        this.insert(camera);
         this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageWriteBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageReadBindGroupLayout::<u32>::new(&gpu));

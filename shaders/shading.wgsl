@@ -2,24 +2,23 @@
 #import <ltc_utils.wgsl>
 
 @group(0) @binding(0) var<uniform> global: Globals;
+@group(0) @binding(1) var<uniform> camera: Camera;
 
-@group(1) @binding(0) var<uniform> camera: Camera;
+@group(1) @binding(0) var t_positions: texture_2d<f32>;
+@group(1) @binding(1) var t_normal: texture_2d<f32>;
+@group(1) @binding(2) var t_material: texture_2d<u32>;
+@group(1) @binding(3) var t_depth: texture_depth_2d;
+@group(1) @binding(4) var t_sampler: sampler;
+@group(1) @binding(5) var t_int_sampler: sampler;
 
-@group(2) @binding(0) var t_positions: texture_2d<f32>;
-@group(2) @binding(1) var t_normal: texture_2d<f32>;
-@group(2) @binding(2) var t_material: texture_2d<u32>;
-@group(2) @binding(3) var t_depth: texture_depth_2d;
-@group(2) @binding(4) var t_sampler: sampler;
-@group(2) @binding(5) var t_int_sampler: sampler;
+@group(2) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
+@group(2) @binding(1) var tex_sampler: sampler;
+@group(2) @binding(2) var tex_ltc_sampler: sampler;
 
-@group(3) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
-@group(3) @binding(1) var tex_sampler: sampler;
-@group(3) @binding(2) var tex_ltc_sampler: sampler;
+@group(3) @binding(0) var<storage, read> materials: array<Material>;
 
-@group(4) @binding(0) var<storage, read> materials: array<Material>;
-
-@group(5) @binding(0) var<storage, read> point_lights: array<Light>;
-@group(6) @binding(0) var<storage, read> area_lights: array<AreaLight>;
+@group(4) @binding(0) var<storage, read> point_lights: array<Light>;
+@group(5) @binding(0) var<storage, read> area_lights: array<AreaLight>;
 
 struct VertexOutput {
   @builtin(position) pos: vec4<f32>,

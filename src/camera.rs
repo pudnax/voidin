@@ -39,7 +39,7 @@ impl Default for CameraUniform {
 }
 
 pub struct CameraUniformBinding {
-    pub buffer: wgpu::Buffer,
+    buffer: wgpu::Buffer,
     pub binding: wgpu::BindGroup,
     pub bind_group_layout: bind_group_layout::BindGroupLayout,
 }
@@ -84,6 +84,10 @@ impl CameraUniformBinding {
 
     pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera) {
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&camera.get_uniform()));
+    }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
     }
 }
 

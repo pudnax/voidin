@@ -53,6 +53,10 @@ impl GlobalUniformBinding {
     pub fn update(&mut self, queue: &wgpu::Queue, uniform: &Uniform) {
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(uniform))
     }
+
+    pub fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
 }
 
 #[repr(C)]

@@ -248,7 +248,7 @@ impl App {
             .add_area_light(&[AreaLight::new(vec3(1., 1., 1.), 10., light_points)]);
         let light_mesh_id = self
             .get_mesh_pool_mut()
-            .add(models::make_uv_sphere(0.1, 10).as_ref());
+            .add(models::make_uv_sphere(1.0, 10).as_ref());
         light_points.iter().for_each(|&p| {
             instances.push(instance::Instance::new(
                 Mat4::from_translation(p) * Mat4::from_scale(Vec3::splat(0.25)),
