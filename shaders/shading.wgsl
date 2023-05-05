@@ -59,11 +59,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let pos = positions_tex.xyz;
     let nor = normal_tex.rgb;
-    let rd = -normalize(camera.position.xyz - pos);
+    let rd = normalize(camera.position.xyz - pos);
 
     var color = vec3(0.);
 
-    color = albedo.rgb * 0.05 + emissive;
+    color = albedo.rgb * 0.01 + emissive;
 
     let light_count = arrayLength(&point_lights);
     for (var i = 0u; i < light_count; i += 1u) {
@@ -85,15 +85,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         color += diff + spec;
     }
 
-    let ltc = ltc_matrix(nor, rd, metallic_roughness.y);
+    let ltc = ltc_matrix(nor, rd, saturate(metallic_roughness.x));
     let area_light_count = arrayLength(&area_lights);
     for (var i = 0u; i < area_light_count; i += 1u) {
         let light = area_lights[i];
 
-        let diff = get_area_light_diffuse(nor, rd, pos, light.points, true);
-        let spec = get_area_light_specular(nor, rd, pos, ltc, light.points, true, vec3(0.4, 0.2, 0.1));
+        let diff = get_area_light_diffuse(nor, rd, pos, light.points, false);
+        let spec = get_area_light_specular(nor, rd, pos, ltc, light.points, false, vec3(1.));
 
-        color += light.color * (spec + albedo.rgb * diff);
+        let center = mix(light.points[0], light.points[2], 0.5);
+        let atten = attenuation(light.intensity, 500., distance(center, pos), 20.);
+        color += light.color * light.intensity * (spec * atten + albedo.rgb * diff);
     }
 
     return vec4(color, 1.0);

@@ -27,7 +27,7 @@ fn integrate_edge(v1: vec3<f32>, v2: vec3<f32>) -> vec3<f32> {
     return cross(v1, v2) * theta_sintheta;
 }
 
-fn ltc_evaluate(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, minv: mat3x3<f32>, points: array<vec3<f32>,4>, two_sided: bool) -> vec3<f32> {
+fn ltc_evaluate_rect(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, minv: mat3x3<f32>, points: array<vec3<f32>,4>, two_sided: bool) -> vec3<f32> {
     let T1 = normalize(view - nor * dot(view, nor));
     let T2 = cross(nor, T1);
 
@@ -65,10 +65,10 @@ fn ltc_evaluate(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, minv: mat3x3<f3
     var uv = vec2(z * 0.5 + 0.5, len);
     uv = uv * LUT_SCALE + LUT_BIAS;
 
-    let scale = textureSample(texture_array[LTC1_TEXTURE], tex_ltc_sampler, uv).w;
+    let scale = textureSample(texture_array[LTC2_TEXTURE], tex_ltc_sampler, uv).w;
 
     var sum = len * scale;
-    if !behind && two_sided {
+    if behind && !two_sided {
         sum = 0.0;
     }
 
@@ -76,12 +76,12 @@ fn ltc_evaluate(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, minv: mat3x3<f3
 }
 
 fn ltc_matrix(nor: vec3<f32>, view: vec3<f32>, roughness: f32) -> Ltc {
-    let ndotv = clamp(dot(nor, view), 0., 1.);
+    let ndotv = saturate(dot(nor, view));
     var uv = vec2(roughness, sqrt(1.0 - ndotv));
     uv = uv * LUT_SCALE + LUT_BIAS;
 
-    let t1 = textureSample(texture_array[LTC1_TEXTURE], tex_ltc_sampler, uv);
-    let t2 = textureSample(texture_array[LTC2_TEXTURE], tex_ltc_sampler, uv);
+    let t1 = textureSample(texture_array[LTC1_TEXTURE], tex_sampler, uv);
+    let t2 = textureSample(texture_array[LTC2_TEXTURE], tex_sampler, uv);
 
     var res: Ltc;
     res.t1 = t1;
@@ -96,13 +96,13 @@ fn ltc_matrix(nor: vec3<f32>, view: vec3<f32>, roughness: f32) -> Ltc {
 }
 
 fn get_area_light_diffuse(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, points: array<vec3<f32>,4>, two_sided: bool) -> vec3<f32> {
-    let one = mat3x3(1., 1., 1., 1., 1., 1., 1., 1., 1.);
-    return ltc_evaluate(nor, view, pos, one, points, two_sided);
+    let one = mat3x3(vec3(1., 0., 0.), vec3(0., 1., 0.), vec3(0., 0., 1.));
+    return ltc_evaluate_rect(nor, view, pos, one, points, two_sided);
 }
 
 // FIXME: pass `Ltc` as a pointer
 fn get_area_light_specular(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, ltc: Ltc, points: array<vec3<f32>,4>, two_sided: bool, scolor: vec3<f32>) -> vec3<f32> {
-    var spec = ltc_evaluate(nor, view, pos, ltc.matrix, points, two_sided);
+    var spec = ltc_evaluate_rect(nor, view, pos, ltc.matrix, points, two_sided);
     spec *= scolor * ltc.t2.x + (1.0 - scolor) * ltc.t2.y;
     return spec;
 }

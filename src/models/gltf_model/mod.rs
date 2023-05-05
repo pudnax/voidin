@@ -163,16 +163,10 @@ impl GltfDocument {
         &self,
         nodes: impl Iterator<Item = gltf::Node<'a>>,
         transform: Mat4,
-        mut instances: &mut Vec<Instance>,
+        instances: &mut Vec<Instance>,
     ) {
         for node in nodes {
-            gather_instances_recursive(
-                &mut instances,
-                &node,
-                &transform,
-                &self.meshes,
-                &self.materials,
-            );
+            gather_instances_recursive(instances, &node, &transform, &self.meshes, &self.materials);
         }
     }
 

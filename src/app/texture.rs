@@ -14,6 +14,10 @@ pub const BLACK_TEXTURE: TextureId = TextureId(1);
 pub const LTC1_TEXTURE: TextureId = TextureId(2);
 pub const LTC2_TEXTURE: TextureId = TextureId(3);
 
+mod ltc {
+    include!("ltc_matrix.inc");
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Default, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct TextureId(u32);
@@ -146,9 +150,9 @@ impl TexturePool {
 }
 
 fn default_textures(gpu: &Gpu) -> Vec<wgpu::TextureView> {
-    let white = utils::create_solid_color_texture(gpu.device(), gpu.queue(), glam::Vec4::splat(1.))
+    let white = utils::create_solid_color_texture(gpu.device(), gpu.queue(), glam::Vec3::splat(1.))
         .create_view(&Default::default());
-    let black = utils::create_solid_color_texture(gpu.device(), gpu.queue(), glam::Vec4::splat(0.))
+    let black = utils::create_solid_color_texture(gpu.device(), gpu.queue(), glam::Vec3::splat(0.))
         .create_view(&Default::default());
 
     let mut ltc_desc = wgpu::TextureDescriptor {
@@ -161,26 +165,18 @@ fn default_textures(gpu: &Gpu) -> Vec<wgpu::TextureView> {
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Bc1RgbaUnorm,
+        format: wgpu::TextureFormat::Rgba32Float,
         usage: wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
     };
     let ltc1 = gpu
         .device()
-        .create_texture_with_data(
-            gpu.queue(),
-            &ltc_desc,
-            include_bytes!("../../assets/ltc/ltc_1.dds"),
-        )
+        .create_texture_with_data(gpu.queue(), &ltc_desc, bytemuck::cast_slice(ltc::LTC1))
         .create_view(&Default::default());
     ltc_desc.label = Some("LTC 2");
     let ltc2 = gpu
         .device()
-        .create_texture_with_data(
-            gpu.queue(),
-            &ltc_desc,
-            include_bytes!("../../assets/ltc/ltc_2.dds"),
-        )
+        .create_texture_with_data(gpu.queue(), &ltc_desc, bytemuck::cast_slice(ltc::LTC2))
         .create_view(&Default::default());
 
     vec![white, black, ltc1, ltc2]

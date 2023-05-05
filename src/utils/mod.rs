@@ -15,7 +15,7 @@ use color_eyre::eyre::{eyre, Context};
 pub use import_resolver::ImportResolver;
 
 use either::Either;
-use glam::{Vec3, Vec4};
+use glam::Vec3;
 use wgpu::util::{align_to, DeviceExt};
 use wgpu_profiler::GpuTimerScopeResult;
 
@@ -94,14 +94,15 @@ pub fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation:
 pub fn create_solid_color_texture(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    color: Vec4,
+    color: Vec3,
 ) -> wgpu::Texture {
-    let color = color * 255.;
+    let color = color.extend(1.);
+    let color = color.to_array().map(|val| (255. * val.clamp(0., 1.)) as u8);
 
     device.create_texture_with_data(
         queue,
         &wgpu::TextureDescriptor {
-            label: Some(&format!("Solid Texture {:?}", color.to_array())),
+            label: Some(&format!("Solid Texture {:?}", color)),
             size: wgpu::Extent3d {
                 width: 1,
                 height: 1,

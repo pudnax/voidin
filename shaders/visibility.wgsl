@@ -75,7 +75,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let normal_tex = textureSample(texture_array[material.normal], tex_sampler, uv);
 
     if material.base_color.w < 0.5 || albedo_tex.a < 0.5 {
-     	discard;
+     	 discard;
     }
 
     var normal = vec3(0.);

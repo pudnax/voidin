@@ -7,7 +7,7 @@ use crate::{
 };
 
 use bytemuck::{Pod, Zeroable};
-use glam::Vec3;
+use glam::{vec3, Mat4, Vec2, Vec3, Vec3Swizzles, Vec4};
 
 use super::bind_group_layout;
 
@@ -16,8 +16,7 @@ use super::bind_group_layout;
 pub struct AreaLight {
     pub color: Vec3,
     pub intensity: f32,
-    pub points: [Vec3; 4],
-    padding: [f32; 4],
+    pub points: [Vec4; 4],
 }
 
 impl AreaLight {
@@ -25,8 +24,33 @@ impl AreaLight {
         Self {
             color,
             intensity,
-            points,
-            padding: Default::default(),
+            points: points.map(|v| v.extend(0.)),
+        }
+    }
+
+    pub fn from_transform(color: Vec3, intensity: f32, wh: Vec2, transform: Mat4) -> Self {
+        let (scale, rot, trans) = transform.to_scale_rotation_translation();
+        let dir = rot.mul_vec3(vec3(0., 0., 1.)).normalize();
+        let up = vec3(0., 1., 0.);
+        let dirx = up.cross(dir);
+        let diry = dir.cross(dirx);
+
+        let wh = wh * scale.xy();
+
+        let dx = dirx * wh.x / 2.;
+        let dy = diry * wh.y / 2.;
+
+        let points = [
+            trans - dx - dy,
+            trans + dx - dy,
+            trans + dx + dy,
+            trans - dx + dy,
+        ];
+
+        Self {
+            color,
+            intensity,
+            points: points.map(|v| v.extend(0.)),
         }
     }
 }
@@ -118,10 +142,11 @@ impl LightPool {
             area_lights,
             area_bind_group_layout,
             area_bind_group,
-            gpu: gpu.clone(),
+            gpu,
         }
     }
 
+    // FIXME: sets `arrayLength` to 32 if the buffer is empty
     fn create_point_bind_group(
         gpu: &Gpu,
         bind_group_layout: &wgpu::BindGroupLayout,

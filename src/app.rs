@@ -1,7 +1,7 @@
 use std::{cell::RefCell, fmt::Display, path::Path, sync::Arc};
 
 use color_eyre::{eyre::ContextCompat, Result};
-use glam::{vec3, vec4, Mat4, Vec3};
+use glam::{vec3, Mat4, Vec2, Vec3};
 
 use pollster::FutureExt;
 use rand::Rng;
@@ -10,13 +10,16 @@ use wgpu_profiler::{wgpu_profiler, GpuProfiler};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    app::light::{AreaLight, Light},
+    app::{
+        instance::Instance,
+        light::{AreaLight, Light},
+    },
     camera::CameraUniformBinding,
     models::{self, GltfDocument},
     pass::{self, Pass},
     recorder::Recorder,
     utils::{
-        self, create_solid_color_texture,
+        self,
         world::{Read, World, Write},
         DrawIndexedIndirect, ImageDimentions, ResizableBuffer, ResizableBufferExt,
     },
@@ -162,7 +165,6 @@ impl App {
             resolution: [surface_config.width as f32, surface_config.height as f32],
         };
 
-        create_solid_color_texture(gpu.device(), gpu.queue(), vec4(1., 1., 1., 1.));
         let default_sampler = gpu.device().create_sampler(&DEFAULT_SAMPLER_DESC);
 
         let draw_cmd_buffer = ResizableBuffer::new(
@@ -230,32 +232,45 @@ impl App {
         })
     }
 
+    fn add_area_light(
+        &mut self,
+        color: Vec3,
+        intensity: f32,
+        wh: Vec2,
+        transform: Mat4,
+    ) -> Result<()> {
+        self.world
+            .get_mut::<LightPool>()?
+            .add_area_light(&[AreaLight::from_transform(color, intensity, wh, transform)]);
+        let plane = self
+            .get_mesh_pool_mut()
+            .add(models::plane_mesh(wh.x / 1.5, wh.y / 1.5).as_ref());
+        self.get_instance_pool_mut()
+            .add(&[Instance::new(transform, plane, MaterialId::default())]);
+        Ok(())
+    }
+
     pub fn setup_scene(&mut self) -> Result<()> {
+        use std::f32::consts::PI;
         let now = std::time::Instant::now();
         let mut instances = vec![];
 
-        let light_points = [
-            vec3(-3., 2., -20.),
-            vec3(-3., 6., -20.),
-            vec3(3., 6., -20.),
-            vec3(3., 2., -20.),
-        ];
         self.world
             .get_mut::<LightPool>()?
             .add_point_light(&[Light::new(vec3(0., 0.5, 0.), 10., vec3(1., 1., 1.))]);
-        self.world
-            .get_mut::<LightPool>()?
-            .add_area_light(&[AreaLight::new(vec3(1., 1., 1.), 10., light_points)]);
-        let light_mesh_id = self
-            .get_mesh_pool_mut()
-            .add(models::make_uv_sphere(1.0, 10).as_ref());
-        light_points.iter().for_each(|&p| {
-            instances.push(instance::Instance::new(
-                Mat4::from_translation(p) * Mat4::from_scale(Vec3::splat(0.25)),
-                light_mesh_id,
-                MaterialId::new(1),
-            ))
-        });
+
+        self.add_area_light(
+            vec3(1., 1., 1.),
+            7.,
+            (5., 8.).into(),
+            Mat4::from_translation(vec3(0., 10., 15.)) * Mat4::from_rotation_x(-PI / 4.),
+        )?;
+        self.add_area_light(
+            vec3(1., 1., 1.),
+            7.,
+            (5., 8.).into(),
+            Mat4::from_translation(vec3(0., 10., -25.)) * Mat4::from_rotation_x(-3. * PI / 4.),
+        )?;
 
         let gltf_scene = GltfDocument::import(
             self,
@@ -267,7 +282,7 @@ impl App {
         )?;
 
         instances.extend(gltf_scene.get_scene_instances(
-            Mat4::from_rotation_y(std::f32::consts::PI / 2.)
+            Mat4::from_rotation_y(PI / 2.)
                 * Mat4::from_translation(vec3(7., -5., 1.))
                 * Mat4::from_scale(Vec3::splat(3.)),
         ));
@@ -290,18 +305,17 @@ impl App {
         gltf_ferris.get_scene_instances(
             Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
         );
+        self.world.get_mut::<InstancePool>()?.add(&instances);
 
         let sphere_mesh = models::make_uv_sphere(1.0, 10);
         let sphere_mesh_id = self.get_mesh_pool_mut().add(sphere_mesh.as_ref());
-        let mut instance_pool = self.world.get_mut::<InstancePool>()?;
-        instance_pool.add(&instances);
 
         let mut moving_instances = vec![];
         let mut rng = rand::thread_rng();
         let num = 10;
         for i in 0..num {
             let r = 3.5;
-            let angle = std::f32::consts::TAU * (i as f32) / num as f32;
+            let angle = 2. * PI * (i as f32) / num as f32;
             let x = r * angle.cos();
             let y = r * angle.sin();
 
@@ -318,13 +332,15 @@ impl App {
             ));
         }
 
-        let moving_instances_id = instance_pool.add(&moving_instances);
+        let moving_instances_id = self.world.get_mut::<InstancePool>()?.add(&moving_instances);
         self.moving_instances.push(&self.gpu, &moving_instances_id);
 
         let mut encoder = self.device().create_command_encoder(&Default::default());
-        self.draw_cmd_buffer
-            .set_len(&self.gpu.device, &mut encoder, instance_pool.count() as _);
-        drop(instance_pool);
+        self.draw_cmd_buffer.set_len(
+            &self.gpu.device,
+            &mut encoder,
+            self.world.get_mut::<InstancePool>()?.count() as _,
+        );
 
         self.draw_cmd_bind_group = self
             .draw_cmd_buffer

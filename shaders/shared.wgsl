@@ -35,7 +35,7 @@ struct MeshInfo {
 	index_count: u32,
 	base_index: u32,
     vertex_offset: i32,
-	paddingg: f32,
+	padding: f32,
 	bounding_sphere: BoundingSphere,
 }
 

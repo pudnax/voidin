@@ -2,21 +2,23 @@ use glam::{vec4, Vec2, Vec3};
 
 use crate::app::mesh::{BoundingSphere, Mesh};
 
-pub fn plane_mesh(scale: f32) -> Mesh {
+pub fn plane_mesh(width: f32, height: f32) -> Mesh {
+    let width = width / 2.;
+    let height = height / 2.;
     let vertices = [
-        [-scale, -scale, 0.],
-        [-scale, scale, 0.],
-        [scale, scale, 0.],
-        [scale, -scale, 0.],
+        [-width, -height, 0.],
+        [-width, height, 0.],
+        [width, height, 0.],
+        [width, -height, 0.],
     ]
     .map(Vec3::from)
     .to_vec();
 
     let normals = [
         [0.0, 0.0, 1.0],
-        [0.0, 0.0, -1.0],
-        [1.0, 0.0, 0.0],
-        [-1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, 1.0],
     ]
     .map(Vec3::from)
     .to_vec();
@@ -28,7 +30,7 @@ pub fn plane_mesh(scale: f32) -> Mesh {
 
     let bounding_sphere = BoundingSphere {
         center: Vec3::ZERO,
-        radius: scale * 2f32.sqrt(),
+        radius: Vec2::new(width, height).length(),
     };
     Mesh {
         vertices,

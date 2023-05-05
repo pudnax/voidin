@@ -74,14 +74,15 @@ fn main() -> Result<()> {
                     .min(MAX_FRAME_TIME);
                 current_instant = new_instant;
 
+                let mut actions = vec![];
                 accumulated_time += frame_time;
                 while accumulated_time >= FIXED_TIME_STEP {
                     app_state.input.tick();
-                    let actions = app_state.update(FIXED_TIME_STEP);
-                    app.update(&app_state, actions).unwrap();
+                    actions.extend(app_state.update(FIXED_TIME_STEP));
 
                     accumulated_time -= FIXED_TIME_STEP;
                 }
+                app.update(&app_state, actions).unwrap();
             }
             Event::RedrawEventsCleared => window.request_redraw(),
             Event::RedrawRequested(_) => {

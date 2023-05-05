@@ -61,7 +61,7 @@ pub struct Mesh {
 impl Mesh {
     pub fn as_ref(&self) -> MeshRef {
         MeshRef {
-            vertices: &self.normals,
+            vertices: &self.vertices,
             normals: &self.normals,
             tangents: &self.tangents,
             tex_coords: &self.tex_coords,
