@@ -5,6 +5,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3, Vec4};
 
 use crate::{
+    models::{make_uv_sphere, plane_mesh},
     utils::{NonZeroSized, ResizableBuffer, ResizableBufferExt},
     Gpu,
 };
@@ -27,6 +28,10 @@ impl From<MeshId> for usize {
 }
 
 impl MeshId {
+    pub const fn new(id: u32) -> Self {
+        Self(id)
+    }
+
     pub fn id(&self) -> u32 {
         self.0
     }
@@ -100,6 +105,10 @@ pub struct MeshPool {
 }
 
 impl MeshPool {
+    pub const PLANE_MESH: MeshId = MeshId::new(0);
+    pub const SPHERE_1_MESH: MeshId = MeshId::new(1);
+    pub const SPHERE_10_MESH: MeshId = MeshId::new(2);
+
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let mesh_info = gpu
             .device()
@@ -139,7 +148,7 @@ impl MeshPool {
         let mesh_info_bind_group =
             Self::create_bind_group(gpu.device(), &mesh_info_layout, &mesh_info);
 
-        Self {
+        let mut this = Self {
             vertex_offset: AtomicU32::new(0),
             base_index: AtomicU32::new(0),
             mesh_index: AtomicU32::new(0),
@@ -156,7 +165,13 @@ impl MeshPool {
             indices,
 
             gpu,
-        }
+        };
+
+        this.add(plane_mesh(1., 1.).as_ref());
+        this.add(make_uv_sphere(1., 1).as_ref());
+        this.add(make_uv_sphere(1., 10).as_ref());
+
+        this
     }
 
     pub fn create_bind_group(

@@ -1,5 +1,5 @@
-const LTC1_TEXTURE = 2;
-const LTC2_TEXTURE = 3;
+const LTC1_TEXTURE = 2u;
+const LTC2_TEXTURE = 3u;
 
 const LUT_SIZE: f32 = 64.0;
 const LUT_SCALE: f32 = 0.984375; // (LUT_SIZE - 1.0) / LUT_SIZE;

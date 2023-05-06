@@ -1,6 +1,10 @@
 const PI = 3.141592;
 const TAU = 6.283185;
 
+const LIGHT_MATERIAL = 1u;
+const WHITE_TEXTURE = 0u;
+const BLACK_TEXTURE = 1u;
+
 fn hash11(x: f32) -> f32 {
     var p = fract(x * 0.1031);
     p *= p + 33.333;

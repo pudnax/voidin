@@ -1,3 +1,4 @@
+#import <utils.wgsl>
 #import <shared.wgsl>
 #import <ltc_utils.wgsl>
 
@@ -64,9 +65,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var color = vec3(0.);
 
     color = albedo.rgb * 0.01 + emissive;
+    if material_id == LIGHT_MATERIAL {
+        color = albedo.rgb + emissive;
+    }
 
     let light_count = arrayLength(&point_lights);
     for (var i = 0u; i < light_count; i += 1u) {
+        if material_id == LIGHT_MATERIAL { break; }
+
         let light = point_lights[i];
 
         let light_vec = light.position - pos;
@@ -88,6 +94,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ltc = ltc_matrix(nor, rd, saturate(metallic_roughness.x));
     let area_light_count = arrayLength(&area_lights);
     for (var i = 0u; i < area_light_count; i += 1u) {
+        if material_id == LIGHT_MATERIAL { break; }
+
         let light = area_lights[i];
 
         let diff = get_area_light_diffuse(nor, rd, pos, light.points, false);

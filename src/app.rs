@@ -242,11 +242,11 @@ impl App {
         self.world
             .get_mut::<LightPool>()?
             .add_area_light(&[AreaLight::from_transform(color, intensity, wh, transform)]);
-        let plane = self
-            .get_mesh_pool_mut()
-            .add(models::plane_mesh(wh.x / 1.5, wh.y / 1.5).as_ref());
-        self.get_instance_pool_mut()
-            .add(&[Instance::new(transform, plane, MaterialId::default())]);
+        self.get_instance_pool_mut().add(&[Instance::new(
+            transform * Mat4::from_scale((wh / 2.).extend(1.)),
+            mesh::MeshPool::PLANE_MESH,
+            MaterialId::default(),
+        )]);
         Ok(())
     }
 
