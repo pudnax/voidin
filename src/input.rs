@@ -161,7 +161,7 @@ impl Input {
 
     pub fn tick(&mut self) {
         self.keyboard_state.keys_down.values_mut().for_each(|val| {
-            val.ticks += 1;
+            val.ticks = val.ticks.wrapping_add(1);
         });
     }
 

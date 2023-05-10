@@ -73,11 +73,7 @@ impl Visibility {
             },
             fragment: Some(pipeline::FragmentState {
                 entry_point: "fs_main".into(),
-                targets: vec![
-                    Some(GBuffer::POSITIONS_FORMAT.into()),
-                    Some(GBuffer::NORMAL_FORMAT.into()),
-                    Some(GBuffer::MATERIAL_FORMAT.into()),
-                ],
+                targets: GBuffer::color_target_state().into(),
             }),
             primitive: wgpu::PrimitiveState {
                 cull_mode: Some(wgpu::Face::Back),

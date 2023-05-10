@@ -20,9 +20,10 @@ use winit::{
 fn main() -> Result<()> {
     color_eyre::install()?;
     env_logger::builder()
+        .parse_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"))
         .filter_module("wgpu_core", log::LevelFilter::Warn)
         .filter_module("wgpu_hal", log::LevelFilter::Warn)
-        .filter_module("mangohud", log::LevelFilter::Warn)
+        .filter_module("MANGOHUD", log::LevelFilter::Warn)
         .filter_module("winit", log::LevelFilter::Warn)
         .filter_module("naga", log::LevelFilter::Error)
         .init();

@@ -1,16 +1,16 @@
 #import <utils.wgsl>
 #import <shared.wgsl>
+#import <encoding.wgsl>
 #import <ltc_utils.wgsl>
 
 @group(0) @binding(0) var<uniform> global: Globals;
 @group(0) @binding(1) var<uniform> camera: Camera;
 
-@group(1) @binding(0) var t_positions: texture_2d<f32>;
-@group(1) @binding(1) var t_normal: texture_2d<f32>;
-@group(1) @binding(2) var t_material: texture_2d<u32>;
-@group(1) @binding(3) var t_depth: texture_depth_2d;
-@group(1) @binding(4) var t_sampler: sampler;
-@group(1) @binding(5) var t_int_sampler: sampler;
+@group(1) @binding(0) var t_normal_uv: texture_2d<u32>;
+@group(1) @binding(1) var t_material: texture_2d<u32>;
+@group(1) @binding(2) var t_depth: texture_depth_2d;
+@group(1) @binding(3) var t_sampler: sampler;
+@group(1) @binding(4) var t_int_sampler: sampler;
 
 @group(2) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
 @group(2) @binding(1) var tex_sampler: sampler;
@@ -48,23 +48,29 @@ fn attenuation(max_intensity: f32, falloff: f32, dist: f32, radius: f32) -> f32 
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let positions_tex = textureSample(t_positions, t_sampler, in.uv);
-    let normal_tex = textureSample(t_normal, t_sampler, in.uv);
-    let material_id = textureGather(t_material, t_int_sampler, in.uv).r;
-    let uv = vec2(positions_tex.w, normal_tex.w) * vec2(1., 1.);
+    let tex_dims = vec2f(textureDimensions(t_normal_uv));
+    let load_uv = vec2<u32>(in.uv * tex_dims + vec2(0., tex_dims.y));
+
+    let depth = textureLoad(t_depth, load_uv, 0);
+    let norm_uv_tex = textureLoad(t_normal_uv, load_uv, 0);
+    let material_id = textureLoad(t_material, load_uv, 0).r;
 
     let material = materials[material_id];
+    let uv = unpack2x16float(norm_uv_tex.y);
     let albedo = textureSample(texture_array[material.albedo], t_sampler, uv);
     let emissive = textureSample(texture_array[material.emissive], t_sampler, uv).rgb;
     let metallic_roughness = textureSample(texture_array[material.metallic_roughness], t_sampler, uv);
 
-    let pos = positions_tex.xyz;
-    let nor = normal_tex.rgb;
+    let clip = vec4(in.uv * vec2(1., -1.) * 2. - 1., depth, 1.);
+    let world_w = camera.inv_proj_view * clip;
+    let pos = world_w.xyz / world_w.w;
+
+    let nor = decode_octahedral_32(norm_uv_tex.x);
     let rd = normalize(camera.position.xyz - pos);
 
     var color = vec3(0.);
 
-    color = albedo.rgb * 0.01 + emissive;
+    color = albedo.rgb * 0.0 + emissive;
     if material_id == LIGHT_MATERIAL {
         color = albedo.rgb + emissive;
     }
@@ -81,7 +87,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let atten = attenuation(1., 1., dist, light.radius);
 
         let light_dir = normalize(light_vec);
-        let shade = max(0., dot(normal_tex.rgb, light_dir));
+        let shade = max(0., dot(nor, light_dir));
         let diff = light.color * albedo.rgb * shade * atten;
 
         let refl = reflect(-light_dir, rd);
@@ -102,8 +108,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let spec = get_area_light_specular(nor, rd, pos, ltc, light.points, false, vec3(1.));
 
         let center = mix(light.points[0], light.points[2], 0.5);
-        let atten = attenuation(light.intensity, 500., distance(center, pos), 20.);
-        color += light.color * light.intensity * (spec * atten + albedo.rgb * diff);
+        let atten = attenuation(light.intensity, 200., distance(center, pos), 15.);
+        color += light.color * light.intensity * (spec * atten + albedo.rgb * diff) ;
     }
 
     return vec4(color, 1.0);

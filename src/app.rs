@@ -245,7 +245,7 @@ impl App {
         self.get_instance_pool_mut().add(&[Instance::new(
             transform * Mat4::from_scale((wh / 2.).extend(1.)),
             mesh::MeshPool::PLANE_MESH,
-            MaterialId::default(),
+            MaterialPool::LIGHT_MATERIAL,
         )]);
         Ok(())
     }

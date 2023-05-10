@@ -21,7 +21,6 @@ struct VertexInput {
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) tangent: vec3<f32>,
     @location(3) bitangent: vec3<f32>,
@@ -39,7 +38,6 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
 
     out.clip_position = camera.proj * view_pos;
-    out.position = world_pos.xyz;
 
     let transform = transpose(mat4_to_mat3(instance.inv_transform));
     out.normal = transform * in.normal;
@@ -53,9 +51,8 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 }
 
 struct FragmentOutput {
-    @location(0) albedo_metallic: vec4<f32>,
-    @location(1) normal: vec4<f32>,
-    @location(2) @interpolate(flat)  material: u32,
+    @location(0) normal_uv: vec2<u32>,
+    @location(1) @interpolate(flat) material: u32,
 }
 
 
@@ -69,8 +66,8 @@ fn get_tbn(normal: vec3<f32>, tangent: vec3<f32>, bitangent: vec3<f32>) -> mat3x
 
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
-    let material = materials[in.material_id];
     let uv = in.uv;
+    let material = materials[in.material_id];
     let albedo_tex = textureSample(texture_array[material.albedo], tex_sampler, uv);
     let normal_tex = textureSample(texture_array[material.normal], tex_sampler, uv);
 
@@ -86,9 +83,10 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
         normal = normalize(tbn * (normal_tex.rgb * 2.0 - 1.0));
     }
 
+    let packed_norm = encode_octahedral_32(normal);
+
     return FragmentOutput(
-        vec4(in.position, uv.x),
-        vec4(normal, uv.y),
+        vec2(packed_norm, pack2x16float(in.uv)),
         in.material_id
     );
 }

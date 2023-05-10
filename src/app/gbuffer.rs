@@ -3,8 +3,7 @@ use crate::Gpu;
 use super::bind_group_layout::{self, WrappedBindGroupLayout};
 
 pub struct GBuffer {
-    pub positions_u: wgpu::TextureView,
-    pub normal_v: wgpu::TextureView,
+    pub normal_uv: wgpu::TextureView,
     pub material: wgpu::TextureView,
     pub depth: wgpu::TextureView,
 
@@ -13,19 +12,13 @@ pub struct GBuffer {
 }
 
 impl GBuffer {
-    pub const POSITIONS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-    pub const NORMAL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+    pub const NORMAL_UV_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg32Uint;
     pub const MATERIAL_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Uint;
-    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24PlusStencil8;
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
     pub const fn color_target_state() -> &'static [Option<wgpu::ColorTargetState>] {
         &[
             Some(wgpu::ColorTargetState {
-                format: Self::POSITIONS_FORMAT,
-                blend: None,
-                write_mask: wgpu::ColorWrites::ALL,
-            }),
-            Some(wgpu::ColorTargetState {
-                format: Self::NORMAL_FORMAT,
+                format: Self::NORMAL_UV_FORMAT,
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             }),
@@ -37,8 +30,8 @@ impl GBuffer {
         ]
     }
 
-    pub fn color_target_attachment(&self) -> [Option<wgpu::RenderPassColorAttachment>; 3] {
-        [&self.positions_u, &self.normal_v, &self.material].map(|view| {
+    pub fn color_target_attachment(&self) -> [Option<wgpu::RenderPassColorAttachment>; 2] {
+        [&self.normal_uv, &self.material].map(|view| {
             Some(wgpu::RenderPassColorAttachment {
                 view,
                 resolve_target: None,
@@ -57,7 +50,7 @@ impl GBuffer {
                 binding: 0,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    sample_type: wgpu::TextureSampleType::Uint,
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -67,7 +60,7 @@ impl GBuffer {
                 binding: 1,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    sample_type: wgpu::TextureSampleType::Uint,
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -77,7 +70,7 @@ impl GBuffer {
                 binding: 2,
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Uint,
+                    sample_type: wgpu::TextureSampleType::Depth,
                     view_dimension: wgpu::TextureViewDimension::D2,
                     multisampled: false,
                 },
@@ -86,21 +79,11 @@ impl GBuffer {
             wgpu::BindGroupLayoutEntry {
                 binding: 3,
                 visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Depth,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 4,
-                visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
             wgpu::BindGroupLayoutEntry {
-                binding: 5,
+                binding: 4,
                 visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                 count: None,
@@ -115,20 +98,16 @@ impl GBuffer {
             depth_or_array_layers: 1,
         };
         let mut desc = wgpu::TextureDescriptor {
-            label: Some("GBuffer: positions and u"),
+            label: Some("GBuffer: normal and uv"),
             size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: Self::POSITIONS_FORMAT,
+            format: Self::NORMAL_UV_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
-        let positions = create_view(gpu, &desc);
-
-        desc.label = Some("GBuffer: normal and v");
-        desc.format = Self::NORMAL_FORMAT;
-        let normal = create_view(gpu, &desc);
+        let normal_uv = create_view(gpu, &desc);
 
         desc.label = Some("GBuffer: material");
         desc.format = Self::MATERIAL_FORMAT;
@@ -148,9 +127,9 @@ impl GBuffer {
             .create_sampler(&crate::app::DEFAULT_SAMPLER_DESC);
         let integer_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Integer Sampler"),
-            address_mode_u: wgpu::AddressMode::Repeat,
-            address_mode_v: wgpu::AddressMode::Repeat,
-            address_mode_w: wgpu::AddressMode::Repeat,
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Nearest,
             min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
@@ -163,18 +142,14 @@ impl GBuffer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&positions),
+                    resource: wgpu::BindingResource::TextureView(&normal_uv),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&normal),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
                     resource: wgpu::BindingResource::TextureView(&material),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 3,
+                    binding: 2,
                     resource: wgpu::BindingResource::TextureView(&depth_tex.create_view(
                         &wgpu::TextureViewDescriptor {
                             aspect: wgpu::TextureAspect::DepthOnly,
@@ -183,19 +158,18 @@ impl GBuffer {
                     )),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 4,
+                    binding: 3,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 5,
+                    binding: 4,
                     resource: wgpu::BindingResource::Sampler(&integer_sampler),
                 },
             ],
         });
 
         Self {
-            positions_u: positions,
-            normal_v: normal,
+            normal_uv,
             material,
             depth,
 
