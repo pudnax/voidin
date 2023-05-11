@@ -39,7 +39,7 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
     out.clip_position = camera.proj * view_pos;
 
-    let transform = transpose(mat4_to_mat3(instance.inv_transform));
+    var transform = mat4_to_mat3(instance.transform);
     out.normal = transform * in.normal;
     out.tangent = transform * in.tangent.xyz;
     out.bitangent = cross(out.normal, out.tangent) * in.tangent.w;
@@ -54,7 +54,6 @@ struct FragmentOutput {
     @location(0) normal_uv: vec2<u32>,
     @location(1) @interpolate(flat) material: u32,
 }
-
 
 fn get_tbn(normal: vec3<f32>, tangent: vec3<f32>, bitangent: vec3<f32>) -> mat3x3<f32> {
     return mat3x3(

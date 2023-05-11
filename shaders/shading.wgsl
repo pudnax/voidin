@@ -83,6 +83,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
         let light_vec = light.position - pos;
         let dist = length(light_vec);
+        if dist - light.radius > 0. { continue; }
 
         let atten = attenuation(1., 1., dist, light.radius);
 
@@ -101,15 +102,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let area_light_count = arrayLength(&area_lights);
     for (var i = 0u; i < area_light_count; i += 1u) {
         if material_id == LIGHT_MATERIAL { break; }
+        let light_radius = 25.;
 
         let light = area_lights[i];
+        let center = mix(light.points[0], light.points[2], 0.5);
+        let light_vec = center - pos;
+        let dist = length(light_vec);
+        if dist - light_radius > 0. { continue; }
 
         let diff = get_area_light_diffuse(nor, rd, pos, light.points, false);
         let spec = get_area_light_specular(nor, rd, pos, ltc, light.points, false, vec3(1.));
 
-        let center = mix(light.points[0], light.points[2], 0.5);
-        let atten = attenuation(light.intensity, 200., distance(center, pos), 15.);
-        color += light.color * light.intensity * (spec * atten + albedo.rgb * diff) ;
+        let atten = attenuation(light.intensity, 1., distance(center, pos), light_radius);
+        color += light.color * light.intensity * (spec * 0.1 + albedo.rgb * diff) * atten;
     }
 
     return vec4(color, 1.0);

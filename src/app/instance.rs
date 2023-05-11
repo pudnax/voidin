@@ -27,7 +27,6 @@ impl InstanceId {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Instance {
     pub transform: glam::Mat4,
-    pub inv_transform: glam::Mat4,
     pub mesh: MeshId,
     pub material: MaterialId,
     junk: [u32; 2],
@@ -37,7 +36,6 @@ impl Default for Instance {
     fn default() -> Self {
         Self {
             transform: Mat4::IDENTITY,
-            inv_transform: Mat4::IDENTITY,
             mesh: MeshId::default(),
             material: MaterialId::default(),
             junk: [0; 2],
@@ -49,7 +47,6 @@ impl Instance {
     pub fn new(transform: glam::Mat4, mesh: MeshId, material: MaterialId) -> Self {
         Self {
             transform,
-            inv_transform: transform.inverse(),
             mesh,
             material,
             junk: [0; 2],
