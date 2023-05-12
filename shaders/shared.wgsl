@@ -3,6 +3,9 @@ struct Globals {
     frame: u32,
     time: f32,
 	dt: f32,
+	custom: f32,
+	prev_jitter: vec2<f32>,
+	jitter: vec2<f32>,
 };
 
 struct Camera {

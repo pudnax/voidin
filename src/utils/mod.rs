@@ -20,6 +20,18 @@ use wgpu_profiler::GpuTimerScopeResult;
 
 use crate::app::mesh::BoundingSphere;
 
+#[inline]
+pub fn halton(base: u8, mut index: usize) -> f32 {
+    let mut factor = 1.0;
+    let mut result = 0.0;
+    while index > 0 {
+        factor /= f32::from(base);
+        result += factor * (index % usize::from(base)) as f32;
+        index /= usize::from(base);
+    }
+    result
+}
+
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = { unsafe { NonZeroU64::new_unchecked(Self::SIZE as _) } };
     const SIZE: usize = {

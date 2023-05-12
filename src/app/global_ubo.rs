@@ -67,6 +67,8 @@ pub struct Uniform {
     pub time: f32,
     pub dt: f32,
     pub custom: f32,
+    pub prev_jitter: [f32; 2],
+    pub jitter: [f32; 2],
 }
 
 impl Default for Uniform {
@@ -77,6 +79,8 @@ impl Default for Uniform {
             frame: 0,
             dt: FIXED_TIME_STEP as _,
             custom: 0.,
+            prev_jitter: [0.; 2],
+            jitter: [0.; 2],
         }
     }
 }

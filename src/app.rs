@@ -19,12 +19,12 @@ use crate::{
     pass::{self, Pass},
     recorder::Recorder,
     utils::{
-        self,
+        self, halton,
         world::{Read, World, Write},
         DrawIndexedIndirect, ImageDimentions, ResizableBuffer, ResizableBufferExt,
     },
     watcher::Watcher,
-    Gpu, FIXED_TIME_STEP,
+    Gpu,
 };
 
 pub mod bind_group_layout;
@@ -158,11 +158,8 @@ impl App {
         world.insert(PipelineArena::new(gpu.clone(), file_watcher));
 
         let global_uniform = global_ubo::Uniform {
-            time: 0.,
-            frame: 0,
-            dt: FIXED_TIME_STEP as _,
-            custom: 0.,
             resolution: [surface_config.width as f32, surface_config.height as f32],
+            ..Default::default()
         };
 
         let default_sampler = gpu.device().create_sampler(&DEFAULT_SAMPLER_DESC);
@@ -272,20 +269,20 @@ impl App {
             Mat4::from_translation(vec3(0., 10., -25.)) * Mat4::from_rotation_x(-3. * PI / 4.),
         )?;
 
-        let gltf_scene = GltfDocument::import(
-            self,
-            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        )?;
-
-        instances.extend(gltf_scene.get_scene_instances(
-            Mat4::from_rotation_y(PI / 2.)
-                * Mat4::from_translation(vec3(7., -5., 1.))
-                * Mat4::from_scale(Vec3::splat(3.)),
-        ));
+        // let gltf_scene = GltfDocument::import(
+        //     self,
+        //     "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
+        //     // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+        //     // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+        //     // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+        //     // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+        // )?;
+        //
+        // instances.extend(gltf_scene.get_scene_instances(
+        //     Mat4::from_rotation_y(PI / 2.)
+        //         * Mat4::from_translation(vec3(7., -5., 1.))
+        //         * Mat4::from_scale(Vec3::splat(3.)),
+        // ));
 
         let helmet = GltfDocument::import(
             self,
@@ -460,14 +457,29 @@ impl App {
     }
 
     pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) -> Result<()> {
+        let jitter = {
+            let jitter_index = (state.frame_count % 8) + 2;
+            let x = halton(jitter_index as u8, 2) * 2. - 1.;
+            let y = halton(jitter_index as u8, 3) * 2. - 1.;
+            [
+                x / self.surface_config.width as f32,
+                y / self.surface_config.height as f32,
+            ]
+        };
+
+        self.global_uniform.prev_jitter = self.global_uniform.jitter;
+        self.global_uniform.jitter = jitter;
         self.global_uniform.frame = state.frame_count as _;
         self.global_uniform.time = state.total_time as _;
         self.world
             .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
-        self.world
-            .get_mut::<CameraUniformBinding>()?
-            .update(self.gpu.queue(), &state.camera);
+
+        self.world.get_mut::<CameraUniformBinding>()?.update(
+            self.gpu.queue(),
+            &state.camera,
+            Some(jitter),
+        );
 
         let mut encoder =
             self.gpu

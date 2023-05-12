@@ -82,8 +82,12 @@ impl CameraUniformBinding {
         }
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&camera.get_uniform()));
+    pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera, jitter: Option<[f32; 2]>) {
+        queue.write_buffer(
+            &self.buffer,
+            0,
+            bytemuck::bytes_of(&camera.get_uniform(jitter)),
+        );
     }
 
     pub fn buffer(&self) -> &wgpu::Buffer {
@@ -129,9 +133,13 @@ impl Camera {
         (proj, view)
     }
 
-    pub fn get_uniform(&self) -> CameraUniform {
+    pub fn get_uniform(&self, jitter: Option<[f32; 2]>) -> CameraUniform {
         let pos = Vec4::from((self.rig.final_transform.position, 1.));
-        let (projection, view) = self.build_projection_view_matrix();
+        let (mut projection, view) = self.build_projection_view_matrix();
+        if let Some([x, y]) = jitter {
+            projection.x_axis[3] += x;
+            projection.y_axis[3] += y;
+        }
         let proj_view = projection * view;
 
         // https://github.com/zeux/niagara/blob/3fafe000ba8fe6e309b41e915b81242b4ca3db28/src/niagara.cpp#L836-L852

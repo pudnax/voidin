@@ -70,7 +70,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var color = vec3(0.);
 
-    color = albedo.rgb * 0.0 + emissive;
+    color = albedo.rgb * 0.01 + emissive;
     if material_id == LIGHT_MATERIAL {
         color = albedo.rgb + emissive;
     }
