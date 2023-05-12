@@ -11,15 +11,14 @@ mod buffer;
 mod import_resolver;
 pub mod world;
 pub use buffer::{ResizableBuffer, ResizableBufferExt};
-use color_eyre::eyre::{eyre, Context};
-pub use import_resolver::ImportResolver;
+pub use import_resolver::{ImportResolver, ResolvedFile};
 
 use either::Either;
 use glam::Vec3;
 use wgpu::util::{align_to, DeviceExt};
 use wgpu_profiler::GpuTimerScopeResult;
 
-use crate::{app::mesh::BoundingSphere, SHADER_FOLDER};
+use crate::app::mesh::BoundingSphere;
 
 pub trait NonZeroSized: Sized {
     const NSIZE: NonZeroU64 = { unsafe { NonZeroU64::new_unchecked(Self::SIZE as _) } };
@@ -128,32 +127,6 @@ pub fn mesh_bounding_sphere(positions: &[Vec3]) -> BoundingSphere {
     let radius = center.distance(max);
 
     BoundingSphere { center, radius }
-}
-
-pub trait DeviceShaderExt {
-    fn create_shader_with_compiler(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> color_eyre::Result<wgpu::ShaderModule>;
-}
-
-impl DeviceShaderExt for wgpu::Device {
-    fn create_shader_with_compiler(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> color_eyre::Result<wgpu::ShaderModule> {
-        let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
-        let source = resolver
-            .populate(&path)
-            .with_context(|| eyre!("Failed to process file: {}", path.as_ref().display()))?
-            .contents;
-
-        let module = self.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: path.as_ref().to_str(),
-            source: wgpu::ShaderSource::Wgsl(source.into()),
-        });
-        Ok(module)
-    }
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -6,7 +6,10 @@ use std::{
 };
 
 use ahash::{AHashMap, AHashSet};
-use color_eyre::Result;
+use color_eyre::{
+    eyre::{eyre, Context},
+    Result,
+};
 use either::Either::{self, Left, Right};
 use pollster::FutureExt;
 use slotmap::{SecondaryMap, SlotMap};
@@ -15,7 +18,7 @@ use wgpu::{
     PushConstantRange, VertexAttribute, VertexFormat, VertexStepMode,
 };
 
-use crate::{app::App, utils::DeviceShaderExt, watcher::Watcher, Gpu};
+use crate::{app::App, utils::ImportResolver, watcher::Watcher, Gpu, SHADER_FOLDER};
 
 use super::{bind_group_layout, gbuffer::GBuffer, view_target};
 
@@ -28,6 +31,7 @@ pub struct PipelineArena {
     render: RenderArena,
     compute: ComputeArena,
     path_mapping: AHashMap<PathBuf, AHashSet<Either<RenderHandle, ComputeHandle>>>,
+    import_mapping: AHashMap<PathBuf, AHashSet<PathBuf>>,
     file_watcher: Watcher,
     gpu: Arc<Gpu>,
 }
@@ -144,6 +148,7 @@ impl PipelineArena {
                 cached: AHashMap::new(),
             },
             path_mapping: AHashMap::new(),
+            import_mapping: AHashMap::new(),
             file_watcher,
             gpu,
         }
@@ -172,13 +177,35 @@ impl PipelineArena {
         descriptor: RenderPipelineDescriptor,
     ) -> Result<RenderHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = self.gpu.device().create_shader_with_compiler(&path)?;
+        let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
+        let source = resolver
+            .populate(&path)
+            .with_context(|| eyre!("Failed to process file: {}", path.display()))?;
+        let module = self
+            .gpu
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: path.to_str(),
+                source: wgpu::ShaderSource::Wgsl(source.contents.into()),
+            });
         let handle = self.process_render_pipeline(&module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
-            .entry(path)
+            .entry(path.clone())
             .or_default()
             .insert(Either::Left(handle));
+
+        self.import_mapping
+            .entry(path.clone())
+            .or_default()
+            .insert(path.clone());
+        for import in source.imports {
+            self.file_watcher.watch_file(&import)?;
+            self.import_mapping
+                .entry(import)
+                .or_default()
+                .insert(path.clone());
+        }
         Ok(handle)
     }
 
@@ -197,49 +224,117 @@ impl PipelineArena {
         descriptor: ComputePipelineDescriptor,
     ) -> Result<ComputeHandle> {
         let path = path.as_ref().canonicalize()?;
-        let module = self.gpu.device().create_shader_with_compiler(&path)?;
+        let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
+        let source = resolver
+            .populate(&path)
+            .with_context(|| eyre!("Failed to process file: {}", path.display()))?;
+        let module = self
+            .gpu
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: path.to_str(),
+                source: wgpu::ShaderSource::Wgsl(source.contents.into()),
+            });
         let handle = self.process_compute_pipeline(&module, descriptor);
         self.file_watcher.watch_file(&path)?;
         self.path_mapping
-            .entry(path)
+            .entry(path.clone())
             .or_default()
             .insert(Either::Right(handle));
+
+        self.import_mapping
+            .entry(path.clone())
+            .or_default()
+            .insert(path.clone());
+        for import in source.imports {
+            self.file_watcher.watch_file(&import)?;
+            self.import_mapping
+                .entry(import)
+                .or_default()
+                .insert(path.clone());
+        }
         Ok(handle)
     }
 
-    pub fn reload_pipelines(&mut self, path: &Path, module: &wgpu::ShaderModule) {
-        let device = self.gpu.device();
-        for &handle in &self.path_mapping[path] {
-            self.gpu
-                .device()
-                .push_error_scope(wgpu::ErrorFilter::Validation);
-            match handle {
-                Left(handle) => {
-                    let desc = self.get_descriptor(handle);
-                    let pipeline = desc.process(device, module);
-                    match device.pop_error_scope().block_on() {
-                        None => {
-                            log::info!("{} reloaded successfully", desc.name());
-                            self.render.pipelines[handle] = pipeline;
-                        }
+    pub fn reload_pipelines(&mut self, path: &Path) {
+        let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
+        if self.path_mapping.contains_key(path) {
+            let source = match resolver.populate(&path) {
+                Ok(source) => source,
+                Err(err) => {
+                    log::error!("Failed to process file {}: {err}", path.display());
+                    return;
+                }
+            };
+            for import in source.imports {
+                let _ = self
+                    .file_watcher
+                    .watch_file(&import)
+                    .map_err(|err| log::error!("Failed to watch file {}: {err}", path.display()));
+                self.import_mapping
+                    .entry(import)
+                    .or_default()
+                    .insert(path.to_path_buf());
+            }
+        }
 
-                        Some(err) => {
-                            log::error!("Validation error on pipeline reloading.");
-                            eprintln!("{err}")
+        let device = self.gpu.device();
+        for path in &self.import_mapping[path] {
+            let source = match resolver.populate(&path) {
+                Ok(source) => source,
+                Err(err) => {
+                    log::error!("Failed to process file {}: {err}", path.display());
+                    continue;
+                }
+            };
+            device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let module = self
+                .gpu
+                .device()
+                .create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: path.to_str(),
+                    source: wgpu::ShaderSource::Wgsl(source.contents.into()),
+                });
+            match device.pop_error_scope().block_on() {
+                None => {}
+                Some(err) => {
+                    log::error!("Validation error on shader compilation.");
+                    eprintln!("{err}");
+                    continue;
+                }
+            }
+            for &handle in &self.path_mapping[path] {
+                self.gpu
+                    .device()
+                    .push_error_scope(wgpu::ErrorFilter::Validation);
+                match handle {
+                    Left(handle) => {
+                        let desc = self.get_descriptor(handle);
+                        let pipeline = desc.process(device, &module);
+                        match device.pop_error_scope().block_on() {
+                            None => {
+                                log::info!("{} reloaded successfully", desc.name());
+                                self.render.pipelines[handle] = pipeline;
+                            }
+
+                            Some(err) => {
+                                log::error!("Validation error on pipeline reloading.");
+                                eprintln!("{err}")
+                            }
                         }
                     }
-                }
-                Right(handle) => {
-                    let desc = self.get_descriptor(handle);
-                    let pipeline = desc.process(device, module);
-                    match device.pop_error_scope().block_on() {
-                        None => {
-                            log::info!("{} reloaded successfully", desc.name());
-                            self.compute.pipelines[handle] = pipeline;
-                        }
-                        Some(err) => {
-                            log::error!("Validation error on pipeline reloading.");
-                            eprintln!("{err}")
+                    Right(handle) => {
+                        let desc = self.get_descriptor(handle);
+                        let pipeline = desc.process(device, &module);
+                        match device.pop_error_scope().block_on() {
+                            None => {
+                                log::info!("{} reloaded successfully", desc.name());
+                                self.compute.pipelines[handle] = pipeline;
+                            }
+                            Some(err) => {
+                                log::error!("Validation error on pipeline reloading.");
+                                eprintln!("{err}")
+                            }
                         }
                     }
                 }

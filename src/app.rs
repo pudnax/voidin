@@ -508,27 +508,10 @@ impl App {
         Ok(())
     }
 
-    pub fn handle_events(&mut self, path: std::path::PathBuf, source: String) {
-        let device = self.gpu.device();
-        device.push_error_scope(wgpu::ErrorFilter::Validation);
-        let module = self
-            .device()
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: path.to_str(),
-                source: wgpu::ShaderSource::Wgsl(source.into()),
-            });
-        match device.pop_error_scope().block_on() {
-            None => {}
-            Some(err) => {
-                log::error!("Validation error on shader compilation.");
-                eprintln!("{err}");
-                return;
-            }
-        }
+    pub fn handle_events(&mut self, path: std::path::PathBuf) {
         self.world
-            .get_mut::<PipelineArena>()
-            .unwrap()
-            .reload_pipelines(&path, &module);
+            .unwrap_mut::<PipelineArena>()
+            .reload_pipelines(&path);
     }
 
     pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions)) {

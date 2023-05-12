@@ -8,14 +8,12 @@ use std::{
     time::Duration,
 };
 
-use crate::{utils::ImportResolver, SHADER_FOLDER};
-
 pub struct Watcher {
     watcher: notify_debouncer_mini::Debouncer<notify::RecommendedWatcher>,
 }
 
 impl Watcher {
-    pub fn new(proxy: EventLoopProxy<(PathBuf, String)>) -> Result<Self> {
+    pub fn new(proxy: EventLoopProxy<PathBuf>) -> Result<Self> {
         let watcher = notify_debouncer_mini::new_debouncer(
             Duration::from_millis(100),
             None,
@@ -34,7 +32,7 @@ impl Watcher {
 }
 
 fn watch_callback(
-    proxy: EventLoopProxy<(PathBuf, String)>,
+    proxy: EventLoopProxy<PathBuf>,
 ) -> impl FnMut(notify_debouncer_mini::DebounceEventResult) {
     move |event| match event {
         Ok(events) => {
@@ -50,17 +48,7 @@ fn watch_callback(
                     "TODO: Support glsl shaders."
                 );
 
-                let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
-                let source = match resolver.populate(&path) {
-                    Ok(s) => s.contents,
-                    Err(err) => {
-                        log::error!("Failed to parse imports: {err}");
-                        return;
-                    }
-                };
-                proxy
-                    .send_event((path, source))
-                    .expect("Event Loop has been dropped");
+                proxy.send_event(path).expect("Event Loop has been dropped");
             }
         }
         Err(errs) => errs.into_iter().for_each(|err| {
