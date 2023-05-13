@@ -1,3 +1,7 @@
+const LIGHT_MATERIAL = 1u;
+const WHITE_TEXTURE = 0u;
+const BLACK_TEXTURE = 1u;
+
 struct Globals {
     resolution: vec2<f32>,
     frame: u32,

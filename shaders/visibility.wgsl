@@ -1,5 +1,5 @@
 #import <shared.wgsl>
-#import <utils.wgsl>
+#import <utils/math.wgsl>
 #import <encoding.wgsl>
 
 @group(0) @binding(0) var<uniform> camera: Camera;

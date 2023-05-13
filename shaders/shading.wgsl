@@ -1,7 +1,7 @@
-#import <utils.wgsl>
 #import <shared.wgsl>
 #import <encoding.wgsl>
-#import <ltc_utils.wgsl>
+#import <utils/ltc.wgsl>
+#import <utils/uv.wgsl>
 
 @group(0) @binding(0) var<uniform> global: Globals;
 @group(0) @binding(1) var<uniform> camera: Camera;
@@ -28,8 +28,9 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
-    let uv = vec2<f32>(vec2((vertex_idx << 1u) & 2u, vertex_idx & 2u));
-    let out = VertexOutput(vec4(2.0 * uv - 1.0, 0.0, 1.0), uv * vec2(1., -1.));
+    var out: VertexOutput;
+    out.uv = vec2<f32>(vec2((vertex_idx << 1u) & 2u, vertex_idx & 2u));
+    out.pos = vec4(2.0 * out.uv.x - 1.0, (1. - out.uv.y) * 2. - 1., 0.0, 1.0);
     return out;
 }
 
@@ -49,7 +50,7 @@ fn attenuation(max_intensity: f32, falloff: f32, dist: f32, radius: f32) -> f32 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let tex_dims = vec2f(textureDimensions(t_normal_uv));
-    let load_uv = vec2<u32>(in.uv * tex_dims + vec2(0., tex_dims.y));
+    let load_uv = vec2<u32>(in.uv * tex_dims);
 
     let depth = textureLoad(t_depth, load_uv, 0);
     let norm_uv_tex = textureLoad(t_normal_uv, load_uv, 0);
@@ -61,10 +62,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let emissive = textureSample(texture_array[material.emissive], t_sampler, uv).rgb;
     let metallic_roughness = textureSample(texture_array[material.metallic_roughness], t_sampler, uv);
 
-    let clip = vec4(in.uv * vec2(1., -1.) * 2. - 1., depth, 1.);
-    let world_w = camera.inv_proj_view * clip;
-    let pos = world_w.xyz / world_w.w;
-
+    let pos = world_position_from_depth(in.uv, depth, camera.inv_proj_view);
     let nor = decode_octahedral_32(norm_uv_tex.x);
     let rd = normalize(camera.position.xyz - pos);
 

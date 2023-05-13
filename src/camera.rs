@@ -137,8 +137,8 @@ impl Camera {
         let pos = Vec4::from((self.rig.final_transform.position, 1.));
         let (mut projection, view) = self.build_projection_view_matrix();
         if let Some([x, y]) = jitter {
-            projection.w_axis[0] += x;
-            projection.w_axis[1] += y;
+            projection.z_axis[0] += x;
+            projection.z_axis[1] += y;
         }
         let proj_view = projection * view;
 
