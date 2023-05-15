@@ -275,20 +275,20 @@ impl App {
             Mat4::from_translation(vec3(0., 10., -25.)) * Mat4::from_rotation_x(-3. * PI / 4.),
         )?;
 
-        // let gltf_scene = GltfDocument::import(
-        //     self,
-        //     "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-        //     // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-        //     // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-        //     // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-        //     // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        // )?;
-        //
-        // instances.extend(gltf_scene.get_scene_instances(
-        //     Mat4::from_rotation_y(PI / 2.)
-        //         * Mat4::from_translation(vec3(7., -5., 1.))
-        //         * Mat4::from_scale(Vec3::splat(3.)),
-        // ));
+        let gltf_scene = GltfDocument::import(
+            self,
+            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
+            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
+            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
+            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
+            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
+        )?;
+
+        instances.extend(gltf_scene.get_scene_instances(
+            Mat4::from_rotation_y(PI / 2.)
+                * Mat4::from_translation(vec3(7., -5., 1.))
+                * Mat4::from_scale(Vec3::splat(3.)),
+        ));
 
         let helmet = GltfDocument::import(
             self,
@@ -417,15 +417,15 @@ impl App {
             );
         });
 
-        // wgpu_profiler!("Get TAA Output", profiler, &mut encoder, self.device(), {
-        //     self.blitter.blit_to_texture(
-        //         &mut encoder,
-        //         self.gpu.device(),
-        //         self.taa_pass.output_texture(),
-        //         self.view_target.main_view(),
-        //         ViewTarget::FORMAT,
-        //     );
-        // });
+        wgpu_profiler!("Blit TAA Output", profiler, &mut encoder, self.device(), {
+            self.blitter.blit_to_texture(
+                &mut encoder,
+                self.gpu.device(),
+                self.taa_pass.output_texture(),
+                self.view_target.main_view(),
+                ViewTarget::FORMAT,
+            );
+        });
 
         wgpu_profiler!("Postprocess", profiler, &mut encoder, self.device(), {
             self.postprocess_pass.record(
@@ -438,15 +438,13 @@ impl App {
             );
         });
 
-        wgpu_profiler!("Blitting", profiler, &mut encoder, self.device(), {
-            self.blitter.blit_to_texture(
-                &mut encoder,
-                self.gpu.device(),
-                self.view_target.main_view(),
-                &target_view,
-                self.surface_config.format,
-            );
-        });
+        self.blitter.blit_to_texture(
+            &mut encoder,
+            self.gpu.device(),
+            self.view_target.main_view(),
+            &target_view,
+            self.surface_config.format,
+        );
 
         profiler.end_scope(&mut encoder);
         profiler.resolve_queries(&mut encoder);
@@ -496,8 +494,6 @@ impl App {
             ]
         };
 
-        self.global_uniform.prev_jitter = self.global_uniform.jitter;
-        self.global_uniform.jitter = jitter;
         self.global_uniform.frame = state.frame_count as _;
         self.global_uniform.time = state.total_time as _;
         self.world
@@ -505,10 +501,9 @@ impl App {
             .update(self.gpu.queue(), &self.global_uniform);
 
         let mut camera_uniform = self.world.get_mut::<CameraUniform>()?;
-        *camera_uniform = state.camera.get_uniform(
-            Some(jitter),
-            Some(camera_uniform.projection * camera_uniform.view),
-        );
+        *camera_uniform = state
+            .camera
+            .get_uniform(Some(jitter), Some(&camera_uniform));
         self.world
             .get_mut::<CameraUniformBinding>()?
             .update(self.gpu.queue(), &camera_uniform);

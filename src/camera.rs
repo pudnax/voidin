@@ -21,6 +21,8 @@ pub struct CameraUniform {
     frustum: [f32; 4],
     zfar: f32,
     znear: f32,
+    pub jitter: [f32; 2],
+    prev_jitter: [f32; 2],
     _padding: [f32; 2],
 }
 
@@ -35,6 +37,8 @@ impl Default for CameraUniform {
             frustum: [0.; 4],
             zfar: f32::INFINITY,
             znear: Camera::ZNEAR,
+            jitter: [0.; 2],
+            prev_jitter: [0.; 2],
             _padding: [0.; 2],
         }
     }
@@ -134,7 +138,7 @@ impl Camera {
     pub fn get_uniform(
         &self,
         jitter: Option<[f32; 2]>,
-        prev_world_to_clip: Option<Mat4>,
+        previous: Option<&CameraUniform>,
     ) -> CameraUniform {
         let pos = Vec4::from((self.rig.final_transform.position, 1.));
         let (mut projection, view) = self.build_projection_view_matrix();
@@ -152,15 +156,23 @@ impl Camera {
         let frustum_y = (perspective_t.col(3) + perspective_t.col(1)).normalize();
         let frustum = vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z);
 
+        let (prev_world_to_clip, prev_jitter) = if let Some(prev) = previous {
+            ((prev.projection * prev.view), prev.jitter)
+        } else {
+            (proj_view, [0.; 2])
+        };
+
         CameraUniform {
             view_position: pos.to_array(),
             projection,
             view,
             clip_to_world: proj_view.inverse(),
-            prev_world_to_clip: prev_world_to_clip.unwrap_or(proj_view),
+            prev_world_to_clip,
             frustum: frustum.to_array(),
             zfar: f32::INFINITY,
             znear: Camera::ZNEAR,
+            jitter: jitter.unwrap_or([0.; 2]),
+            prev_jitter,
             _padding: [0.; 2],
         }
     }

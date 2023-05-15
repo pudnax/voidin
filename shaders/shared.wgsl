@@ -8,8 +8,6 @@ struct Globals {
     time: f32,
 	dt: f32,
 	custom: f32,
-	prev_jitter: vec2<f32>,
-	jitter: vec2<f32>,
 }
 
 struct Camera {
@@ -20,6 +18,8 @@ struct Camera {
 	prev_world_to_clip: mat4x4<f32>,
 	frustum: vec4<f32>,
 	zfar: f32, znear: f32,
+	jitter: vec2<f32>,
+	prev_jitter: vec2<f32>,
 }
 
 struct Light {
