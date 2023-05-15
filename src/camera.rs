@@ -14,9 +14,10 @@ use crate::{
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
     pub view_position: [f32; 4],
-    pub projection: [[f32; 4]; 4],
-    pub view: [[f32; 4]; 4],
-    pub inv_proj_view: [[f32; 4]; 4],
+    pub projection: Mat4,
+    pub view: Mat4,
+    pub clip_to_world: Mat4,
+    pub prev_world_to_clip: Mat4,
     frustum: [f32; 4],
     zfar: f32,
     znear: f32,
@@ -27,9 +28,10 @@ impl Default for CameraUniform {
     fn default() -> Self {
         Self {
             view_position: [0.0; 4],
-            projection: Mat4::IDENTITY.to_cols_array_2d(),
-            view: Mat4::IDENTITY.to_cols_array_2d(),
-            inv_proj_view: Mat4::IDENTITY.to_cols_array_2d(),
+            projection: Mat4::IDENTITY,
+            view: Mat4::IDENTITY,
+            clip_to_world: Mat4::IDENTITY,
+            prev_world_to_clip: Mat4::IDENTITY,
             frustum: [0.; 4],
             zfar: f32::INFINITY,
             znear: Camera::ZNEAR,
@@ -82,12 +84,8 @@ impl CameraUniformBinding {
         }
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue, camera: &Camera, jitter: Option<[f32; 2]>) {
-        queue.write_buffer(
-            &self.buffer,
-            0,
-            bytemuck::bytes_of(&camera.get_uniform(jitter)),
-        );
+    pub fn update(&mut self, queue: &wgpu::Queue, camera_uniform: &CameraUniform) {
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(camera_uniform));
     }
 
     pub fn buffer(&self) -> &wgpu::Buffer {
@@ -133,7 +131,11 @@ impl Camera {
         (proj, view)
     }
 
-    pub fn get_uniform(&self, jitter: Option<[f32; 2]>) -> CameraUniform {
+    pub fn get_uniform(
+        &self,
+        jitter: Option<[f32; 2]>,
+        prev_world_to_clip: Option<Mat4>,
+    ) -> CameraUniform {
         let pos = Vec4::from((self.rig.final_transform.position, 1.));
         let (mut projection, view) = self.build_projection_view_matrix();
         if let Some([x, y]) = jitter {
@@ -152,9 +154,10 @@ impl Camera {
 
         CameraUniform {
             view_position: pos.to_array(),
-            projection: projection.to_cols_array_2d(),
-            view: view.to_cols_array_2d(),
-            inv_proj_view: proj_view.inverse().to_cols_array_2d(),
+            projection,
+            view,
+            clip_to_world: proj_view.inverse(),
+            prev_world_to_clip: prev_world_to_clip.unwrap_or(proj_view),
             frustum: frustum.to_array(),
             zfar: f32::INFINITY,
             znear: Camera::ZNEAR,

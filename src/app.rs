@@ -14,7 +14,7 @@ use crate::{
         instance::Instance,
         light::{AreaLight, Light},
     },
-    camera::CameraUniformBinding,
+    camera::{CameraUniform, CameraUniformBinding},
     models::{self, GltfDocument},
     pass::{self, Pass},
     recorder::Recorder,
@@ -95,6 +95,8 @@ pub struct App {
     postprocess_pass: pass::postprocess::PostProcess,
 
     update_pass: pass::compute_update::ComputeUpdate,
+
+    taa_pass: pass::taa::Taa,
 
     default_sampler: wgpu::Sampler,
 
@@ -193,6 +195,8 @@ impl App {
         let path = Path::new("shaders").join("compute_update.wgsl");
         let update_pass = pass::compute_update::ComputeUpdate::new(&world, path)?;
 
+        let taa_pass = pass::taa::Taa::new(&world, &gbuffer, width, height)?;
+
         Ok(Self {
             surface,
             surface_config,
@@ -219,6 +223,8 @@ impl App {
             shading_pass,
 
             update_pass,
+
+            taa_pass,
 
             profiler,
             blitter: blitter::Blitter::new(gpu.device()),
@@ -399,6 +405,28 @@ impl App {
             );
         });
 
+        wgpu_profiler!("Taa", profiler, &mut encoder, self.device(), {
+            self.taa_pass.record(
+                &self.world,
+                &mut encoder,
+                pass::taa::TaaResource {
+                    gbuffer: &self.gbuffer,
+                    view_target: &self.view_target,
+                    width_height: (self.surface_config.width, self.surface_config.height),
+                },
+            );
+        });
+
+        // wgpu_profiler!("Get TAA Output", profiler, &mut encoder, self.device(), {
+        //     self.blitter.blit_to_texture(
+        //         &mut encoder,
+        //         self.gpu.device(),
+        //         self.taa_pass.output_texture(),
+        //         self.view_target.main_view(),
+        //         ViewTarget::FORMAT,
+        //     );
+        // });
+
         wgpu_profiler!("Postprocess", profiler, &mut encoder, self.device(), {
             self.postprocess_pass.record(
                 &self.world,
@@ -450,6 +478,7 @@ impl App {
         self.global_uniform.resolution = [width as f32, height as f32];
 
         self.screenshot_ctx.resize(&self.gpu, width, height);
+        self.taa_pass.resize(self.gpu.device(), width, height);
 
         if self.recorder.is_active() {
             self.recorder.finish();
@@ -475,11 +504,14 @@ impl App {
             .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
 
-        self.world.get_mut::<CameraUniformBinding>()?.update(
-            self.gpu.queue(),
-            &state.camera,
+        let mut camera_uniform = self.world.get_mut::<CameraUniform>()?;
+        *camera_uniform = state.camera.get_uniform(
             Some(jitter),
+            Some(camera_uniform.projection * camera_uniform.view),
         );
+        self.world
+            .get_mut::<CameraUniformBinding>()?
+            .update(self.gpu.queue(), &camera_uniform);
 
         let mut encoder =
             self.gpu

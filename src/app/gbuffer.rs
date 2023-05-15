@@ -82,12 +82,6 @@ impl GBuffer {
                 ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             },
-            wgpu::BindGroupLayoutEntry {
-                binding: 4,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
-                count: None,
-            },
         ],
     };
 
@@ -125,16 +119,6 @@ impl GBuffer {
         let sampler = gpu
             .device()
             .create_sampler(&crate::app::DEFAULT_SAMPLER_DESC);
-        let integer_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Integer Sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("GBuffer: bind group"),
@@ -160,10 +144,6 @@ impl GBuffer {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Sampler(&integer_sampler),
                 },
             ],
         });

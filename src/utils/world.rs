@@ -21,7 +21,7 @@ use crate::app::light::LightPool;
 use crate::app::material::MaterialPool;
 use crate::app::mesh::MeshPool;
 use crate::app::texture::TexturePool;
-use crate::camera::CameraUniformBinding;
+use crate::camera::{CameraUniform, CameraUniformBinding};
 use crate::{GlobalsBindGroup, Gpu};
 
 use super::DrawIndexedIndirect;
@@ -112,6 +112,7 @@ impl World {
         this.insert(GlobalsBindGroup::new(&gpu, &globals, &camera));
         this.insert(globals);
         this.insert(camera);
+        this.insert(CameraUniform::default());
         this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageWriteBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageReadBindGroupLayout::<u32>::new(&gpu));
