@@ -23,6 +23,11 @@ impl Watcher {
         Ok(Self { watcher })
     }
 
+    pub fn unwatch_file(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        self.watcher.watcher().unwatch(path.as_ref())?;
+        Ok(())
+    }
+
     pub fn watch_file(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.watcher
             .watcher()

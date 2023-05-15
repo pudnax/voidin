@@ -49,7 +49,7 @@ pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
                 indices.push(k1 + 1);
             }
 
-            if i != ((stack_count) - 0) {
+            if i != stack_count {
                 indices.push(k1 + 1);
                 indices.push(k2);
                 indices.push(k2 + 1);

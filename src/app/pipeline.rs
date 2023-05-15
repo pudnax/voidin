@@ -39,7 +39,6 @@ pub struct PipelineArena {
 struct RenderArena {
     pipelines: SlotMap<RenderHandle, wgpu::RenderPipeline>,
     descriptors: SecondaryMap<RenderHandle, RenderPipelineDescriptor>,
-    cached: AHashMap<RenderPipelineDescriptor, RenderHandle>,
 }
 
 impl RenderArena {
@@ -49,12 +48,10 @@ impl RenderArena {
         module: &wgpu::ShaderModule,
         descriptor: RenderPipelineDescriptor,
     ) -> RenderHandle {
-        *self.cached.entry(descriptor).or_insert_with_key(|args| {
-            let pipeline = args.process(device, module);
-            let handle = self.pipelines.insert(pipeline);
-            self.descriptors.insert(handle, args.clone());
-            handle
-        })
+        let pipeline = descriptor.process(device, module);
+        let handle = self.pipelines.insert(pipeline);
+        self.descriptors.insert(handle, descriptor);
+        handle
     }
 
     #[allow(dead_code)]
@@ -72,7 +69,6 @@ impl RenderArena {
 struct ComputeArena {
     pipelines: SlotMap<ComputeHandle, wgpu::ComputePipeline>,
     descriptors: SecondaryMap<ComputeHandle, ComputePipelineDescriptor>,
-    cached: AHashMap<ComputePipelineDescriptor, ComputeHandle>,
 }
 
 impl ComputeArena {
@@ -82,12 +78,10 @@ impl ComputeArena {
         module: &wgpu::ShaderModule,
         descriptor: ComputePipelineDescriptor,
     ) -> ComputeHandle {
-        *self.cached.entry(descriptor).or_insert_with_key(|args| {
-            let pipeline = args.process(device, module);
-            let handle = self.pipelines.insert(pipeline);
-            self.descriptors.insert(handle, args.clone());
-            handle
-        })
+        let pipeline = descriptor.process(device, module);
+        let handle = self.pipelines.insert(pipeline);
+        self.descriptors.insert(handle, descriptor);
+        handle
     }
 
     #[allow(dead_code)]
@@ -140,12 +134,10 @@ impl PipelineArena {
             render: RenderArena {
                 pipelines: SlotMap::with_key(),
                 descriptors: SecondaryMap::new(),
-                cached: AHashMap::new(),
             },
             compute: ComputeArena {
                 pipelines: SlotMap::with_key(),
                 descriptors: SecondaryMap::new(),
-                cached: AHashMap::new(),
             },
             path_mapping: AHashMap::new(),
             import_mapping: AHashMap::new(),
@@ -189,21 +181,21 @@ impl PipelineArena {
                 source: wgpu::ShaderSource::Wgsl(source.contents.into()),
             });
         let handle = self.process_render_pipeline(&module, descriptor);
-        self.file_watcher.watch_file(&path)?;
         self.path_mapping
             .entry(path.clone())
-            .or_default()
+            .or_insert_with_key(|path| {
+                let _ = self.file_watcher.watch_file(path);
+                AHashSet::new()
+            })
             .insert(Either::Left(handle));
 
-        self.import_mapping
-            .entry(path.clone())
-            .or_default()
-            .insert(path.clone());
-        for import in source.imports {
-            self.file_watcher.watch_file(&import)?;
+        for import in source.imports.into_iter().chain([path.clone()]) {
             self.import_mapping
                 .entry(import)
-                .or_default()
+                .or_insert_with_key(|import| {
+                    let _ = self.file_watcher.watch_file(import);
+                    AHashSet::new()
+                })
                 .insert(path.clone());
         }
         Ok(handle)
@@ -236,21 +228,21 @@ impl PipelineArena {
                 source: wgpu::ShaderSource::Wgsl(source.contents.into()),
             });
         let handle = self.process_compute_pipeline(&module, descriptor);
-        self.file_watcher.watch_file(&path)?;
         self.path_mapping
             .entry(path.clone())
-            .or_default()
+            .or_insert_with_key(|path| {
+                let _ = self.file_watcher.watch_file(path);
+                AHashSet::new()
+            })
             .insert(Either::Right(handle));
 
-        self.import_mapping
-            .entry(path.clone())
-            .or_default()
-            .insert(path.clone());
-        for import in source.imports {
-            self.file_watcher.watch_file(&import)?;
+        for import in source.imports.into_iter().chain([path.clone()]) {
             self.import_mapping
                 .entry(import)
-                .or_default()
+                .or_insert_with_key(|import| {
+                    let _ = self.file_watcher.watch_file(import);
+                    AHashSet::new()
+                })
                 .insert(path.clone());
         }
         Ok(handle)
@@ -258,29 +250,41 @@ impl PipelineArena {
 
     pub fn reload_pipelines(&mut self, path: &Path) {
         let mut resolver = ImportResolver::new(&[SHADER_FOLDER]);
+
         if self.path_mapping.contains_key(path) {
-            let source = match resolver.populate(&path) {
+            let source = match resolver.populate(path) {
                 Ok(source) => source,
                 Err(err) => {
                     log::error!("Failed to process file {}: {err}", path.display());
                     return;
                 }
             };
+
+            // Remove unused includes
+            for (import, links) in self.import_mapping.iter_mut() {
+                if import != path && links.contains(path) && !source.imports.contains(import) {
+                    links.remove(path);
+                }
+            }
+
+            // Add new includes
             for import in source.imports {
-                let _ = self
-                    .file_watcher
-                    .watch_file(&import)
-                    .map_err(|err| log::error!("Failed to watch file {}: {err}", path.display()));
                 self.import_mapping
                     .entry(import)
-                    .or_default()
+                    .or_insert_with_key(|import| {
+                        let _ = self.file_watcher.watch_file(import).map_err(|err| {
+                            log::error!("Failed to watch file {}: {err}", import.display())
+                        });
+                        AHashSet::new()
+                    })
                     .insert(path.to_path_buf());
             }
         }
 
         let device = self.gpu.device();
         for path in &self.import_mapping[path] {
-            let source = match resolver.populate(&path) {
+            // Compile shader module
+            let source = match resolver.populate(path) {
                 Ok(source) => source,
                 Err(err) => {
                     log::error!("Failed to process file {}: {err}", path.display());
@@ -303,6 +307,8 @@ impl PipelineArena {
                     continue;
                 }
             }
+
+            // Iterate over pipelines and update them
             for &handle in &self.path_mapping[path] {
                 self.gpu
                     .device()
@@ -426,7 +432,7 @@ impl RenderPipelineDescriptor {
 impl Default for RenderPipelineDescriptor {
     fn default() -> Self {
         Self {
-            label: Some("Pipeline".into()),
+            label: Some("Render Pipeline".into()),
             layout: vec![],
             fragment: Some(FragmentState::default()),
             vertex: VertexState::default(),

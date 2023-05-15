@@ -13,7 +13,7 @@ struct VertexOutput {
 fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
     var out: VertexOutput;
     out.uv = vec2<f32>(vec2((vertex_idx << 1u) & 2u, vertex_idx & 2u));
-    out.pos = vec4(2.0 * out.uv.x - 1.0, (1. - out.uv.y) * 2. - 1., 0.0, 1.0);
+    out.pos = vec4(2.0 * out.uv.x - 1.0, 1. - out.uv.y * 2., 0.0, 1.0);
     return out;
 }
 

@@ -10,7 +10,7 @@ struct Globals {
 	custom: f32,
 	prev_jitter: vec2<f32>,
 	jitter: vec2<f32>,
-};
+}
 
 struct Camera {
 	position: vec4<f32>,
@@ -19,7 +19,7 @@ struct Camera {
 	inv_proj_view: mat4x4<f32>,
 	frustum: vec4<f32>,
 	zfar: f32, znear: f32,
-};
+}
 
 struct Light {
 	position: vec3<f32>,
