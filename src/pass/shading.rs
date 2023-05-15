@@ -53,13 +53,13 @@ pub struct ShadingResource<'a> {
 }
 
 impl Pass for ShadingPass {
-    type Resoutces<'a> = ShadingResource<'a>;
+    type Resources<'a> = ShadingResource<'a>;
 
     fn record(
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        resources: Self::Resoutces<'_>,
+        resources: Self::Resources<'_>,
     ) {
         let globals = world.unwrap::<GlobalsBindGroup>();
         let arena = world.unwrap::<PipelineArena>();

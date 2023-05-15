@@ -47,13 +47,13 @@ pub struct ComputeUpdateResourse<'a> {
 }
 
 impl Pass for ComputeUpdate {
-    type Resoutces<'a> = ComputeUpdateResourse<'a>;
+    type Resources<'a> = ComputeUpdateResourse<'a>;
 
     fn record(
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        resources: Self::Resoutces<'_>,
+        resources: Self::Resources<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();
         let instances = world.unwrap::<InstancePool>();

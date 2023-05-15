@@ -95,12 +95,12 @@ pub struct VisibilityResource<'a> {
 }
 
 impl Pass for Visibility {
-    type Resoutces<'a> = VisibilityResource<'a>;
+    type Resources<'a> = VisibilityResource<'a>;
     fn record(
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        resources: Self::Resoutces<'_>,
+        resources: Self::Resources<'_>,
     ) {
         let meshes = world.unwrap::<MeshPool>();
         let textures = world.unwrap::<TexturePool>();
@@ -176,13 +176,13 @@ pub struct EmitDrawsResource<'a> {
 }
 
 impl Pass for EmitDraws {
-    type Resoutces<'a> = EmitDrawsResource<'a>;
+    type Resources<'a> = EmitDrawsResource<'a>;
 
     fn record(
         &self,
         world: &World,
         encoder: &mut wgpu::CommandEncoder,
-        resources: Self::Resoutces<'_>,
+        resources: Self::Resources<'_>,
     ) {
         let camera = world.unwrap::<CameraUniformBinding>();
         let meshes = world.unwrap::<MeshPool>();

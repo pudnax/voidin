@@ -65,9 +65,9 @@ pub struct PostProcessResource<'a> {
 }
 
 impl Pass for PostProcess {
-    type Resoutces<'a> = PostProcessResource<'a>;
+    type Resources<'a> = PostProcessResource<'a>;
 
-    fn record(&self, world: &World, encoder: &mut CommandEncoder, resource: Self::Resoutces<'_>) {
+    fn record(&self, world: &World, encoder: &mut CommandEncoder, resource: Self::Resources<'_>) {
         let global_ubo = world.unwrap::<GlobalUniformBinding>();
         let post_process_target = resource.view_target.post_process_write();
         let arena = world.unwrap::<PipelineArena>();
