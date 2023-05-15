@@ -15,7 +15,7 @@ pub const LTC1_TEXTURE: TextureId = TextureId(2);
 pub const LTC2_TEXTURE: TextureId = TextureId(3);
 
 mod ltc {
-    include!("ltc_matrix.inc");
+    include!("ltc_matrix.raw");
 }
 
 #[repr(C)]
