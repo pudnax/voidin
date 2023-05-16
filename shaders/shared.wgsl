@@ -20,6 +20,7 @@ struct Camera {
 	zfar: f32, znear: f32,
 	jitter: vec2<f32>,
 	prev_jitter: vec2<f32>,
+	padding: vec2<f32>,
 }
 
 struct Light {

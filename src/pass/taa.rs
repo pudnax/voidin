@@ -14,6 +14,8 @@ use crate::{
     utils::world::World,
 };
 use color_eyre::Result;
+use glam::{vec2, Vec2};
+use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
 use wgpu::{util::align_to, CommandEncoder};
 
 use super::Pass;
@@ -22,6 +24,22 @@ struct CombinedTexture {
     texture: wgpu::TextureView,
     sample_bind_group: wgpu::BindGroup,
     storage_bind_group: wgpu::BindGroup,
+}
+
+#[inline]
+fn radical_inverse(mut n: u32, base: u32) -> f32 {
+    let mut val = 0.0f32;
+    let inv_base = 1.0f32 / base as f32;
+    let mut inv_bi = inv_base;
+
+    while n > 0 {
+        let d_i = n % base;
+        val += d_i as f32 * inv_bi;
+        n = (n as f32 * inv_base) as u32;
+        inv_bi *= inv_base;
+    }
+
+    val
 }
 
 impl CombinedTexture {
@@ -86,6 +104,8 @@ pub struct Taa {
     reprojection_pipeline: ComputeHandle,
     taa_pipeline: ComputeHandle,
     sampler: wgpu::BindGroup,
+
+    jitter_samples: Vec<Vec2>,
 }
 
 impl Taa {
@@ -151,7 +171,7 @@ impl Taa {
             wgpu::TextureFormat::Rgba16Float,
             &read_texture_layout,
             &write_texture_layout,
-            Some(&format!("Motion Texture")),
+            Some("Motion Texture"),
         );
 
         let pipeline_desc = ComputePipelineDescriptor {
@@ -186,7 +206,15 @@ impl Taa {
         let taa_pipeline =
             pipeline_arena.process_compute_pipeline_from_path(shader_path, pipeline_desc)?;
 
-        let sampler = device.create_sampler(&DEFAULT_SAMPLER_DESC);
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Taa Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..DEFAULT_SAMPLER_DESC
+        });
         let sampler = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Sampler BG"),
             layout: &sampler_layout,
@@ -195,6 +223,16 @@ impl Taa {
                 resource: wgpu::BindingResource::Sampler(&sampler),
             }],
         });
+
+        let n = 16;
+        let jitter_samples = (0..n)
+            .map(|i| {
+                Vec2::new(
+                    radical_inverse(i % n + 1, 2) * 2. - 1.,
+                    radical_inverse(i % n + 1, 3) * 2. - 1.,
+                )
+            })
+            .collect();
 
         Ok(Self {
             read_texture_layout,
@@ -207,6 +245,8 @@ impl Taa {
             reprojection_pipeline,
             taa_pipeline,
             sampler,
+
+            jitter_samples,
         })
     }
 
@@ -230,12 +270,29 @@ impl Taa {
             wgpu::TextureFormat::Rgba16Float,
             &self.read_texture_layout,
             &self.write_texture_layout,
-            Some(&format!("Motion Texture")),
+            Some("Motion Texture"),
         );
     }
 
     pub fn output_texture(&self) -> &wgpu::TextureView {
         &self.history[self.active_texture.load(Ordering::Relaxed) as usize].texture
+    }
+
+    pub fn get_jitter(&mut self, frame_idx: u32, width: u32, height: u32) -> Vec2 {
+        if 0 == frame_idx % self.jitter_samples.len() as u32 && frame_idx > 0 {
+            let mut rng = SmallRng::seed_from_u64(frame_idx as u64);
+
+            let prev_sample = self.jitter_samples.last().copied();
+            loop {
+                self.jitter_samples.shuffle(&mut rng);
+                if self.jitter_samples.first().copied() != prev_sample {
+                    break;
+                }
+            }
+        }
+
+        self.jitter_samples[frame_idx as usize % self.jitter_samples.len()]
+            / vec2(width as f32, height as f32)
     }
 }
 

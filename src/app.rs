@@ -19,7 +19,7 @@ use crate::{
     pass::{self, Pass},
     recorder::Recorder,
     utils::{
-        self, halton,
+        self,
         world::{Read, World, Write},
         DrawIndexedIndirect, ImageDimentions, ResizableBuffer, ResizableBufferExt,
     },
@@ -484,26 +484,21 @@ impl App {
     }
 
     pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) -> Result<()> {
-        let jitter = {
-            let jitter_index = (state.frame_count % 8) + 2;
-            let x = halton(jitter_index as u8, 2) * 2. - 1.;
-            let y = halton(jitter_index as u8, 3) * 2. - 1.;
-            [
-                x / self.surface_config.width as f32,
-                y / self.surface_config.height as f32,
-            ]
-        };
-
         self.global_uniform.frame = state.frame_count as _;
         self.global_uniform.time = state.total_time as _;
         self.world
             .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
 
+        let jitter = self.taa_pass.get_jitter(
+            state.frame_count as u32,
+            self.surface_config.width,
+            self.surface_config.height,
+        );
         let mut camera_uniform = self.world.get_mut::<CameraUniform>()?;
         *camera_uniform = state
             .camera
-            .get_uniform(Some(jitter), Some(&camera_uniform));
+            .get_uniform(Some(jitter.to_array()), Some(&camera_uniform));
         self.world
             .get_mut::<CameraUniformBinding>()?
             .update(self.gpu.queue(), &camera_uniform);

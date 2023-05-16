@@ -1,3 +1,7 @@
+fn get_uv_comp(global_id: vec3<u32>, tex_size: vec2<u32>) -> vec2<f32> {
+    return (vec2<f32>(global_id.xy) + 0.5) / vec2<f32>(tex_size);
+}
+
 fn cs_to_uv(cs: vec2<f32>) -> vec2<f32> {
     return cs * vec2(0.5, -0.5) + vec2(0.5, 0.5);
 }

@@ -105,14 +105,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         let center = mix(light.points[0], light.points[2], 0.5);
         let light_vec = center - pos;
         let dist = length(light_vec);
-        if dist - light_radius > 0. { continue; }
 
         let diff = get_area_light_diffuse(nor, rd, pos, light.points, false);
         let spec = get_area_light_specular(nor, rd, pos, ltc, light.points, false, vec3(1.));
 
-        let atten = attenuation(light.intensity, 1., distance(center, pos), light_radius);
-        color += light.color * light.intensity * (spec * 0.1 + albedo.rgb * diff) * atten;
+        let atten = attenuation(light.intensity, 500., distance(center, pos), light_radius);
+        color += light.color * light.intensity * (spec * atten + albedo.rgb * diff) ;
     }
 
+    color = max(color, vec3(0.));
     return vec4(color, 1.0);
 }

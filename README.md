@@ -13,6 +13,7 @@ The goal of this project is to research and implement modern techniques for rend
 - Instancing for reduced memory usage
 - Deferred renderer artitecture
 - LTC based arealights
+- TAA
 
 ## Building
 
