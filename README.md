@@ -8,10 +8,10 @@ The goal of this project is to research and implement modern techniques for rend
 
 ## Features
 
-- GPU driven rendering for greatly reduced driver overhead
+- GPU driven rendering
 - Compute based frustum culling
 - Instancing for reduced memory usage
-- Deferred renderer artitecture
+- Deferred renderer architecture
 - LTC based arealights
 - TAA
 
