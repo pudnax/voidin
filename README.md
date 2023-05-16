@@ -24,3 +24,5 @@ Run `cargo build --release` from the main repository directory. Don't forget the
 * [Real-Time Polygonal-Light Shading with Linearly Transformed Cosines](https://eheitzresearch.wordpress.com/415-2/) (2016)
 * [World position reconstruction from depth](https://github.com/ARM-software/vulkan_best_practice_for_mobile_developers/blob/master/samples/performance/render_subpasses/render_subpasses_tutorial.md)
 * [Two-Pass Occlusion Culling](https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/)
+* [Temporal AA and the quest for the Holy Trail](https://www.elopezr.com/temporal-aa-and-the-quest-for-the-holy-trail/)
+* [Kajiya Renderer](https://github.com/EmbarkStudios/kajiya/blob/d3b6ac22c5306cc9d3ea5e2d62fd872bea58d8d6/docs/gi-overview.md)
