@@ -8,26 +8,14 @@
 @group(1) @binding(2) var t_depth: texture_depth_2d;
 @group(1) @binding(3) var t_sampler: sampler;
 
-struct VertexOutput {
-  @builtin(position) pos: vec4<f32>,
-  @location(0) uv: vec2<f32>,
-};
+@group(2) @binding(0) var t_motion: texture_storage_2d<rgba16float, write>;
 
-@vertex
-fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
-    var out: VertexOutput;
-    out.uv = vec2<f32>(vec2((vertex_idx << 1u) & 2u, vertex_idx & 2u));
-    out.pos = vec4(2.0 * out.uv.x - 1.0, 1. - out.uv.y * 2., 0.0, 1.0);
-    return out;
-}
-
-@fragment
-fn fs_main(
-    @builtin(position) pos: vec4<f32>,
-    @location(0) uv: vec2<f32>,
-) -> @location(0) vec4<f32> {
-    let tex_dims = vec2f(textureDimensions(t_depth));
-    let pix = vec2<i32>(uv * tex_dims);
+@compute
+@workgroup_size(8, 8, 1)
+fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let pix = vec2<i32>(global_id.xy);
+    let dims = textureDimensions(t_motion);
+    let uv = get_uv_comp(global_id, dims);
 
     var depth = 0.0;
     for (var y = -1; y <= 1; y += 1) {
@@ -45,7 +33,7 @@ fn fs_main(
 
     let velocity = (curr_position_ndc.xy + camera.jitter) - (prev_position_ndc.xy + camera.prev_jitter);
 
-    let inv_dims = 1.0 / tex_dims;
+    let inv_dims = 1.0 / vec2<f32>(dims);
     let limits = all(prev_position_ndc.xy == clamp(prev_position_ndc.xy, -1. + inv_dims, 1. - inv_dims));
-    return vec4(velocity, f32(limits), 1.);
+    textureStore(t_motion, pix, vec4(velocity, f32(limits), 1.));
 }

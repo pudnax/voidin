@@ -9,7 +9,7 @@ use crate::{
             BindGroupLayout, SingleTextureBindGroupLayout, WrappedBindGroupLayout,
         },
         gbuffer::GBuffer,
-        pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
+        pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
         ViewTarget, DEFAULT_SAMPLER_DESC,
     },
     camera::CameraUniformBinding,
@@ -18,7 +18,7 @@ use crate::{
 use color_eyre::Result;
 use glam::{vec2, Vec2};
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
-use wgpu::CommandEncoder;
+use wgpu::{util::align_to, CommandEncoder};
 
 use super::Pass;
 
@@ -26,6 +26,7 @@ struct CombinedTexture {
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     sample_bind_group: wgpu::BindGroup,
+    storage_bind_group: wgpu::BindGroup,
 }
 
 #[inline]
@@ -51,6 +52,7 @@ impl CombinedTexture {
         height: u32,
         format: wgpu::TextureFormat,
         read_bgl: &wgpu::BindGroupLayout,
+        write_bgl: &wgpu::BindGroupLayout,
         label: Option<&str>,
     ) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -65,7 +67,7 @@ impl CombinedTexture {
             dimension: wgpu::TextureDimension::D2,
             format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
@@ -78,24 +80,34 @@ impl CombinedTexture {
                 resource: wgpu::BindingResource::TextureView(&view),
             }],
         });
+        let storage_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Write Texture BG"),
+            layout: write_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            }],
+        });
 
         Self {
             texture,
             view,
             sample_bind_group,
+            storage_bind_group,
         }
     }
 }
 
 pub struct Taa {
     read_texture_layout: BindGroupLayout,
+    write_texture_layout: BindGroupLayout,
 
     active_texture: AtomicU8,
     history: [CombinedTexture; 2],
     motion_texture: CombinedTexture,
 
-    reprojection_pipeline: RenderHandle,
-    taa_pipeline: RenderHandle,
+    reprojection_pipeline: ComputeHandle,
+    taa_pipeline: ComputeHandle,
     sampler: wgpu::BindGroup,
 
     jitter_samples: Vec<Vec2>,
@@ -111,7 +123,7 @@ impl Taa {
                 label: Some("Sampler BGL"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 }],
@@ -123,11 +135,25 @@ impl Taa {
                 label: Some("History Texture BGL"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    visibility: wgpu::ShaderStages::COMPUTE,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled: false,
+                    },
+                    count: None,
+                }],
+            });
+        let write_texture_layout =
+            device.create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("History Texture BGL"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba16Float,
+                        view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
                 }],
@@ -140,6 +166,7 @@ impl Taa {
                 height,
                 wgpu::TextureFormat::Rgba16Float,
                 &read_texture_layout,
+                &write_texture_layout,
                 Some(&format!("History Texture {i}")),
             )
         });
@@ -150,23 +177,24 @@ impl Taa {
             height,
             wgpu::TextureFormat::Rgba16Float,
             &read_texture_layout,
+            &write_texture_layout,
             Some("Motion Texture"),
         );
 
-        let pipeline_desc = RenderPipelineDescriptor {
+        let pipeline_desc = ComputePipelineDescriptor {
             label: Some("Reprojection Pipeline".into()),
             layout: vec![
                 camera_binding.bind_group_layout.clone(),
                 gbuffer.bind_group_layout.clone(),
+                write_texture_layout.clone(),
             ],
-            depth_stencil: None,
             ..Default::default()
         };
         let shader_path = Path::new("shaders").join("reproject.wgsl");
         let reprojection_pipeline =
-            pipeline_arena.process_render_pipeline_from_path(shader_path, pipeline_desc)?;
+            pipeline_arena.process_compute_pipeline_from_path(shader_path, pipeline_desc)?;
 
-        let pipeline_desc = RenderPipelineDescriptor {
+        let pipeline_desc = ComputePipelineDescriptor {
             label: Some("Taa Pipeline".into()),
             layout: vec![
                 sampler_layout.clone(),
@@ -176,13 +204,14 @@ impl Taa {
                 read_texture_layout.clone(),
                 // Motion Texture
                 read_texture_layout.clone(),
+                // Output Texture
+                write_texture_layout.clone(),
             ],
-            depth_stencil: None,
             ..Default::default()
         };
         let shader_path = Path::new("shaders").join("taa.wgsl");
         let taa_pipeline =
-            pipeline_arena.process_render_pipeline_from_path(shader_path, pipeline_desc)?;
+            pipeline_arena.process_compute_pipeline_from_path(shader_path, pipeline_desc)?;
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Taa Sampler"),
@@ -214,6 +243,7 @@ impl Taa {
 
         Ok(Self {
             read_texture_layout,
+            write_texture_layout,
 
             active_texture: AtomicU8::new(0),
             history: history_textures,
@@ -235,6 +265,7 @@ impl Taa {
                 height,
                 wgpu::TextureFormat::Rgba16Float,
                 &self.read_texture_layout,
+                &self.write_texture_layout,
                 Some(&format!("History Texture {i}")),
             )
         });
@@ -245,6 +276,7 @@ impl Taa {
             height,
             wgpu::TextureFormat::Rgba16Float,
             &self.read_texture_layout,
+            &self.write_texture_layout,
             Some("Motion Texture"),
         );
     }
@@ -288,46 +320,32 @@ impl Pass for Taa {
         let arena = world.unwrap::<PipelineArena>();
 
         let (width, height) = resource.width_height;
+        let x = align_to(width, 8) / 8;
+        let y = align_to(height, 8) / 8;
 
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Reprojection Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.motion_texture.view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
         });
 
-        rpass.set_pipeline(arena.get_pipeline(self.reprojection_pipeline));
-        rpass.set_bind_group(0, &camera.binding, &[]);
-        rpass.set_bind_group(1, &resource.gbuffer.bind_group, &[]);
-        rpass.draw(0..3, 0..1);
-        drop(rpass);
+        cpass.set_pipeline(arena.get_pipeline(self.reprojection_pipeline));
+        cpass.set_bind_group(0, &camera.binding, &[]);
+        cpass.set_bind_group(1, &resource.gbuffer.bind_group, &[]);
+        cpass.set_bind_group(2, &self.motion_texture.storage_bind_group, &[]);
+        cpass.dispatch_workgroups(x, y, 1);
+        drop(cpass);
 
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("Taa Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.history[output_history].view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: true,
-                },
-            })],
-            depth_stencil_attachment: None,
         });
 
-        rpass.set_pipeline(arena.get_pipeline(self.taa_pipeline));
-        rpass.set_bind_group(0, &self.sampler, &[]);
-        rpass.set_bind_group(1, &resource.view_target.main_binding(), &[]);
-        rpass.set_bind_group(2, &self.history[input_history].sample_bind_group, &[]);
-        rpass.set_bind_group(3, &self.motion_texture.sample_bind_group, &[]);
-        rpass.draw(0..3, 0..1);
-        drop(rpass);
+        cpass.set_pipeline(arena.get_pipeline(self.taa_pipeline));
+        cpass.set_bind_group(0, &self.sampler, &[]);
+        cpass.set_bind_group(1, &resource.view_target.main_binding(), &[]);
+        cpass.set_bind_group(2, &self.history[input_history].sample_bind_group, &[]);
+        cpass.set_bind_group(3, &self.motion_texture.sample_bind_group, &[]);
+        cpass.set_bind_group(4, &self.history[output_history].storage_bind_group, &[]);
+        cpass.dispatch_workgroups(x, y, 1);
+        drop(cpass);
 
         encoder.copy_texture_to_texture(
             self.history[output_history].texture.as_image_copy(),
