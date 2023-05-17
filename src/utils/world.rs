@@ -12,8 +12,8 @@ use std::{
 };
 
 use crate::app::bind_group_layout::{
-    StorageReadBindGroupLayout, StorageReadBindGroupLayoutDyn, StorageWriteBindGroupLayout,
-    StorageWriteBindGroupLayoutDyn,
+    SingleTextureBindGroupLayout, StorageReadBindGroupLayout, StorageReadBindGroupLayoutDyn,
+    StorageWriteBindGroupLayout, StorageWriteBindGroupLayoutDyn,
 };
 use crate::app::global_ubo;
 use crate::app::instance::InstancePool;
@@ -113,6 +113,7 @@ impl World {
         this.insert(globals);
         this.insert(camera);
         this.insert(CameraUniform::default());
+        this.insert(SingleTextureBindGroupLayout::new(&gpu));
         this.insert(StorageReadBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageWriteBindGroupLayoutDyn::new(&gpu));
         this.insert(StorageReadBindGroupLayout::<u32>::new(&gpu));

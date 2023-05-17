@@ -2,17 +2,20 @@ use std::cell::RefCell;
 
 use ahash::AHashMap;
 
-use super::DEFAULT_SAMPLER_DESC;
+use crate::utils::world::World;
+
+use super::{bind_group_layout::SingleTextureBindGroupLayout, DEFAULT_SAMPLER_DESC};
 
 pub struct Blitter {
     pipelines: RefCell<AHashMap<wgpu::TextureFormat, wgpu::RenderPipeline>>,
     shader: wgpu::ShaderModule,
-    bind_group_layout: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
+    pipeline_layout: wgpu::PipelineLayout,
+    sampler: wgpu::BindGroup,
 }
 
 impl Blitter {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(world: &World) -> Self {
+        let device = world.device();
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Blit Shader"),
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(concat!(
@@ -20,67 +23,62 @@ impl Blitter {
                 "/shaders/blit.wgsl"
             )))),
         });
+        let texture_bind_group_layout = world.unwrap::<SingleTextureBindGroupLayout>();
+
         let sampler = device.create_sampler(&DEFAULT_SAMPLER_DESC);
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Blit Bind Group Layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let sampler_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Blit Sampler Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
-                },
-            ],
+                }],
+            });
+        let sampler = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Blit Sampler Bind Group"),
+            layout: &sampler_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            }],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Blit Pipeline Layout"),
+            bind_group_layouts: &[&texture_bind_group_layout, &sampler_bind_group_layout],
+            push_constant_ranges: &[],
         });
         let pipelines = RefCell::new(AHashMap::from([(
             wgpu::TextureFormat::Bgra8UnormSrgb,
-            Self::create_pipeline(device, &shader, wgpu::TextureFormat::Bgra8UnormSrgb),
+            Self::create_pipeline(
+                device,
+                &shader,
+                wgpu::TextureFormat::Bgra8UnormSrgb,
+                &pipeline_layout,
+            ),
         )]));
 
         Self {
             pipelines,
             shader,
-            bind_group_layout,
+            pipeline_layout,
             sampler,
         }
     }
 
-    pub fn blit_to_texture(
+    pub fn blit_to_texture_with_binding(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         device: &wgpu::Device,
-        src_texture: &wgpu::TextureView,
+        src_texture: &wgpu::BindGroup,
         dst_texture: &wgpu::TextureView,
         dst_format: wgpu::TextureFormat,
     ) {
         let mut pipelines = self.pipelines.borrow_mut();
-        let pipeline = pipelines
-            .entry(dst_format)
-            .or_insert_with_key(|&format| Self::create_pipeline(device, &self.shader, format));
-
-        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(src_texture),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
+        let pipeline = pipelines.entry(dst_format).or_insert_with_key(|&format| {
+            Self::create_pipeline(device, &self.shader, format, &self.pipeline_layout)
         });
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -97,74 +95,60 @@ impl Blitter {
         });
 
         render_pass.set_pipeline(pipeline);
-        render_pass.set_bind_group(0, &texture_bind_group, &[]);
+        render_pass.set_bind_group(0, &src_texture, &[]);
+        render_pass.set_bind_group(1, &self.sampler, &[]);
         render_pass.draw(0..3, 0..1);
+    }
+
+    pub fn blit_to_texture(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        world: &World,
+        src_texture: &wgpu::TextureView,
+        dst_texture: &wgpu::TextureView,
+        dst_format: wgpu::TextureFormat,
+    ) {
+        let texture_bind_group_layout = world.unwrap::<SingleTextureBindGroupLayout>();
+        let texture_bind_group = world
+            .device()
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: None,
+                layout: &texture_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(src_texture),
+                }],
+            });
+
+        self.blit_to_texture_with_binding(
+            encoder,
+            world.device(),
+            &texture_bind_group,
+            dst_texture,
+            dst_format,
+        )
     }
 
     pub fn generate_mipmaps(
         &self,
         encoder: &mut wgpu::CommandEncoder,
-        device: &wgpu::Device,
+        world: &World,
         texture: &wgpu::Texture,
     ) {
-        let mut pipelines = self.pipelines.borrow_mut();
-        let pipeline = pipelines
-            .entry(texture.format())
-            .or_insert_with_key(|&format| Self::create_pipeline(device, &self.shader, format));
-
         let mip_count = texture.mip_level_count();
-        let array_count = texture.depth_or_array_layers();
 
-        for array_layer in 0..array_count {
-            for (mip_from, mip_to) in (0..mip_count).zip(1..mip_count) {
-                let src_view = texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: Some("Blit: Src View"),
-                    base_mip_level: mip_from,
+        let views: Vec<_> = (0..mip_count)
+            .map(|base_mip_level| {
+                texture.create_view(&wgpu::TextureViewDescriptor {
+                    base_mip_level,
                     mip_level_count: Some(1),
-                    base_array_layer: array_layer,
-                    array_layer_count: Some(1),
                     ..Default::default()
-                });
-                let dst_view = texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: Some("Blit: Dst View"),
-                    base_mip_level: mip_to,
-                    mip_level_count: Some(1),
-                    base_array_layer: array_layer,
-                    array_layer_count: Some(1),
-                    ..Default::default()
-                });
+                })
+            })
+            .collect();
 
-                let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Blit: Bind Group"),
-                    layout: &self.bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&src_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&self.sampler),
-                        },
-                    ],
-                });
-
-                let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: None,
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &dst_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                });
-                rpass.set_pipeline(pipeline);
-                rpass.set_bind_group(0, &bind_group, &[]);
-                rpass.draw(0..3, 0..1);
-            }
+        for (src_view, dst_view) in views.iter().zip(views.iter().skip(1)) {
+            self.blit_to_texture(encoder, world, src_view, dst_view, texture.format());
         }
     }
 
@@ -172,10 +156,11 @@ impl Blitter {
         device: &wgpu::Device,
         shader: &wgpu::ShaderModule,
         format: wgpu::TextureFormat,
+        layout: &wgpu::PipelineLayout,
     ) -> wgpu::RenderPipeline {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Blit Pipeline"),
-            layout: None,
+            layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: "vs_main",

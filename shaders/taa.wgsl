@@ -6,7 +6,18 @@
 @group(2) @binding(0) var t_history: texture_2d<f32>;
 @group(3) @binding(0) var t_motion: texture_2d<f32>;
 
-@group(4) @binding(0) var t_output: texture_storage_2d<rgba16float, write>;
+struct VertexOutput {
+  @builtin(position) pos: vec4<f32>,
+  @location(0) uv: vec2<f32>,
+};
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
+    var out: VertexOutput;
+    out.uv = vec2<f32>(vec2((vertex_idx << 1u) & 2u, vertex_idx & 2u));
+    out.pos = vec4(2.0 * out.uv.x - 1.0, 1. - out.uv.y * 2., 0.0, 1.0);
+    return out;
+}
 
 fn mitchell_netravali(x: f32) -> f32 {
     let B = 1.0 / 3.0;
@@ -40,12 +51,13 @@ fn fetch_center_filtered(pix: vec2<i32>) -> vec3<f32> {
 }
 
 
-@compute
-@workgroup_size(8, 8, 1)
-fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let pix = vec2<i32>(global_id.xy);
-    let dims = textureDimensions(t_output);
-    let uv = get_uv_comp(global_id, dims);
+@fragment
+fn fs_main(
+    @builtin(position) pos: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+) -> @location(0) vec4<f32> {
+    let tex_dims = vec2f(textureDimensions(t_input));
+    let pix = vec2<i32>(uv * tex_dims);
 
     let velocity = textureLoad(t_motion, pix, 0);
     let history_uv = uv - velocity.xy * 0.5 * vec2(1., -1.);
@@ -77,7 +89,7 @@ fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let local_contrast = dev.x / (ex.x + 1e-5);
 
-    let history_pixel = history_uv * vec2f(dims);
+    let history_pixel = history_uv * tex_dims;
     let texel_center_dist = dot(vec2(1.0), abs(0.5 - fract(history_pixel)));
 
     var box_size = 1.0;
@@ -100,5 +112,5 @@ fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var result = mix(clamped_history, center, blend_factor);
     result = ycbcr_to_rgb(result);
 
-    textureStore(t_output, global_id.xy, vec4(result, 1.));
+    return vec4(result, 1.);
 }

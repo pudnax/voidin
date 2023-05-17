@@ -296,8 +296,7 @@ fn process_texture(
     );
     let texture_view = texture.create_view(&Default::default());
 
-    app.blitter
-        .generate_mipmaps(encoder, app.device(), &texture);
+    app.blitter.generate_mipmaps(encoder, &app.world, &texture);
 
     let texture_id = app.get_texture_pool_mut().add(texture_view);
     log::info!("Inserted texture {name} with id: {}", texture_id.id());

@@ -3,7 +3,7 @@
 
 @group(0) @binding(0) var<uniform> un: Globals;
 @group(1) @binding(0) var src_texture : texture_2d<f32>;
-@group(1) @binding(1) var src_sampler : sampler;
+@group(2) @binding(0) var src_sampler : sampler;
 
 struct VertexOutput {
   @builtin(position) pos: vec4<f32>,
@@ -54,8 +54,6 @@ fn sharpen_remap(l: f32) -> f32 {
 fn sharpen_remap_inv(l: f32) -> f32 {
     return l * l;
 }
-
-
 
 @fragment
 fn fs_main(

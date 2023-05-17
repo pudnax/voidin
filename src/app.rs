@@ -154,10 +154,10 @@ impl App {
         surface.configure(gpu.device(), &surface_config);
         let gbuffer = GBuffer::new(&gpu, surface_config.width, surface_config.height);
 
-        let view_target = view_target::ViewTarget::new(gpu.device(), width, height);
-
         let mut world = World::new(gpu.clone());
         world.insert(PipelineArena::new(gpu.clone(), file_watcher));
+
+        let view_target = view_target::ViewTarget::new(&world, width, height);
 
         let global_uniform = global_ubo::Uniform {
             resolution: [surface_config.width as f32, surface_config.height as f32],
@@ -209,8 +209,6 @@ impl App {
 
             postprocess_pass,
 
-            world,
-
             draw_cmd_buffer,
             draw_cmd_bind_group,
 
@@ -227,10 +225,11 @@ impl App {
             taa_pass,
 
             profiler,
-            blitter: blitter::Blitter::new(gpu.device()),
+            blitter: blitter::Blitter::new(&world),
             screenshot_ctx: ScreenshotCtx::new(&gpu, width, height),
             recorder: Recorder::new(),
 
+            world,
             gpu,
         })
     }
@@ -417,16 +416,6 @@ impl App {
             );
         });
 
-        wgpu_profiler!("Blit TAA Output", profiler, &mut encoder, self.device(), {
-            self.blitter.blit_to_texture(
-                &mut encoder,
-                self.gpu.device(),
-                self.taa_pass.output_texture(),
-                self.view_target.main_view(),
-                ViewTarget::FORMAT,
-            );
-        });
-
         wgpu_profiler!("Postprocess", profiler, &mut encoder, self.device(), {
             self.postprocess_pass.record(
                 &self.world,
@@ -438,10 +427,10 @@ impl App {
             );
         });
 
-        self.blitter.blit_to_texture(
+        self.blitter.blit_to_texture_with_binding(
             &mut encoder,
-            self.gpu.device(),
-            self.view_target.main_view(),
+            &self.world.device(),
+            self.view_target.main_binding(),
             &target_view,
             self.surface_config.format,
         );
@@ -472,7 +461,7 @@ impl App {
         self.surface
             .configure(self.gpu.device(), &self.surface_config);
         self.gbuffer.resize(&self.gpu, width, height);
-        self.view_target = view_target::ViewTarget::new(self.gpu.device(), width, height);
+        self.view_target = view_target::ViewTarget::new(&self.world, width, height);
         self.global_uniform.resolution = [width as f32, height as f32];
 
         self.screenshot_ctx.resize(&self.gpu, width, height);
@@ -550,7 +539,7 @@ impl App {
 
     pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions)) {
         let (frame, dims) = self.screenshot_ctx.capture_frame(
-            &self.gpu,
+            &self.world,
             &self.blitter,
             self.view_target.main_view(),
         );

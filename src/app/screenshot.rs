@@ -1,6 +1,9 @@
 use wgpu::MapMode;
 
-use crate::{utils::ImageDimentions, Gpu};
+use crate::{
+    utils::{world::World, ImageDimentions},
+    Gpu,
+};
 
 use super::blitter::Blitter;
 
@@ -74,19 +77,19 @@ impl ScreenshotCtx {
 
     pub fn capture_frame(
         &self,
-        gpu: &Gpu,
+        world: &World,
         blitter: &Blitter,
         src_texture: &wgpu::TextureView,
     ) -> (Vec<u8>, ImageDimentions) {
+        let device = world.device();
+
         let view = self.texture.create_view(&Default::default());
-        let mut encoder = gpu
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Screenshot"),
-            });
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Screenshot"),
+        });
         blitter.blit_to_texture(
             &mut encoder,
-            gpu.device(),
+            world,
             src_texture,
             &view,
             self.texture.format(),
@@ -105,7 +108,7 @@ impl ScreenshotCtx {
             self.texture.size(),
         );
 
-        let submit = gpu.queue().submit(Some(encoder.finish()));
+        let submit = world.queue().submit(Some(encoder.finish()));
 
         let image_slice = self.data.slice(0..self.image_dimentions.linear_size());
         image_slice.map_async(MapMode::Read, |res| {
@@ -114,8 +117,7 @@ impl ScreenshotCtx {
             }
         });
 
-        gpu.device()
-            .poll(wgpu::Maintain::WaitForSubmissionIndex(submit));
+        device.poll(wgpu::Maintain::WaitForSubmissionIndex(submit));
 
         let mapped_slice = image_slice.get_mapped_range();
         let frame = mapped_slice.to_vec();

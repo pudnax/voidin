@@ -31,6 +31,40 @@ impl BindGroupLayoutId {
 }
 
 #[derive(Clone, Debug)]
+pub struct SingleTextureBindGroupLayout {
+    pub layout: BindGroupLayout,
+}
+
+impl Deref for SingleTextureBindGroupLayout {
+    type Target = BindGroupLayout;
+    fn deref(&self) -> &Self::Target {
+        &self.layout
+    }
+}
+
+impl SingleTextureBindGroupLayout {
+    pub fn new(gpu: &Gpu) -> Self {
+        let layout = gpu
+            .device()
+            .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
+                label: Some(&format!("Single Texture Bind Group Layout",)),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE
+                        .union(wgpu::ShaderStages::VERTEX_FRAGMENT),
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                }],
+            });
+        Self { layout }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct StorageReadBindGroupLayout<T> {
     pub layout: BindGroupLayout,
     _marker: PhantomData<T>,

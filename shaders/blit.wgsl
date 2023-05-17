@@ -11,7 +11,7 @@ fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
 }
 
 @group(0) @binding(0) var tex: texture_2d<f32>;
-@group(0) @binding(1) var tex_sampler: sampler;
+@group(1) @binding(0) var tex_sampler: sampler;
 
 @fragment
 fn fs_main(vout: VertexOutput) -> @location(0) vec4<f32> {
