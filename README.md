@@ -15,6 +15,9 @@ The goal of this project is to research and implement modern techniques for rend
 - LTC based arealights
 - TAA
 
+## TODO
+[ ] Implement BVH for shadow rays
+
 ## Building
 
 Run `cargo build --release` from the main repository directory. Don't forget the --release since debug builds in Rust will run slowly.
