@@ -19,8 +19,8 @@ image = { version = "0.24.5", default-features = false, features = [
 	"jpeg",
 	"png",
 ] }
-notify = "5.1.0"
-notify-debouncer-mini = "0.2.1"
+notify = "6.0.0"
+notify-debouncer-mini = "0.3.0"
 slotmap = "1.0.6"
 indexmap = "1.9.3"
 pollster = { version = "0.3.0", features = ["macro"] }

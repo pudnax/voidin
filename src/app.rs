@@ -429,7 +429,7 @@ impl App {
 
         self.blitter.blit_to_texture_with_binding(
             &mut encoder,
-            &self.world.device(),
+            self.world.device(),
             self.view_target.main_binding(),
             &target_view,
             self.surface_config.format,

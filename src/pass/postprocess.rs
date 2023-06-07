@@ -91,7 +91,7 @@ impl Pass for PostProcess {
             depth_stencil_attachment: None,
         });
         pass.set_bind_group(0, &global_ubo.binding, &[]);
-        pass.set_bind_group(1, &post_process_target.source_binding, &[]);
+        pass.set_bind_group(1, post_process_target.source_binding, &[]);
         pass.set_bind_group(2, &self.sampler, &[]);
         pass.set_pipeline(arena.get_pipeline(self.pipeline));
         pass.draw(0..3, 0..1);

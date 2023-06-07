@@ -47,7 +47,7 @@ impl SingleTextureBindGroupLayout {
         let layout = gpu
             .device()
             .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
-                label: Some(&format!("Single Texture Bind Group Layout",)),
+                label: Some("Single Texture Bind Group Layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::COMPUTE

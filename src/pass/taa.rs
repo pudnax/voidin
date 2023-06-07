@@ -340,7 +340,7 @@ impl Pass for Taa {
 
         cpass.set_pipeline(arena.get_pipeline(self.taa_pipeline));
         cpass.set_bind_group(0, &self.sampler, &[]);
-        cpass.set_bind_group(1, &resource.view_target.main_binding(), &[]);
+        cpass.set_bind_group(1, resource.view_target.main_binding(), &[]);
         cpass.set_bind_group(2, &self.history[input_history].sample_bind_group, &[]);
         cpass.set_bind_group(3, &self.motion_texture.sample_bind_group, &[]);
         cpass.set_bind_group(4, &self.history[output_history].storage_bind_group, &[]);

@@ -95,7 +95,7 @@ impl Blitter {
         });
 
         render_pass.set_pipeline(pipeline);
-        render_pass.set_bind_group(0, &src_texture, &[]);
+        render_pass.set_bind_group(0, src_texture, &[]);
         render_pass.set_bind_group(1, &self.sampler, &[]);
         render_pass.draw(0..3, 0..1);
     }
@@ -160,7 +160,7 @@ impl Blitter {
     ) -> wgpu::RenderPipeline {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Blit Pipeline"),
-            layout: Some(&layout),
+            layout: Some(layout),
             vertex: wgpu::VertexState {
                 module: shader,
                 entry_point: "vs_main",
