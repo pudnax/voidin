@@ -20,7 +20,7 @@ pub struct PostProcess {
 }
 
 impl PostProcess {
-    pub fn new(world: &mut World, path: impl AsRef<Path>) -> Result<Self> {
+    pub fn new(world: &World, path: impl AsRef<Path>) -> Result<Self> {
         let global_ubo = world.get::<GlobalUniformBinding>()?;
         let mut pipeline_arena = world.get_mut::<PipelineArena>()?;
         let texture_bind_group_layout = world.unwrap::<SingleTextureBindGroupLayout>();
@@ -66,7 +66,6 @@ impl PostProcess {
 }
 
 pub struct PostProcessResource<'a> {
-    pub sampler: &'a wgpu::Sampler,
     pub view_target: &'a ViewTarget,
 }
 

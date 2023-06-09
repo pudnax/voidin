@@ -37,7 +37,7 @@ impl ObjModel {
         let mut materials = vec![];
         if let Ok(model_materials) = model_materials {
             for material in model_materials {
-                let base_color = Vec3::from_array(material.diffuse);
+                let base_color = Vec3::from_array(material.diffuse.unwrap_or([1., 1., 1.]));
                 let material_id = app.get_material_pool_mut().add(Material {
                     base_color: base_color.extend(0.5),
                     ..Default::default()

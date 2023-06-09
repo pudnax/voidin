@@ -1,27 +1,21 @@
-use std::{cell::RefCell, fmt::Display, path::Path, sync::Arc};
+use std::{cell::RefCell, fmt::Display, sync::Arc};
 
 use color_eyre::{eyre::ContextCompat, Result};
-use glam::{vec3, Mat4, Vec2, Vec3};
+use glam::{Mat4, Vec2, Vec3};
 
 use pollster::FutureExt;
-use rand::Rng;
 use wgpu::FilterMode;
-use wgpu_profiler::{wgpu_profiler, GpuProfiler};
+use wgpu_profiler::GpuProfiler;
 use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
-    app::{
-        instance::Instance,
-        light::{AreaLight, Light},
-    },
+    app::{instance::Instance, light::AreaLight},
     camera::{CameraUniform, CameraUniformBinding},
-    models::{self, GltfDocument},
-    pass::{self, Pass},
     recorder::Recorder,
     utils::{
         self,
         world::{Read, World, Write},
-        DrawIndexedIndirect, ImageDimentions, ResizableBuffer, ResizableBufferExt,
+        DrawIndexedIndirect, ImageDimentions, ResizableBuffer,
     },
     watcher::Watcher,
     Gpu,
@@ -45,9 +39,9 @@ pub(crate) use view_target::ViewTarget;
 
 use self::{
     gbuffer::GBuffer,
-    instance::{InstanceId, InstancePool},
+    instance::InstancePool,
     light::LightPool,
-    material::{MaterialId, MaterialPool},
+    material::MaterialPool,
     mesh::{MeshId, MeshPool, MeshRef},
     pipeline::PipelineArena,
     screenshot::ScreenshotCtx,
@@ -74,7 +68,7 @@ pub struct App {
     pub gpu: Arc<Gpu>,
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
-    gbuffer: GBuffer,
+    pub gbuffer: GBuffer,
     view_target: view_target::ViewTarget,
 
     global_uniform: global_ubo::Uniform,
@@ -83,22 +77,6 @@ pub struct App {
 
     draw_cmd_buffer: ResizableBuffer<DrawIndexedIndirect>,
     draw_cmd_bind_group: wgpu::BindGroup,
-
-    moving_instances: ResizableBuffer<InstanceId>,
-    moving_instances_bind_group: wgpu::BindGroup,
-
-    visibility_pass: pass::visibility::Visibility,
-    emit_draws_pass: pass::visibility::EmitDraws,
-
-    shading_pass: pass::shading::ShadingPass,
-
-    postprocess_pass: pass::postprocess::PostProcess,
-
-    update_pass: pass::compute_update::ComputeUpdate,
-
-    taa_pass: pass::taa::Taa,
-
-    default_sampler: wgpu::Sampler,
 
     pub blitter: blitter::Blitter,
 
@@ -164,21 +142,11 @@ impl App {
             ..Default::default()
         };
 
-        let default_sampler = gpu.device().create_sampler(&DEFAULT_SAMPLER_DESC);
-
         let draw_cmd_buffer = ResizableBuffer::new(
             gpu.device(),
             wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
         );
         let draw_cmd_bind_group = draw_cmd_buffer.create_storage_write_bind_group(&mut world);
-
-        let path = Path::new("shaders").join("postprocess.wgsl");
-        let postprocess_pass = pass::postprocess::PostProcess::new(&mut world, path)?;
-
-        let visibility_pass = pass::visibility::Visibility::new(&world)?;
-        let emit_draws_pass = pass::visibility::EmitDraws::new(&world)?;
-
-        let shading_pass = pass::shading::ShadingPass::new(&world, &gbuffer)?;
 
         let profiler = RefCell::new(GpuProfiler::new(
             4,
@@ -186,43 +154,16 @@ impl App {
             features,
         ));
 
-        let moving_instances = gpu
-            .device()
-            .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
-        let moving_instances_bind_group =
-            moving_instances.create_storage_read_bind_group(&mut world);
-
-        let path = Path::new("shaders").join("compute_update.wgsl");
-        let update_pass = pass::compute_update::ComputeUpdate::new(&world, path)?;
-
-        let taa_pass = pass::taa::Taa::new(&world, &gbuffer, width, height)?;
-
         Ok(Self {
             surface,
             surface_config,
             gbuffer,
             view_target,
 
-            default_sampler,
-
             global_uniform,
-
-            postprocess_pass,
 
             draw_cmd_buffer,
             draw_cmd_bind_group,
-
-            moving_instances,
-            moving_instances_bind_group,
-
-            visibility_pass,
-            emit_draws_pass,
-
-            shading_pass,
-
-            update_pass,
-
-            taa_pass,
 
             profiler,
             blitter: blitter::Blitter::new(&world),
@@ -234,7 +175,7 @@ impl App {
         })
     }
 
-    fn add_area_light(
+    pub fn add_area_light(
         &mut self,
         color: Vec3,
         intensity: f32,
@@ -253,90 +194,6 @@ impl App {
     }
 
     pub fn setup_scene(&mut self) -> Result<()> {
-        use std::f32::consts::PI;
-        let now = std::time::Instant::now();
-        let mut instances = vec![];
-
-        self.world
-            .get_mut::<LightPool>()?
-            .add_point_light(&[Light::new(vec3(0., 0.5, 0.), 10., vec3(1., 1., 1.))]);
-
-        self.add_area_light(
-            vec3(1., 1., 1.),
-            7.,
-            (5., 8.).into(),
-            Mat4::from_translation(vec3(0., 10., 15.)) * Mat4::from_rotation_x(-PI / 4.),
-        )?;
-        self.add_area_light(
-            vec3(1., 1., 1.),
-            7.,
-            (5., 8.).into(),
-            Mat4::from_translation(vec3(0., 10., -25.)) * Mat4::from_rotation_x(-3. * PI / 4.),
-        )?;
-
-        let gltf_scene = GltfDocument::import(
-            self,
-            "assets/glTF-Sample-Models/2.0/Sponza/glTF/Sponza.gltf",
-            // "assets/glTF-Sample-Models/2.0/AntiqueCamera/glTF/AntiqueCamera.gltf",
-            // "assets/glTF-Sample-Models/2.0/Buggy/glTF-Binary/Buggy.glb",
-            // "assets/glTF-Sample-Models/2.0/FlightHelmet/glTF/FlightHelmet.gltf",
-            // "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        )?;
-
-        instances.extend(gltf_scene.get_scene_instances(
-            Mat4::from_rotation_y(PI / 2.)
-                * Mat4::from_translation(vec3(7., -5., 1.))
-                * Mat4::from_scale(Vec3::splat(3.)),
-        ));
-
-        let helmet = GltfDocument::import(
-            self,
-            "assets/glTF-Sample-Models/2.0/DamagedHelmet/glTF-Binary/DamagedHelmet.glb",
-        )?;
-        instances.extend(helmet.get_scene_instances(
-            Mat4::from_translation(vec3(0., 0., 9.)) * Mat4::from_scale(Vec3::splat(3.)),
-        ));
-
-        let gltf_ferris = GltfDocument::import(self, "assets/ferris3d_v1.0.glb")?;
-        instances.extend(gltf_ferris.get_scene_instances(
-            Mat4::from_translation(vec3(-3., -5.0, -4.)) * Mat4::from_scale(Vec3::splat(3.)),
-        ));
-        instances.extend(gltf_ferris.get_scene_instances(
-            Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
-        ));
-        gltf_ferris.get_scene_instances(
-            Mat4::from_translation(vec3(2., -5.0, -2.)) * Mat4::from_scale(Vec3::splat(3.)),
-        );
-        self.world.get_mut::<InstancePool>()?.add(&instances);
-
-        let sphere_mesh = models::make_uv_sphere(1.0, 10);
-        let sphere_mesh_id = self.get_mesh_pool_mut().add(sphere_mesh.as_ref());
-
-        let mut moving_instances = vec![];
-        let mut rng = rand::thread_rng();
-        let num = 10;
-        for i in 0..num {
-            let r = 3.5;
-            let angle = 2. * PI * (i as f32) / num as f32;
-            let x = r * angle.cos();
-            let y = r * angle.sin();
-
-            moving_instances.push(instance::Instance::new(
-                Mat4::from_translation(vec3(x, y, -17.)),
-                sphere_mesh_id,
-                MaterialId::new(rng.gen_range(0..self.get_material_pool().buffer.len() as u32)),
-            ));
-
-            moving_instances.extend(gltf_ferris.get_scene_instances(
-                Mat4::from_translation(vec3(x, y + 0., -9.))
-                    * Mat4::from_rotation_z(angle)
-                    * Mat4::from_scale(Vec3::splat(2.5)),
-            ));
-        }
-
-        let moving_instances_id = self.world.get_mut::<InstancePool>()?.add(&moving_instances);
-        self.moving_instances.push(&self.gpu, &moving_instances_id);
-
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
             &self.gpu.device,
@@ -347,16 +204,15 @@ impl App {
         self.draw_cmd_bind_group = self
             .draw_cmd_buffer
             .create_storage_write_bind_group(&mut self.world);
-        self.moving_instances_bind_group = self
-            .moving_instances
-            .create_storage_read_bind_group(&mut self.world);
-
-        println!("Scene complete: {:?}", now.elapsed());
 
         Ok(())
     }
 
-    pub fn render(&self, _state: &AppState) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(
+        &self,
+        app_state: &AppState,
+        draw: impl FnOnce(RenderContext),
+    ) -> Result<(), wgpu::SurfaceError> {
         let mut profiler = self.profiler.borrow_mut();
         let target = self.surface.get_current_texture()?;
         let target_view = target.texture.create_view(&Default::default());
@@ -369,63 +225,23 @@ impl App {
 
         profiler.begin_scope("Main Render Scope ", &mut encoder, self.device());
 
-        wgpu_profiler!("Visibility", profiler, &mut encoder, self.device(), {
-            wgpu_profiler!("Emit Draws", profiler, &mut encoder, self.device(), {
-                self.emit_draws_pass.record(
-                    &self.world,
-                    &mut encoder,
-                    pass::visibility::EmitDrawsResource {
-                        draw_cmd_bind_group: &self.draw_cmd_bind_group,
-                        draw_cmd_buffer: &self.draw_cmd_buffer,
-                    },
-                );
-            });
+        let render_context = RenderContext {
+            app_state,
+            encoder: ProfilerCommandEncoder {
+                encoder: &mut encoder,
+                device: self.device(),
+                profiler: &mut profiler,
+            },
+            view_target: &self.view_target,
+            gbuffer: &self.gbuffer,
+            world: &self.world,
+            width: self.surface_config.width,
+            height: self.surface_config.height,
+            draw_cmd_buffer: &self.draw_cmd_buffer,
+            draw_cmd_bind_group: &self.draw_cmd_bind_group,
+        };
 
-            wgpu_profiler!("Geometry", profiler, &mut encoder, self.device(), {
-                self.visibility_pass.record(
-                    &self.world,
-                    &mut encoder,
-                    pass::visibility::VisibilityResource {
-                        gbuffer: &self.gbuffer,
-                        draw_cmd_buffer: &self.draw_cmd_buffer,
-                    },
-                );
-            });
-        });
-
-        wgpu_profiler!("Shading", profiler, &mut encoder, self.device(), {
-            self.shading_pass.record(
-                &self.world,
-                &mut encoder,
-                pass::shading::ShadingResource {
-                    gbuffer: &self.gbuffer,
-                    view_target: &self.view_target,
-                },
-            );
-        });
-
-        wgpu_profiler!("Taa", profiler, &mut encoder, self.device(), {
-            self.taa_pass.record(
-                &self.world,
-                &mut encoder,
-                pass::taa::TaaResource {
-                    gbuffer: &self.gbuffer,
-                    view_target: &self.view_target,
-                    width_height: (self.surface_config.width, self.surface_config.height),
-                },
-            );
-        });
-
-        wgpu_profiler!("Postprocess", profiler, &mut encoder, self.device(), {
-            self.postprocess_pass.record(
-                &self.world,
-                &mut encoder,
-                pass::postprocess::PostProcessResource {
-                    sampler: &self.default_sampler,
-                    view_target: &self.view_target,
-                },
-            );
-        });
+        draw(render_context);
 
         self.blitter.blit_to_texture_with_binding(
             &mut encoder,
@@ -465,7 +281,6 @@ impl App {
         self.global_uniform.resolution = [width as f32, height as f32];
 
         self.screenshot_ctx.resize(&self.gpu, width, height);
-        self.taa_pass.resize(self.gpu.device(), width, height);
 
         if self.recorder.is_active() {
             self.recorder.finish();
@@ -479,32 +294,10 @@ impl App {
             .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
 
-        let jitter = self.taa_pass.get_jitter(
-            state.frame_count as u32,
-            self.surface_config.width,
-            self.surface_config.height,
-        );
-        let mut camera_uniform = self.world.get_mut::<CameraUniform>()?;
-        *camera_uniform = state
-            .camera
-            .get_uniform(Some(jitter.to_array()), Some(&camera_uniform));
+        let camera_uniform = self.world.get::<CameraUniform>()?;
         self.world
             .get_mut::<CameraUniformBinding>()?
             .update(self.gpu.queue(), &camera_uniform);
-
-        let mut encoder =
-            self.gpu
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Compute Update"),
-                });
-        let resources = pass::compute_update::ComputeUpdateResourse {
-            idx_bind_group: &self.moving_instances_bind_group,
-            dispatch_size: self.moving_instances.len() as u32,
-        };
-        self.update_pass
-            .record(&self.world, &mut encoder, resources);
-        self.gpu.queue().submit(Some(encoder.finish()));
 
         if state.frame_count % 500 == 0 && std::env::var("GPU_PROFILING").is_ok() {
             let mut last_profile = vec![];
@@ -532,9 +325,7 @@ impl App {
     }
 
     pub fn handle_events(&mut self, path: std::path::PathBuf) {
-        self.world
-            .unwrap_mut::<PipelineArena>()
-            .reload_pipelines(&path);
+        self.get_pipeline_arena_mut().reload_pipelines(&path);
     }
 
     pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions)) {
@@ -546,40 +337,48 @@ impl App {
         callback(frame, dims)
     }
 
+    pub fn get_pipeline_arena(&self) -> Read<PipelineArena> {
+        self.world.unwrap::<PipelineArena>()
+    }
+
+    pub fn get_pipeline_arena_mut(&self) -> Write<PipelineArena> {
+        self.world.unwrap_mut::<PipelineArena>()
+    }
+
     pub fn add_mesh(&mut self, mesh: MeshRef) -> MeshId {
-        self.world.get_mut::<MeshPool>().unwrap().add(mesh)
+        self.world.unwrap_mut::<MeshPool>().add(mesh)
     }
 
     pub fn get_material_pool(&self) -> Read<MaterialPool> {
-        self.world.get::<MaterialPool>().unwrap()
+        self.world.unwrap::<MaterialPool>()
     }
 
     pub fn get_material_pool_mut(&self) -> Write<MaterialPool> {
-        self.world.get_mut::<MaterialPool>().unwrap()
+        self.world.unwrap_mut::<MaterialPool>()
     }
 
     pub fn get_texture_pool(&self) -> Read<TexturePool> {
-        self.world.get::<TexturePool>().unwrap()
+        self.world.unwrap::<TexturePool>()
     }
 
     pub fn get_texture_pool_mut(&self) -> Write<TexturePool> {
-        self.world.get_mut::<TexturePool>().unwrap()
+        self.world.unwrap_mut::<TexturePool>()
     }
 
     pub fn get_mesh_pool(&self) -> Read<MeshPool> {
-        self.world.get::<MeshPool>().unwrap()
+        self.world.unwrap::<MeshPool>()
     }
 
     pub fn get_mesh_pool_mut(&self) -> Write<MeshPool> {
-        self.world.get_mut::<MeshPool>().unwrap()
+        self.world.unwrap_mut::<MeshPool>()
     }
 
     pub fn get_instance_pool(&self) -> Read<InstancePool> {
-        self.world.get::<InstancePool>().unwrap()
+        self.world.unwrap::<InstancePool>()
     }
 
     pub fn get_instance_pool_mut(&self) -> Write<InstancePool> {
-        self.world.get_mut::<InstancePool>().unwrap()
+        self.world.unwrap_mut::<InstancePool>()
     }
 
     pub fn queue(&self) -> &wgpu::Queue {
@@ -650,5 +449,81 @@ impl Display for RendererInfo {
         writeln!(f, "Device type: {}", self.device_type)?;
         writeln!(f, "Backend: {}", self.backend)?;
         Ok(())
+    }
+}
+
+pub struct RenderContext<'a> {
+    pub app_state: &'a AppState,
+    pub encoder: ProfilerCommandEncoder<'a>,
+    pub view_target: &'a ViewTarget,
+    pub gbuffer: &'a GBuffer,
+    pub world: &'a World,
+    pub width: u32,
+    pub height: u32,
+    pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
+    pub draw_cmd_bind_group: &'a wgpu::BindGroup,
+}
+
+impl<'a> RenderContext<'a> {
+    pub fn get_pipeline_arena(&self) -> Read<PipelineArena> {
+        self.world.unwrap::<PipelineArena>()
+    }
+}
+
+pub struct ProfilerCommandEncoder<'a> {
+    encoder: &'a mut wgpu::CommandEncoder,
+
+    device: &'a wgpu::Device,
+    profiler: &'a mut GpuProfiler,
+}
+
+impl<'a> ProfilerCommandEncoder<'a> {
+    pub fn profile_start(&mut self, label: &str) {
+        #[cfg(debug_assertions)]
+        self.encoder.push_debug_group(label);
+        self.profiler.begin_scope(label, self.encoder, self.device);
+    }
+
+    pub fn profile_end(&mut self) {
+        self.profiler.end_scope(self.encoder);
+        #[cfg(debug_assertions)]
+        self.encoder.pop_debug_group();
+    }
+
+    pub fn begin_compute_pass(
+        &mut self,
+        desc: &wgpu::ComputePassDescriptor,
+    ) -> wgpu_profiler::scope::OwningScope<wgpu::ComputePass> {
+        wgpu_profiler::scope::OwningScope::start(
+            desc.label.unwrap_or("Compute Pass"),
+            self.profiler,
+            self.encoder.begin_compute_pass(desc),
+            self.device,
+        )
+    }
+
+    pub fn begin_render_pass<'pass>(
+        &'pass mut self,
+        desc: &wgpu::RenderPassDescriptor<'pass, '_>,
+    ) -> wgpu_profiler::scope::OwningScope<wgpu::RenderPass<'pass>> {
+        wgpu_profiler::scope::OwningScope::start(
+            desc.label.unwrap_or("Render Pass"),
+            self.profiler,
+            self.encoder.begin_render_pass(desc),
+            self.device,
+        )
+    }
+}
+
+impl<'a> std::ops::Deref for ProfilerCommandEncoder<'a> {
+    type Target = wgpu::CommandEncoder;
+
+    fn deref(&self) -> &Self::Target {
+        self.encoder
+    }
+}
+impl<'a> std::ops::DerefMut for ProfilerCommandEncoder<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.encoder
     }
 }

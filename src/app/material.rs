@@ -92,6 +92,10 @@ impl MaterialPool {
         }
     }
 
+    pub fn num_materials(&self) -> usize {
+        self.buffer.len()
+    }
+
     pub fn create_bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,

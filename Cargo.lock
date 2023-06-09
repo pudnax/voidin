@@ -1837,9 +1837,9 @@ dependencies = [
 
 [[package]]
 name = "tobj"
-version = "3.2.4"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d0bde887a49e2e09f30ba3b454cdba3fbc971703e436c527f9f69a035b45b9b"
+checksum = "b450e3ba06251ec4fc76917dafeaf55805ffb26dbf7d5500bfb9511ce63a0d1f"
 dependencies = [
  "ahash 0.8.3",
 ]
