@@ -6,8 +6,64 @@ use wgpu::util::DeviceExt;
 
 use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
-    NonZeroSized,
+    CameraUniform, CameraUniformBinding, Gpu, NonZeroSized,
 };
+
+pub struct GlobalsBindGroup {
+    pub layout: bind_group_layout::BindGroupLayout,
+    pub binding: wgpu::BindGroup,
+}
+
+impl GlobalsBindGroup {
+    pub fn new(gpu: &Gpu, globals: &GlobalUniformBinding, camera: &CameraUniformBinding) -> Self {
+        let layout = gpu.device().create_bind_group_layout_wrap(&Self::LAYOUT);
+        let binding = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Globals Bind Group"),
+            layout: &layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: globals.buffer().as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: camera.buffer().as_entire_binding(),
+                },
+            ],
+        });
+        Self { layout, binding }
+    }
+
+    const LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = wgpu::BindGroupLayoutDescriptor {
+        label: Some("Globals Bind Group Layout"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT.union(wgpu::ShaderStages::COMPUTE),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(Uniform::NSIZE),
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT.union(wgpu::ShaderStages::COMPUTE),
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: Some(CameraUniform::NSIZE),
+                },
+                count: None,
+            },
+        ],
+    };
+
+    pub fn binding(&self) -> &wgpu::BindGroup {
+        &self.binding
+    }
+}
 
 pub struct GlobalUniformBinding {
     pub binding: wgpu::BindGroup,

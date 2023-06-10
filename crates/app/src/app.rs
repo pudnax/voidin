@@ -8,7 +8,6 @@ use wgpu::FilterMode;
 use wgpu_profiler::{GpuProfiler, GpuTimerScopeResult};
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::GlobalsBindGroup;
 use components::{
     bind_group_layout::{
         SingleTextureBindGroupLayout, StorageReadBindGroupLayout, StorageReadBindGroupLayoutDyn,
@@ -30,6 +29,7 @@ pub use view_target::ViewTarget;
 
 use self::{
     gbuffer::GBuffer,
+    global_ubo::GlobalsBindGroup,
     pipeline::PipelineArena,
     screenshot::ScreenshotCtx,
     state::{AppState, StateAction},
