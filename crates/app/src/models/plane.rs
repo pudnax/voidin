@@ -1,6 +1,6 @@
 use glam::{vec4, Vec2, Vec3};
 
-use crate::pool::mesh::{BoundingSphere, Mesh};
+use crate::{BoundingSphere, Mesh};
 
 pub fn plane_mesh(width: f32, height: f32) -> Mesh {
     let width = width / 2.;

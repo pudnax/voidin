@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)]
+
 use std::{
     io,
     iter::{self, Repeat},
@@ -7,16 +9,24 @@ use std::{
 };
 
 pub mod bind_group_layout;
-pub mod blitter;
+mod blitter;
 mod buffer;
-pub mod camera;
+mod camera;
 mod import_resolver;
-pub mod input;
-pub mod recorder;
-pub mod watcher;
+mod input;
+mod recorder;
+mod watcher;
 pub mod world;
+
+pub use bind_group_layout::{BindGroupLayout, WrappedBindGroupLayout};
+pub use blitter::Blitter;
 pub use buffer::{ResizableBuffer, ResizableBufferExt};
+pub use camera::{Camera, CameraUniform, CameraUniformBinding};
 pub use import_resolver::{ImportResolver, ResolvedFile};
+pub use input::{Input, KeyMap, KeyboardMap, KeyboardState};
+pub use recorder::Recorder;
+pub use watcher::Watcher;
+pub use world::World;
 
 use either::Either;
 use glam::Vec3;

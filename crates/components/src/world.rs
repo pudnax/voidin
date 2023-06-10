@@ -87,7 +87,7 @@ impl World {
     pub fn new(gpu: Arc<Gpu>) -> Self {
         Self {
             resources: AHashMap::new(),
-            gpu: gpu.clone(),
+            gpu,
         }
     }
 

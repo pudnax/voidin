@@ -1,7 +1,7 @@
 use glam::{vec2, vec3, vec4, Vec3};
 use std::f32::consts::PI;
 
-use crate::pool::mesh::{BoundingSphere, Mesh};
+use crate::{BoundingSphere, Mesh};
 
 pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
     let vside = 4 * resolution; // stack

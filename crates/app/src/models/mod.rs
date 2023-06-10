@@ -17,10 +17,7 @@ pub use sphere::make_uv_sphere;
 
 use crate::{
     app::App,
-    pool::{
-        material::{Material, MaterialId},
-        mesh::{mesh_bounding_sphere, MeshId, MeshRef},
-    },
+    {mesh_bounding_sphere, MeshId, MeshRef}, {Material, MaterialId},
 };
 
 pub struct ObjModel;

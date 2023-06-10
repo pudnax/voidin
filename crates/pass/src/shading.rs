@@ -3,12 +3,8 @@ use std::path::Path;
 use color_eyre::Result;
 
 use app::{
-    app::{
-        gbuffer::GBuffer,
-        pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
-    },
-    pool::{light::LightPool, material::MaterialPool, texture::TexturePool},
-    GlobalsBindGroup,
+    pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
+    GBuffer, GlobalsBindGroup, ViewTarget, {LightPool, MaterialPool, TexturePool},
 };
 use components::world::World;
 
@@ -47,7 +43,7 @@ impl ShadingPass {
 
 pub struct ShadingResource<'a> {
     pub gbuffer: &'a GBuffer,
-    pub view_target: &'a app::app::ViewTarget,
+    pub view_target: &'a ViewTarget,
 }
 
 impl Pass for ShadingPass {

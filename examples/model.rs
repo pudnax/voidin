@@ -1,14 +1,9 @@
 use std::path::Path;
 
 use app::{
-    app::{App, RenderContext},
-    models::{self, GltfDocument},
-    pool::{
-        instance::{self, InstanceId, InstancePool},
-        light::{Light, LightPool},
-        material::MaterialId,
-    },
-    run, CameraUniform, Example, Gpu, ResizableBuffer, ResizableBufferExt,
+    models, run, AppState, CameraUniform, Example, GltfDocument, Gpu, Instance, MaterialId,
+    ResizableBuffer, ResizableBufferExt, {self, InstanceId, InstancePool}, {App, RenderContext},
+    {Light, LightPool},
 };
 use color_eyre::Result;
 use glam::{vec3, Mat4, Vec3};
@@ -141,7 +136,7 @@ impl Example for Model {
             let x = r * angle.cos();
             let y = r * angle.sin();
 
-            moving_instances.push(instance::Instance::new(
+            moving_instances.push(Instance::new(
                 Mat4::from_translation(vec3(x, y, -17.)),
                 sphere_mesh_id,
                 MaterialId::new(rng.gen_range(0..app.get_material_pool().num_materials() as u32)),
@@ -163,7 +158,7 @@ impl Example for Model {
         Ok(())
     }
 
-    fn update(&mut self, app: &App, app_state: &app::app::state::AppState) {
+    fn update(&mut self, app: &App, app_state: &AppState) {
         let jitter = self.taa_pass.get_jitter(
             app_state.frame_count as u32,
             app.surface_config.width,
@@ -203,7 +198,7 @@ impl Example for Model {
             width,
             height,
             ..
-        }: app::app::RenderContext,
+        }: RenderContext,
     ) {
         encoder.profile_start("Visibility");
         self.emit_draws_pass.record(

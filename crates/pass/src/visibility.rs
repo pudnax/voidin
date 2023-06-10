@@ -9,18 +9,12 @@ use wgpu::{util::align_to, IndexFormat};
 
 use super::Pass;
 
-use app::pool::{
-    instance::InstancePool, material::MaterialPool, mesh::MeshPool, texture::TexturePool,
-};
 use app::{
-    app::{
-        gbuffer::GBuffer,
-        pipeline::{
-            self, ComputeHandle, ComputePipelineDescriptor, PipelineArena, RenderHandle,
-            RenderPipelineDescriptor,
-        },
+    pipeline::{
+        self, ComputeHandle, ComputePipelineDescriptor, PipelineArena, RenderHandle,
+        RenderPipelineDescriptor,
     },
-    CameraUniformBinding,
+    CameraUniformBinding, GBuffer, InstancePool, MaterialPool, MeshPool, TexturePool,
 };
 
 pub struct Visibility {

@@ -1,9 +1,6 @@
 use app::{
-    app::{
-        pipeline::{PipelineArena, RenderHandle, VertexState},
-        App,
-    },
-    run, Example, Gpu,
+    pipeline::{self, PipelineArena, RenderHandle, VertexState},
+    run, App, AppState, Example, Gpu, RenderContext,
 };
 use color_eyre::Result;
 
@@ -21,7 +18,7 @@ impl Example for Triangle {
             .get_pipeline_arena_mut()
             .process_render_pipeline_from_path(
                 "shaders/trig.wgsl",
-                app::app::pipeline::RenderPipelineDescriptor {
+                pipeline::RenderPipelineDescriptor {
                     vertex: VertexState {
                         entry_point: "vs_main_trig".into(),
                         ..Default::default()
@@ -33,11 +30,11 @@ impl Example for Triangle {
         Ok(Self { pipeline })
     }
 
-    fn update(&mut self, _app: &App, _app_state: &app::app::state::AppState) {}
+    fn update(&mut self, _app: &App, _app_state: &AppState) {}
 
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
 
-    fn render(&self, mut ctx: app::app::RenderContext) {
+    fn render(&self, mut ctx: RenderContext) {
         let arena = ctx.world.unwrap::<PipelineArena>();
         let mut pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,

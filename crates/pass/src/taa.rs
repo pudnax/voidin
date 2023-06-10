@@ -4,12 +4,8 @@ use std::{
 };
 
 use app::{
-    app::{
-        gbuffer::GBuffer,
-        pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
-        ViewTarget, DEFAULT_SAMPLER_DESC,
-    },
-    CameraUniformBinding,
+    pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
+    CameraUniformBinding, GBuffer, ViewTarget, DEFAULT_SAMPLER_DESC,
 };
 use color_eyre::Result;
 use components::{

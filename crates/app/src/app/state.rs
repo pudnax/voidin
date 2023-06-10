@@ -3,8 +3,7 @@ use glam::Vec3;
 use winit::event::VirtualKeyCode;
 
 use components::{
-    camera::Camera,
-    input::{Input, KeyboardMap, KeyboardState},
+    Camera, {Input, KeyboardMap, KeyboardState},
 };
 
 pub enum StateAction {

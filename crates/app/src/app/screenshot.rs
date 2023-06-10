@@ -2,7 +2,7 @@ use wgpu::MapMode;
 
 use crate::Gpu;
 
-use components::{blitter::Blitter, world::World, ImageDimentions};
+use components::{world::World, Blitter, ImageDimentions};
 
 pub struct ScreenshotCtx {
     pub image_dimentions: ImageDimentions,

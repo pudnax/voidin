@@ -12,12 +12,8 @@ use glam::{Mat4, Vec4};
 
 use crate::{
     app::App,
-    pool::{
-        instance::Instance,
-        material::{Material, MaterialId},
-        mesh::{mesh_bounding_sphere, MeshId, MeshRef},
-        texture::{TextureId, BLACK_TEXTURE, WHITE_TEXTURE},
-    },
+    Instance, {mesh_bounding_sphere, MeshId, MeshRef}, {Material, MaterialId},
+    {TextureId, BLACK_TEXTURE, WHITE_TEXTURE},
 };
 use components::{FormatConversions, UnwrapRepeat};
 

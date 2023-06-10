@@ -3,11 +3,6 @@
 use color_eyre::Result;
 use std::time::Instant;
 
-use app::{
-    global_ubo::{GlobalUniformBinding, Uniform},
-    state::AppState,
-    RenderContext,
-};
 use glam::vec3;
 use log::warn;
 use wgpu::SurfaceError;
@@ -17,19 +12,26 @@ use winit::{
     event_loop::ControlFlow,
 };
 
-use crate::app::App;
-pub mod app;
+pub use crate::app::App;
+mod app;
 pub mod models;
-pub mod pool;
+mod pool;
+
+pub use crate::models::GltfDocument;
 pub use app::DEFAULT_SAMPLER_DESC;
+pub use app::{
+    gbuffer::GBuffer,
+    global_ubo::{GlobalUniformBinding, Uniform},
+    pipeline,
+    state::AppState,
+    RenderContext, ViewTarget,
+};
 pub use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
-    camera::Camera,
-    camera::{CameraUniform, CameraUniformBinding},
-    input::{KeyMap, KeyboardMap},
-    watcher::Watcher,
-    Gpu, NonZeroSized, ResizableBuffer, ResizableBufferExt,
+    Camera, Gpu, NonZeroSized, ResizableBuffer, ResizableBufferExt, Watcher,
+    {CameraUniform, CameraUniformBinding}, {KeyMap, KeyboardMap},
 };
+pub use pool::*;
 
 pub const UPDATES_PER_SECOND: u32 = 60;
 pub const FIXED_TIME_STEP: f64 = 1. / UPDATES_PER_SECOND as f64;

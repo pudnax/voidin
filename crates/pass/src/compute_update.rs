@@ -4,12 +4,9 @@ use color_eyre::Result;
 use wgpu::util::align_to;
 
 use app::{
-    app::{
-        global_ubo::GlobalUniformBinding,
-        pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
-    },
     bind_group_layout::StorageReadBindGroupLayout,
-    pool::instance::InstancePool,
+    pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
+    GlobalUniformBinding, InstancePool,
 };
 use components::world::World;
 

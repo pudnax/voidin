@@ -8,22 +8,15 @@ use wgpu::FilterMode;
 use wgpu_profiler::{GpuProfiler, GpuTimerScopeResult};
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::{
-    pool::{instance::Instance, light::AreaLight},
-    GlobalsBindGroup,
-};
+use crate::GlobalsBindGroup;
 use components::{
-    self,
     bind_group_layout::{
         SingleTextureBindGroupLayout, StorageReadBindGroupLayout, StorageReadBindGroupLayoutDyn,
         StorageWriteBindGroupLayout, StorageWriteBindGroupLayoutDyn,
     },
-    blitter,
-    camera::{CameraUniform, CameraUniformBinding},
-    recorder::Recorder,
-    watcher::Watcher,
-    world::{Read, World, Write},
-    DrawIndexedIndirect, Gpu, ImageDimentions, ResizableBuffer,
+    world::{Read, Write},
+    Blitter, DrawIndexedIndirect, Gpu, ImageDimentions, Recorder, ResizableBuffer, Watcher, World,
+    {CameraUniform, CameraUniformBinding},
 };
 
 pub mod gbuffer;
@@ -41,12 +34,9 @@ use self::{
     screenshot::ScreenshotCtx,
     state::{AppState, StateAction},
 };
-use crate::pool::{
-    instance::InstancePool,
-    light::LightPool,
-    material::MaterialPool,
-    mesh::{MeshId, MeshPool, MeshRef},
-    texture::TexturePool,
+use crate::{
+    AreaLight, Instance, InstancePool, LightPool, MaterialPool, TexturePool,
+    {MeshId, MeshPool, MeshRef},
 };
 
 pub const DEFAULT_SAMPLER_DESC: wgpu::SamplerDescriptor<'static> = wgpu::SamplerDescriptor {
@@ -78,7 +68,7 @@ pub struct App {
     draw_cmd_buffer: ResizableBuffer<DrawIndexedIndirect>,
     draw_cmd_bind_group: wgpu::BindGroup,
 
-    pub blitter: blitter::Blitter,
+    pub blitter: Blitter,
 
     recorder: Recorder,
     screenshot_ctx: ScreenshotCtx,
@@ -185,7 +175,7 @@ impl App {
             draw_cmd_bind_group,
 
             profiler,
-            blitter: blitter::Blitter::new(&world),
+            blitter: Blitter::new(&world),
             screenshot_ctx: ScreenshotCtx::new(&gpu, width, height),
             recorder: Recorder::new(),
 
@@ -215,7 +205,7 @@ impl App {
     pub fn setup_scene(&mut self) -> Result<()> {
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
-            &self.gpu.device(),
+            self.gpu.device(),
             &mut encoder,
             self.world.get_mut::<InstancePool>()?.count() as _,
         );

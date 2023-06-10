@@ -1,6 +1,6 @@
 use glam::{vec4, Vec2, Vec3};
 
-use crate::pool::mesh::{BoundingSphere, Mesh};
+use crate::{BoundingSphere, Mesh};
 
 pub fn cube_mesh(scale: f32) -> Mesh {
     let vertices = [

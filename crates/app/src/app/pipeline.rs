@@ -20,7 +20,7 @@ use wgpu::{
 
 use crate::{app::App, Gpu, SHADER_FOLDER};
 
-use components::{bind_group_layout, watcher::Watcher, ImportResolver};
+use components::{bind_group_layout, ImportResolver, Watcher};
 
 use super::{gbuffer::GBuffer, view_target};
 

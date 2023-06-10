@@ -1,10 +1,6 @@
 use app::{
-    app::{
-        global_ubo::GlobalUniformBinding,
-        pipeline::{PipelineArena, RenderPipelineDescriptor},
-        ViewTarget,
-    },
-    WrappedBindGroupLayout, DEFAULT_SAMPLER_DESC,
+    pipeline::{PipelineArena, RenderPipelineDescriptor},
+    GlobalUniformBinding, ViewTarget, WrappedBindGroupLayout, DEFAULT_SAMPLER_DESC,
 };
 use color_eyre::Result;
 use components::{bind_group_layout::SingleTextureBindGroupLayout, world::World};
@@ -14,7 +10,7 @@ use wgpu::CommandEncoder;
 use super::Pass;
 
 pub struct PostProcess {
-    pipeline: app::app::pipeline::RenderHandle,
+    pipeline: app::pipeline::RenderHandle,
     sampler: wgpu::BindGroup,
 }
 
