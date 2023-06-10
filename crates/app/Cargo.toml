@@ -1,0 +1,32 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["dylib"]
+
+[dependencies]
+wgpu = { workspace = true }
+color-eyre = { workspace = true }
+env_logger = { workspace = true }
+log = { workspace = true }
+glam = { workspace = true }
+rand = { workspace = true }
+bytemuck = { workspace = true }
+ahash = { workspace = true }
+winit = { workspace = true }
+dolly = { workspace = true }
+either = { workspace = true }
+components = { path = "../components" }
+pollster = { version = "0.3.0", features = ["macro"] }
+wgpu-profiler = "0.12.1"
+slotmap = "1.0.6"
+gltf = "1.2.0"
+image = { version = "0.24.5", default-features = false, features = [
+	"jpeg",
+	"png",
+] }
+tobj = "4.0.0"

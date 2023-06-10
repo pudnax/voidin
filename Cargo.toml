@@ -5,42 +5,36 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[workspace]
+members = ["crates/*"]
+
+[workspace.dependencies]
+glam = { version = "0.23.0", features = ["rand", "bytemuck"] }
+bytemuck = { version = "1.13.1", features = ["derive"] }
+color-eyre = "0.6.2"
 log = "0.4.17"
 env_logger = "0.10.0"
-color-eyre = "0.6.2"
-either = "1.8.1"
-bytemuck = { version = "1.13.1", features = ["derive"] }
-dolly = "0.4.1"
-glam = { version = "0.23.0", features = ["rand", "bytemuck"] }
-gltf = "1.1.0"
-tobj = "4.0.0"
-image = { version = "0.24.5", default-features = false, features = [
-	"jpeg",
-	"png",
-] }
-notify = "6.0.0"
-notify-debouncer-mini = "0.3.0"
-slotmap = "1.0.6"
-indexmap = "1.9.3"
-pollster = { version = "0.3.0", features = ["macro"] }
-wgpu = { version = "0.16.0", features = ["spirv", "naga"] }
-wgpu-profiler = "0.12.1"
-winit = "0.28.3"
-parking_lot = "0.12.1"
-chrono = "0.4.24"
-png = "0.17.8"
-crossbeam-channel = "0.5.8"
-clean-path = "0.2.1"
-rand = { version = "0.8.5", features = ["small_rng"] }
-pretty-type-name = "1.0.1"
 ahash = "0.8.3"
+wgpu = { version = "0.16.0", features = ["spirv", "naga"] }
+rand = { version = "0.8.5", features = ["small_rng"] }
+winit = "0.28.3"
+png = "0.17.8"
+dolly = "0.4.1"
+either = "1.8.1"
+
+[dependencies]
+app = { path = "crates/app" }
+pass = { path = "crates/pass" }
+wgpu = { workspace = true }
+color-eyre = { workspace = true }
+glam = { workspace = true }
+rand = { workspace = true }
 
 [profile.dev.package."*"]
 opt-level = 1
 
 [profile.release]
-panic = "abort"   # Strip expensive panic clean-up logic
+# panic = "abort"   # Strip expensive panic clean-up logic
 codegen-units = 1 # Compile crates one after another so the compiler can optimize better
 lto = true        # Enables link to optimizations
 strip = true      # Remove debug symbols

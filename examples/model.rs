@@ -1,22 +1,19 @@
 use std::path::Path;
 
-use color_eyre::Result;
-use glam::{vec3, Mat4, Vec3};
-use rand::Rng;
-use voidin::{
-    app::{
+use app::{
+    app::{App, RenderContext},
+    models::{self, GltfDocument},
+    pool::{
         instance::{self, InstanceId, InstancePool},
         light::{Light, LightPool},
         material::MaterialId,
-        App, RenderContext,
     },
-    camera::CameraUniform,
-    models::{self, GltfDocument},
-    pass::{self, Pass},
-    run,
-    utils::{ResizableBuffer, ResizableBufferExt},
-    Example, Gpu,
+    run, CameraUniform, Example, Gpu, ResizableBuffer, ResizableBufferExt,
 };
+use color_eyre::Result;
+use glam::{vec3, Mat4, Vec3};
+use pass::Pass;
+use rand::Rng;
 
 struct Model {
     visibility_pass: pass::visibility::Visibility,
@@ -166,7 +163,7 @@ impl Example for Model {
         Ok(())
     }
 
-    fn update(&mut self, app: &App, app_state: &voidin::app::state::AppState) {
+    fn update(&mut self, app: &App, app_state: &app::app::state::AppState) {
         let jitter = self.taa_pass.get_jitter(
             app_state.frame_count as u32,
             app.surface_config.width,
@@ -206,7 +203,7 @@ impl Example for Model {
             width,
             height,
             ..
-        }: voidin::app::RenderContext,
+        }: app::app::RenderContext,
     ) {
         encoder.profile_start("Visibility");
         self.emit_draws_pass.record(
