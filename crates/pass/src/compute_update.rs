@@ -49,7 +49,7 @@ impl Pass for ComputeUpdate {
     fn record(
         &self,
         world: &World,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut app::ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();

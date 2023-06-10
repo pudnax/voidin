@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use app::{
+    egui,
     pipeline::{self, PipelineArena, RenderHandle, VertexState},
-    run, App, AppState, Example, Gpu, RenderContext,
+    run_default, App, Example, Gpu, RenderContext, UpdateContext,
 };
 use color_eyre::Result;
 
@@ -30,7 +33,7 @@ impl Example for Triangle {
         Ok(Self { pipeline })
     }
 
-    fn update(&mut self, _app: &App, _app_state: &AppState) {}
+    fn update(&mut self, _ctx: UpdateContext) {}
 
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
 
@@ -56,9 +59,19 @@ impl Example for Triangle {
 
         pass.set_pipeline(arena.get_pipeline(self.pipeline));
         pass.draw(0..3, 0..1);
+        drop(pass);
+
+        ctx.ui(|egui_ctx| {
+            egui::Window::new("debug").show(egui_ctx, |ui| {
+                ui.label(format!(
+                    "Fps: {:.04?}",
+                    Duration::from_secs_f64(ctx.app_state.dt)
+                ));
+            });
+        });
     }
 }
 
 fn main() -> Result<()> {
-    run::<Triangle>()
+    run_default::<Triangle>()
 }

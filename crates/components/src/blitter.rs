@@ -7,7 +7,7 @@ use crate::world::World;
 use super::bind_group_layout::SingleTextureBindGroupLayout;
 
 pub struct Blitter {
-    pipelines: RefCell<AHashMap<wgpu::TextureFormat, wgpu::RenderPipeline>>,
+    pipelines: RefCell<AHashMap<(wgpu::TextureFormat, bool), wgpu::RenderPipeline>>,
     shader: wgpu::ShaderModule,
     pipeline_layout: wgpu::PipelineLayout,
     sampler: wgpu::BindGroup,
@@ -60,18 +60,9 @@ impl Blitter {
             bind_group_layouts: &[&texture_bind_group_layout, &sampler_bind_group_layout],
             push_constant_ranges: &[],
         });
-        let pipelines = RefCell::new(AHashMap::from([(
-            wgpu::TextureFormat::Bgra8UnormSrgb,
-            Self::create_pipeline(
-                device,
-                &shader,
-                wgpu::TextureFormat::Bgra8UnormSrgb,
-                &pipeline_layout,
-            ),
-        )]));
 
         Self {
-            pipelines,
+            pipelines: RefCell::new(AHashMap::new()),
             shader,
             pipeline_layout,
             sampler,
@@ -87,8 +78,14 @@ impl Blitter {
         dst_format: wgpu::TextureFormat,
     ) {
         let mut pipelines = self.pipelines.borrow_mut();
-        let pipeline = pipelines.entry(dst_format).or_insert_with_key(|&format| {
-            Self::create_pipeline(device, &self.shader, format, &self.pipeline_layout)
+        let pipeline = pipelines.entry((dst_format, false)).or_insert_with(|| {
+            Self::create_pipeline(
+                device,
+                &self.shader,
+                dst_format,
+                &self.pipeline_layout,
+                false,
+            )
         });
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -158,7 +155,47 @@ impl Blitter {
             .collect();
 
         for (src_view, dst_view) in views.iter().zip(views.iter().skip(1)) {
-            self.blit_to_texture(encoder, world, src_view, dst_view, texture.format());
+            let texture_bind_group_layout = world.unwrap::<SingleTextureBindGroupLayout>();
+            let texture_bind_group = world
+                .device()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: None,
+                    layout: &texture_bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(src_view),
+                    }],
+                });
+            let mut pipelines = self.pipelines.borrow_mut();
+            let pipeline = pipelines
+                .entry((texture.format(), true))
+                .or_insert_with(|| {
+                    Self::create_pipeline(
+                        world.device(),
+                        &self.shader,
+                        texture.format(),
+                        &self.pipeline_layout,
+                        true,
+                    )
+                });
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Blit Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: dst_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &texture_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.sampler, &[]);
+            render_pass.draw(0..3, 0..1);
         }
     }
 
@@ -167,7 +204,17 @@ impl Blitter {
         shader: &wgpu::ShaderModule,
         format: wgpu::TextureFormat,
         layout: &wgpu::PipelineLayout,
+        mipmap: bool,
     ) -> wgpu::RenderPipeline {
+        let entry_point = if mipmap {
+            "fs_main"
+        } else {
+            match format {
+                wgpu::TextureFormat::Rgba8UnormSrgb => "fs_main",
+                wgpu::TextureFormat::Bgra8UnormSrgb => "fs_main",
+                _ => "fs_main_srgb",
+            }
+        };
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Blit Pipeline"),
             layout: Some(layout),
@@ -178,7 +225,7 @@ impl Blitter {
             },
             fragment: Some(wgpu::FragmentState {
                 module: shader,
-                entry_point: "fs_main",
+                entry_point,
                 targets: &[Some(format.into())],
             }),
             primitive: wgpu::PrimitiveState {

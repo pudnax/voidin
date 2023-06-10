@@ -93,7 +93,7 @@ impl Pass for Visibility {
     fn record(
         &self,
         world: &World,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut app::ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let meshes = world.unwrap::<MeshPool>();
@@ -175,7 +175,7 @@ impl Pass for EmitDraws {
     fn record(
         &self,
         world: &World,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut app::ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let camera = world.unwrap::<CameraUniformBinding>();

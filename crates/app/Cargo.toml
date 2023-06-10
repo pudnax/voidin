@@ -30,3 +30,6 @@ image = { version = "0.24.5", default-features = false, features = [
 	"png",
 ] }
 tobj = "4.0.0"
+egui = "0.22.0"
+egui-winit = "0.22.0"
+egui-wgpu = "0.22.0"

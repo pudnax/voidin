@@ -1,6 +1,7 @@
 use std::{cell::RefCell, fmt::Display, sync::Arc, time::Duration};
 
 use color_eyre::{eyre::ContextCompat, Result};
+use egui_wgpu::renderer::ScreenDescriptor;
 use glam::{Mat4, Vec2, Vec3};
 
 use pollster::FutureExt;
@@ -73,6 +74,11 @@ pub struct App {
     recorder: Recorder,
     screenshot_ctx: ScreenshotCtx,
     profiler: RefCell<wgpu_profiler::GpuProfiler>,
+
+    pub(crate) egui_context: egui::Context,
+    egui_renderer: egui_wgpu::Renderer,
+    pub(crate) egui_state: egui_winit::State,
+    pixels_per_point: f64,
 }
 
 impl App {
@@ -112,9 +118,17 @@ impl App {
         let gpu = Arc::new(Gpu::new(adapter, device, queue));
 
         let PhysicalSize { width, height } = window.inner_size();
-        let surface_config = surface
-            .get_default_config(gpu.adapter(), width, height)
-            .context("Surface in not supported")?;
+        let format =
+            preferred_framebuffer_format(&surface.get_capabilities(&gpu.adapter()).formats);
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format,
+            width,
+            height,
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            view_formats: vec![],
+        };
         surface.configure(gpu.device(), &surface_config);
         let gbuffer = GBuffer::new(&gpu, surface_config.width, surface_config.height);
 
@@ -163,6 +177,15 @@ impl App {
             features,
         ));
 
+        let egui_renderer = egui_wgpu::renderer::Renderer::new(
+            &gpu.device(),
+            ViewTarget::FORMAT,
+            None,
+            Self::SAMPLE_COUNT,
+        );
+        let egui_context = egui::Context::default();
+        let egui_state = egui_winit::State::new(window);
+
         Ok(Self {
             surface,
             surface_config,
@@ -181,6 +204,11 @@ impl App {
 
             world,
             gpu,
+
+            egui_renderer,
+            egui_context,
+            egui_state,
+            pixels_per_point: window.scale_factor(),
         })
     }
 
@@ -218,7 +246,8 @@ impl App {
     }
 
     pub fn render(
-        &self,
+        &mut self,
+        window: &Window,
         app_state: &AppState,
         draw: impl FnOnce(RenderContext),
     ) -> Result<(), wgpu::SurfaceError> {
@@ -235,19 +264,26 @@ impl App {
         profiler.begin_scope("Main Render Scope ", &mut encoder, self.device());
 
         let render_context = RenderContext {
+            window,
             app_state,
             encoder: ProfilerCommandEncoder {
                 encoder: &mut encoder,
-                device: self.device(),
+                device: self.gpu.device(),
                 profiler: &mut profiler,
             },
             view_target: &self.view_target,
             gbuffer: &self.gbuffer,
             world: &self.world,
+            gpu: &self.gpu,
             width: self.surface_config.width,
             height: self.surface_config.height,
             draw_cmd_buffer: &self.draw_cmd_buffer,
             draw_cmd_bind_group: &self.draw_cmd_bind_group,
+
+            egui_context: &self.egui_context,
+            egui_renderer: &mut self.egui_renderer,
+            egui_state: &mut self.egui_state,
+            pixels_per_point: self.pixels_per_point,
         };
 
         draw(render_context);
@@ -296,9 +332,34 @@ impl App {
         }
     }
 
-    pub fn update(&mut self, state: &AppState, actions: Vec<StateAction>) -> Result<()> {
+    pub fn update(
+        &mut self,
+        state: &AppState,
+        actions: Vec<StateAction>,
+        update: impl FnOnce(UpdateContext),
+    ) -> Result<()> {
+        let mut profiler = self.profiler.borrow_mut();
+        let mut encoder = self
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Update Encoder"),
+            });
+        update(UpdateContext {
+            app_state: state,
+            encoder: ProfilerCommandEncoder {
+                encoder: &mut encoder,
+                device: self.device(),
+                profiler: &mut profiler,
+            },
+            world: &self.world,
+            width: self.surface_config.width,
+            height: self.surface_config.height,
+        });
+        self.gpu.queue().submit(Some(encoder.finish()));
+
         self.global_uniform.frame = state.frame_count as _;
         self.global_uniform.time = state.total_time as _;
+        self.global_uniform.dt = state.dt as _;
         self.world
             .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
@@ -461,16 +522,88 @@ impl Display for RendererInfo {
     }
 }
 
+pub struct UpdateContext<'a> {
+    pub app_state: &'a AppState,
+    pub encoder: ProfilerCommandEncoder<'a>,
+    pub world: &'a World,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub struct RenderContext<'a> {
+    pub window: &'a Window,
     pub app_state: &'a AppState,
     pub encoder: ProfilerCommandEncoder<'a>,
     pub view_target: &'a ViewTarget,
     pub gbuffer: &'a GBuffer,
     pub world: &'a World,
+    pub gpu: &'a Gpu,
     pub width: u32,
     pub height: u32,
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
     pub draw_cmd_bind_group: &'a wgpu::BindGroup,
+
+    egui_context: &'a egui::Context,
+    egui_renderer: &'a mut egui_wgpu::Renderer,
+    egui_state: &'a mut egui_winit::State,
+    pixels_per_point: f64,
+}
+
+impl<'a> RenderContext<'a> {
+    pub fn ui(&mut self, ui_builder: impl FnOnce(&egui::Context)) {
+        self.encoder.profile_start("UI Pass");
+        let screen_descriptor = ScreenDescriptor {
+            size_in_pixels: [self.width, self.height],
+            pixels_per_point: self.pixels_per_point as _,
+        };
+
+        let full_output = self
+            .egui_context
+            .run(self.egui_state.take_egui_input(self.window), |ctx| {
+                ui_builder(ctx)
+            });
+
+        let paint_jobs = self.egui_context.tessellate(full_output.shapes);
+        let textures_delta = full_output.textures_delta;
+
+        {
+            for (texture_id, image_delta) in &textures_delta.set {
+                self.egui_renderer.update_texture(
+                    &self.gpu.device(),
+                    &self.gpu.queue(),
+                    *texture_id,
+                    image_delta,
+                );
+            }
+            for texture_id in &textures_delta.free {
+                self.egui_renderer.free_texture(texture_id);
+            }
+            self.egui_renderer.update_buffers(
+                &self.gpu.device(),
+                &self.gpu.queue(),
+                &mut self.encoder,
+                &paint_jobs,
+                &screen_descriptor,
+            );
+
+            let mut render_pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("UI Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: self.view_target.main_view(),
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: true,
+                    },
+                })],
+                depth_stencil_attachment: None,
+            });
+            self.egui_renderer
+                .render(&mut render_pass, paint_jobs.as_slice(), &screen_descriptor);
+        }
+
+        self.encoder.profile_end();
+    }
 }
 
 impl<'a> RenderContext<'a> {
@@ -505,7 +638,7 @@ impl<'a> ProfilerCommandEncoder<'a> {
     ) -> wgpu_profiler::scope::OwningScope<wgpu::ComputePass> {
         wgpu_profiler::scope::OwningScope::start(
             desc.label.unwrap_or("Compute Pass"),
-            self.profiler,
+            &mut self.profiler,
             self.encoder.begin_compute_pass(desc),
             self.device,
         )
@@ -517,7 +650,7 @@ impl<'a> ProfilerCommandEncoder<'a> {
     ) -> wgpu_profiler::scope::OwningScope<wgpu::RenderPass<'pass>> {
         wgpu_profiler::scope::OwningScope::start(
             desc.label.unwrap_or("Render Pass"),
-            self.profiler,
+            &mut self.profiler,
             self.encoder.begin_render_pass(desc),
             self.device,
         )
@@ -548,4 +681,16 @@ pub fn scopes_to_console_recursive(results: &[GpuTimerScopeResult], indentation:
             scopes_to_console_recursive(&scope.nested_scopes, indentation + 1);
         }
     }
+}
+
+fn preferred_framebuffer_format(formats: &[wgpu::TextureFormat]) -> wgpu::TextureFormat {
+    for &format in formats {
+        if matches!(
+            format,
+            wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Bgra8Unorm
+        ) {
+            return format;
+        }
+    }
+    formats[0]
 }

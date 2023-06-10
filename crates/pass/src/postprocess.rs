@@ -5,7 +5,6 @@ use app::{
 use color_eyre::Result;
 use components::{bind_group_layout::SingleTextureBindGroupLayout, world::World};
 use std::path::Path;
-use wgpu::CommandEncoder;
 
 use super::Pass;
 
@@ -67,7 +66,12 @@ pub struct PostProcessResource<'a> {
 impl Pass for PostProcess {
     type Resources<'a> = PostProcessResource<'a>;
 
-    fn record(&self, world: &World, encoder: &mut CommandEncoder, resource: Self::Resources<'_>) {
+    fn record(
+        &self,
+        world: &World,
+        encoder: &mut app::ProfilerCommandEncoder,
+        resource: Self::Resources<'_>,
+    ) {
         let global_ubo = world.unwrap::<GlobalUniformBinding>();
         let post_process_target = resource.view_target.post_process_write();
         let arena = world.unwrap::<PipelineArena>();

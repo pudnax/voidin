@@ -12,7 +12,7 @@ pub trait Pass {
     fn record(
         &self,
         world: &World,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut app::ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     );
 }

@@ -52,7 +52,7 @@ impl Pass for ShadingPass {
     fn record(
         &self,
         world: &World,
-        encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut app::ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let globals = world.unwrap::<GlobalsBindGroup>();

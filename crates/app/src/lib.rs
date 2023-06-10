@@ -1,13 +1,14 @@
 #![allow(clippy::new_without_default)]
 
 use color_eyre::Result;
+use components::FpsCounter;
 use std::time::Instant;
 
 use glam::vec3;
 use log::warn;
 use wgpu::SurfaceError;
 use winit::{
-    dpi::{LogicalSize, PhysicalSize},
+    dpi::PhysicalSize,
     event::{Event, KeyboardInput, VirtualKeyCode, WindowEvent},
     event_loop::ControlFlow,
 };
@@ -24,21 +25,21 @@ pub use app::{
     global_ubo::{GlobalUniformBinding, GlobalsBindGroup, Uniform},
     pipeline,
     state::AppState,
-    RenderContext, ViewTarget,
+    ProfilerCommandEncoder, RenderContext, UpdateContext, ViewTarget,
 };
 pub use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
     Camera, Gpu, NonZeroSized, ResizableBuffer, ResizableBufferExt, Watcher,
     {CameraUniform, CameraUniformBinding}, {KeyMap, KeyboardMap},
 };
+pub use egui;
 pub use pool::*;
+pub use winit::{dpi::LogicalSize, window::WindowBuilder};
 
 pub const UPDATES_PER_SECOND: u32 = 60;
 pub const FIXED_TIME_STEP: f64 = 1. / UPDATES_PER_SECOND as f64;
 pub const MAX_FRAME_TIME: f64 = 15. * FIXED_TIME_STEP; // 0.25;
 
-pub const SCREENSHOTS_FOLDER: &str = "screenshots";
-pub const VIDEO_FOLDER: &str = "recordings";
 pub const SHADER_FOLDER: &str = "shaders";
 
 pub trait Example: 'static + Sized {
@@ -50,12 +51,24 @@ pub trait Example: 'static + Sized {
     fn setup_scene(&mut self, _app: &mut App) -> Result<()> {
         Ok(())
     }
-    fn update(&mut self, _app: &App, _app_state: &AppState) {}
+    fn update(&mut self, _ctx: UpdateContext) {}
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
     fn render(&self, ctx: RenderContext);
 }
 
-pub fn run<E: Example>() -> color_eyre::Result<()> {
+pub fn run_default<E: Example>() -> color_eyre::Result<()> {
+    let window = winit::window::WindowBuilder::new()
+        .with_title(E::name())
+        .with_inner_size(LogicalSize::new(1280, 1024));
+
+    let camera = Camera::new(vec3(0., 0., 0.), 0., 0.);
+    run::<E>(window, camera)
+}
+
+pub fn run<E: Example>(
+    window_builder: WindowBuilder,
+    mut camera: Camera,
+) -> color_eyre::Result<()> {
     color_eyre::install()?;
     env_logger::builder()
         .parse_env(env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info"))
@@ -67,15 +80,11 @@ pub fn run<E: Example>() -> color_eyre::Result<()> {
         .init();
 
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
-    let window = winit::window::WindowBuilder::new()
-        .with_title(E::name())
-        .with_inner_size(LogicalSize::new(1280, 1024))
-        // .with_resizable(false)
-        .build(&event_loop)?;
+    let window = window_builder.build(&event_loop)?;
 
     let PhysicalSize { width, height } = window.inner_size();
+    camera.aspect = width as f32 / height as f32;
 
-    let camera = Camera::new(vec3(2., 5., 12.), 0., -20., width, height);
     let keyboard_map = {
         use VirtualKeyCode::*;
         KeyboardMap::new()
@@ -105,6 +114,7 @@ pub fn run<E: Example>() -> color_eyre::Result<()> {
 
     let mut current_instant = Instant::now();
     let mut accumulated_time = 0.;
+    let mut fps_counter = FpsCounter::new();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -127,12 +137,13 @@ pub fn run<E: Example>() -> color_eyre::Result<()> {
 
                     accumulated_time -= FIXED_TIME_STEP;
                 }
-                example.update(&app, &app_state);
-                app.update(&app_state, actions).unwrap();
+                app.update(&app_state, actions, |ctx| example.update(ctx))
+                    .unwrap();
             }
             Event::RedrawEventsCleared => window.request_redraw(),
             Event::RedrawRequested(_) => {
-                if let Err(err) = app.render(&app_state, |ctx| example.render(ctx)) {
+                app_state.dt = fps_counter.record();
+                if let Err(err) = app.render(&window, &app_state, |ctx| example.render(ctx)) {
                     eprintln!("get_current_texture error: {:?}", err);
                     match err {
                         SurfaceError::Lost | SurfaceError::Outdated => {
@@ -173,6 +184,9 @@ pub fn run<E: Example>() -> color_eyre::Result<()> {
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
+            Event::WindowEvent { event, .. } => {
+                let _ = app.egui_state.on_event(&app.egui_context, &event);
+            }
             Event::UserEvent(path) => {
                 app.handle_events(path);
             }

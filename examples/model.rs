@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use app::{
-    models, run, AppState, CameraUniform, Example, GltfDocument, Gpu, Instance, MaterialId,
-    ResizableBuffer, ResizableBufferExt, {self, InstanceId, InstancePool}, {App, RenderContext},
-    {Light, LightPool},
+    models, run, Camera, CameraUniform, Example, GltfDocument, Gpu, Instance, LogicalSize,
+    MaterialId, ResizableBuffer, ResizableBufferExt, UpdateContext, WindowBuilder,
+    {self, InstanceId, InstancePool}, {App, RenderContext}, {Light, LightPool},
 };
 use color_eyre::Result;
 use glam::{vec3, Mat4, Vec3};
@@ -37,11 +37,11 @@ impl Example for Model {
 
         let shading_pass = pass::shading::ShadingPass::new(&app.world, &app.gbuffer)?;
 
-        let path = Path::new("shaders").join("postprocess.wgsl");
-        let postprocess_pass = pass::postprocess::PostProcess::new(&app.world, path)?;
+        let postprocess_pass =
+            pass::postprocess::PostProcess::new(&app.world, "shaders/postprocess.wgsl")?;
 
-        let path = Path::new("shaders").join("compute_update.wgsl");
-        let update_pass = pass::compute_update::ComputeUpdate::new(&app.world, path)?;
+        let update_pass =
+            pass::compute_update::ComputeUpdate::new(&app.world, "shaders/compute_update.wgsl")?;
 
         let taa_pass = pass::taa::Taa::new(
             &app.world,
@@ -158,28 +158,22 @@ impl Example for Model {
         Ok(())
     }
 
-    fn update(&mut self, app: &App, app_state: &AppState) {
-        let jitter = self.taa_pass.get_jitter(
-            app_state.frame_count as u32,
-            app.surface_config.width,
-            app.surface_config.height,
-        );
-        let mut camera_uniform = app.world.get_mut::<CameraUniform>().unwrap();
-        *camera_uniform = app_state
+    fn update(&mut self, mut ctx: UpdateContext) {
+        let jitter =
+            self.taa_pass
+                .get_jitter(ctx.app_state.frame_count as u32, ctx.width, ctx.height);
+        let mut camera_uniform = ctx.world.get_mut::<CameraUniform>().unwrap();
+        *camera_uniform = ctx
+            .app_state
             .camera
             .get_uniform(Some(jitter.to_array()), Some(&camera_uniform));
 
-        let mut encoder = app
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Compute Update"),
-            });
         let resources = pass::compute_update::ComputeUpdateResourse {
             idx_bind_group: &self.moving_instances_bind_group,
             dispatch_size: self.moving_instances.len() as u32,
         };
-        self.update_pass.record(&app.world, &mut encoder, resources);
-        app.queue().submit(Some(encoder.finish()));
+        self.update_pass
+            .record(&ctx.world, &mut ctx.encoder, resources);
     }
 
     fn resize(&mut self, gpu: &Gpu, width: u32, height: u32) {
@@ -250,5 +244,8 @@ impl Example for Model {
 }
 
 fn main() -> Result<()> {
-    run::<Model>()
+    let window = WindowBuilder::new().with_inner_size(LogicalSize::new(1280, 1024));
+
+    let camera = Camera::new(vec3(2., 5., 12.), 0., -20.);
+    run::<Model>(window, camera)
 }

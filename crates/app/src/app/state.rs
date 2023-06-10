@@ -18,7 +18,7 @@ pub struct AppState {
     pub camera: Camera,
     pub input: Input,
     pub keyboard_map: KeyboardMap,
-    pub make_screenshot: bool,
+    pub dt: f64,
     recording: bool,
 }
 
@@ -30,8 +30,8 @@ impl AppState {
             total_time: 0.,
             camera,
             keyboard_map: keyboard_map.unwrap_or_default(),
-            make_screenshot: false,
             recording: false,
+            dt: 0.,
         }
     }
 

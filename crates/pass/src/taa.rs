@@ -14,7 +14,7 @@ use components::{
 };
 use glam::{vec2, Vec2};
 use rand::{rngs::SmallRng, seq::SliceRandom, SeedableRng};
-use wgpu::{util::align_to, CommandEncoder};
+use wgpu::util::align_to;
 
 use super::Pass;
 
@@ -308,7 +308,12 @@ pub struct TaaResource<'a> {
 impl Pass for Taa {
     type Resources<'a> = TaaResource<'a>;
 
-    fn record(&self, world: &World, encoder: &mut CommandEncoder, resource: Self::Resources<'_>) {
+    fn record(
+        &self,
+        world: &World,
+        encoder: &mut app::ProfilerCommandEncoder,
+        resource: Self::Resources<'_>,
+    ) {
         let input_history = self.active_texture.fetch_xor(1, Ordering::Relaxed) as usize;
         let output_history = input_history ^ 1;
 
