@@ -154,8 +154,10 @@ pub fn run<E: Example>() -> color_eyre::Result<()> {
 
     let mut example = E::init(&mut app)?;
 
+    let now = std::time::Instant::now();
     example.setup_scene(&mut app)?;
     app.setup_scene()?;
+    println!("Scene finished: {:?}", now.elapsed());
 
     let mut current_instant = Instant::now();
     let mut accumulated_time = 0.;
