@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use app::{
     models, run, Camera, CameraUniform, Example, GltfDocument, Gpu, Instance, LogicalSize,
     MaterialId, ResizableBuffer, ResizableBufferExt, UpdateContext, WindowBuilder,
