@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use app::{
-    models, run, Camera, CameraUniform, Example, GltfDocument, Gpu, Instance, LogicalSize,
+    egui, models, run, Camera, CameraUniform, Example, GltfDocument, Gpu, Instance, LogicalSize,
     MaterialId, ResizableBuffer, ResizableBufferExt, UpdateContext, WindowBuilder,
     {self, InstanceId, InstancePool}, {App, RenderContext}, {Light, LightPool},
 };
@@ -180,8 +182,7 @@ impl Example for Model {
 
     fn render(
         &self,
-        RenderContext {
-            mut encoder,
+        mut ctx @ RenderContext {
             world,
             gbuffer,
             view_target,
@@ -192,6 +193,7 @@ impl Example for Model {
             ..
         }: RenderContext,
     ) {
+        let mut encoder = &mut ctx.encoder;
         encoder.profile_start("Visibility");
         self.emit_draws_pass.record(
             &world,
@@ -238,6 +240,15 @@ impl Example for Model {
                 view_target: &view_target,
             },
         );
+
+        ctx.ui(|egui_ctx| {
+            egui::Window::new("debug").show(egui_ctx, |ui| {
+                ui.label(format!(
+                    "Fps: {:.04?}",
+                    Duration::from_secs_f64(ctx.app_state.dt)
+                ));
+            });
+        });
     }
 }
 

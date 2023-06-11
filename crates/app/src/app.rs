@@ -118,8 +118,7 @@ impl App {
         let gpu = Arc::new(Gpu::new(adapter, device, queue));
 
         let PhysicalSize { width, height } = window.inner_size();
-        let format =
-            preferred_framebuffer_format(&surface.get_capabilities(&gpu.adapter()).formats);
+        let format = preferred_framebuffer_format(&surface.get_capabilities(gpu.adapter()).formats);
         let surface_config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format,
@@ -178,7 +177,7 @@ impl App {
         ));
 
         let egui_renderer = egui_wgpu::renderer::Renderer::new(
-            &gpu.device(),
+            gpu.device(),
             ViewTarget::FORMAT,
             None,
             Self::SAMPLE_COUNT,
@@ -569,8 +568,8 @@ impl<'a> RenderContext<'a> {
         {
             for (texture_id, image_delta) in &textures_delta.set {
                 self.egui_renderer.update_texture(
-                    &self.gpu.device(),
-                    &self.gpu.queue(),
+                    self.gpu.device(),
+                    self.gpu.queue(),
                     *texture_id,
                     image_delta,
                 );
@@ -579,8 +578,8 @@ impl<'a> RenderContext<'a> {
                 self.egui_renderer.free_texture(texture_id);
             }
             self.egui_renderer.update_buffers(
-                &self.gpu.device(),
-                &self.gpu.queue(),
+                self.gpu.device(),
+                self.gpu.queue(),
                 &mut self.encoder,
                 &paint_jobs,
                 &screen_descriptor,
@@ -638,7 +637,7 @@ impl<'a> ProfilerCommandEncoder<'a> {
     ) -> wgpu_profiler::scope::OwningScope<wgpu::ComputePass> {
         wgpu_profiler::scope::OwningScope::start(
             desc.label.unwrap_or("Compute Pass"),
-            &mut self.profiler,
+            self.profiler,
             self.encoder.begin_compute_pass(desc),
             self.device,
         )
@@ -650,7 +649,7 @@ impl<'a> ProfilerCommandEncoder<'a> {
     ) -> wgpu_profiler::scope::OwningScope<wgpu::RenderPass<'pass>> {
         wgpu_profiler::scope::OwningScope::start(
             desc.label.unwrap_or("Render Pass"),
-            &mut self.profiler,
+            self.profiler,
             self.encoder.begin_render_pass(desc),
             self.device,
         )

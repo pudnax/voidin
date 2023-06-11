@@ -23,6 +23,7 @@ dolly = "0.4.1"
 either = "1.8.1"
 
 [dependencies]
+bvh = { path = "crates/bvh" }
 app = { path = "crates/app" }
 pass = { path = "crates/pass" }
 wgpu = { workspace = true }
