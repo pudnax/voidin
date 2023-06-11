@@ -175,7 +175,7 @@ impl Example for Model {
     }
 
     fn render(
-        &self,
+        &mut self,
         mut ctx @ RenderContext {
             world,
             gbuffer,

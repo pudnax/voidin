@@ -60,7 +60,7 @@ pub struct App {
     pub surface: wgpu::Surface,
     pub surface_config: wgpu::SurfaceConfiguration,
     pub gbuffer: GBuffer,
-    view_target: view_target::ViewTarget,
+    pub view_target: view_target::ViewTarget,
 
     global_uniform: global_ubo::Uniform,
 
@@ -550,7 +550,6 @@ pub struct RenderContext<'a> {
 
 impl<'a> RenderContext<'a> {
     pub fn ui(&mut self, ui_builder: impl FnOnce(&egui::Context)) {
-        self.encoder.profile_start("UI Pass");
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [self.width, self.height],
             pixels_per_point: self.pixels_per_point as _,
@@ -600,8 +599,6 @@ impl<'a> RenderContext<'a> {
             self.egui_renderer
                 .render(&mut render_pass, paint_jobs.as_slice(), &screen_descriptor);
         }
-
-        self.encoder.profile_end();
     }
 }
 

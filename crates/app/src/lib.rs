@@ -53,7 +53,7 @@ pub trait Example: 'static + Sized {
     }
     fn update(&mut self, _ctx: UpdateContext) {}
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
-    fn render(&self, ctx: RenderContext);
+    fn render(&mut self, ctx: RenderContext);
 }
 
 pub fn run_default<E: Example>() -> color_eyre::Result<()> {

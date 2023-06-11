@@ -33,7 +33,7 @@ impl Example for Triangle {
 
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
 
-    fn render(&self, mut ctx: RenderContext) {
+    fn render(&mut self, mut ctx: RenderContext) {
         let arena = ctx.world.unwrap::<PipelineArena>();
         let mut pass = ctx.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,

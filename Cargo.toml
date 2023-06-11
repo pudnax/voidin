@@ -21,6 +21,7 @@ winit = "0.28.3"
 png = "0.17.8"
 dolly = "0.4.1"
 either = "1.8.1"
+half = { version = "2.2.1", features = ["bytemuck"] }
 
 [dependencies]
 bvh = { path = "crates/bvh" }
@@ -30,6 +31,9 @@ wgpu = { workspace = true }
 color-eyre = { workspace = true }
 glam = { workspace = true }
 rand = { workspace = true }
+bytemuck = { workspace = true }
+log = { workspace = true }
+half = { workspace = true }
 
 [profile.dev.package."*"]
 opt-level = 1
