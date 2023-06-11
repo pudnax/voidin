@@ -1,5 +1,5 @@
 [package]
-name = "pass"
+name = "dyn_import"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,9 +9,4 @@ edition = "2021"
 crate-type = ["dylib"]
 
 [dependencies]
-color-eyre = { workspace = true }
-wgpu = { workspace = true }
-glam = { workspace = true }
-rand = { workspace = true }
 app = { path = "../app" }
-components = { path = "../components" }

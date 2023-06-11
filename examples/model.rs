@@ -6,7 +6,6 @@ use voidin::*;
 
 struct Model {
     visibility_pass: pass::visibility::Visibility,
-    emit_draws_pass: pass::visibility::EmitDraws,
 
     shading_pass: pass::shading::ShadingPass,
 
@@ -27,7 +26,6 @@ impl Example for Model {
 
     fn init(app: &mut App) -> Result<Self> {
         let visibility_pass = pass::visibility::Visibility::new(&app.world)?;
-        let emit_draws_pass = pass::visibility::EmitDraws::new(&app.world)?;
 
         let shading_pass = pass::shading::ShadingPass::new(&app.world, &app.gbuffer)?;
 
@@ -51,7 +49,6 @@ impl Example for Model {
 
         Ok(Self {
             visibility_pass,
-            emit_draws_pass,
             shading_pass,
             postprocess_pass,
             update_pass,
@@ -188,15 +185,6 @@ impl Example for Model {
         }: RenderContext,
     ) {
         let mut encoder = &mut ctx.encoder;
-        encoder.profile_start("Visibility");
-        self.emit_draws_pass.record(
-            &world,
-            &mut encoder,
-            pass::visibility::EmitDrawsResource {
-                draw_cmd_bind_group: &draw_cmd_bind_group,
-                draw_cmd_buffer: &draw_cmd_buffer,
-            },
-        );
 
         self.visibility_pass.record(
             &world,
@@ -204,9 +192,9 @@ impl Example for Model {
             pass::visibility::VisibilityResource {
                 gbuffer: &gbuffer,
                 draw_cmd_buffer: &draw_cmd_buffer,
+                draw_cmd_bind_group: &draw_cmd_bind_group,
             },
         );
-        encoder.profile_end();
 
         self.shading_pass.record(
             &world,

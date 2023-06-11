@@ -605,6 +605,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
+name = "dyn_import"
+version = "0.1.0"
+dependencies = [
+ "app",
+]
+
+[[package]]
 name = "ecolor"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1671,18 +1678,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pass"
-version = "0.1.0"
-dependencies = [
- "app",
- "color-eyre",
- "components",
- "glam",
- "rand",
- "wgpu",
-]
-
-[[package]]
 name = "percent-encoding"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2330,10 +2325,10 @@ dependencies = [
  "bvh",
  "bytemuck",
  "color-eyre",
+ "dyn_import",
  "glam",
  "half",
  "log",
- "pass",
  "rand",
  "wgpu",
 ]

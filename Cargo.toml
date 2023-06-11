@@ -26,7 +26,7 @@ half = { version = "2.2.1", features = ["bytemuck"] }
 [dependencies]
 bvh = { path = "crates/bvh" }
 app = { path = "crates/app" }
-pass = { path = "crates/pass" }
+dyn_import = { path = "crates/dyn_import" }
 wgpu = { workspace = true }
 color-eyre = { workspace = true }
 glam = { workspace = true }

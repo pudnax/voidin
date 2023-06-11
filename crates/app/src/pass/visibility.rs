@@ -9,7 +9,8 @@ use wgpu::{util::align_to, IndexFormat};
 
 use super::Pass;
 
-use app::{
+use crate::ProfilerCommandEncoder;
+use crate::{
     pipeline::{
         self, ComputeHandle, ComputePipelineDescriptor, PipelineArena, RenderHandle,
         RenderPipelineDescriptor,
@@ -18,10 +19,60 @@ use app::{
 };
 
 pub struct Visibility {
-    pipeline: RenderHandle,
+    geometry: Geometry,
+    emit_draws: EmitDraws,
+}
+
+pub struct VisibilityResource<'a> {
+    pub gbuffer: &'a GBuffer,
+
+    pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
+    pub draw_cmd_bind_group: &'a wgpu::BindGroup,
+}
+
+impl Pass for Visibility {
+    type Resources<'a> = VisibilityResource<'a>;
+    fn record(
+        &self,
+        world: &World,
+        encoder: &mut ProfilerCommandEncoder,
+        resources: Self::Resources<'_>,
+    ) {
+        encoder.profile_start("Visibility");
+        self.geometry.record(
+            world,
+            encoder,
+            GeometryResource {
+                gbuffer: resources.gbuffer,
+                draw_cmd_buffer: resources.draw_cmd_buffer,
+            },
+        );
+        self.emit_draws.record(
+            world,
+            encoder,
+            EmitDrawsResource {
+                draw_cmd_buffer: resources.draw_cmd_buffer,
+                draw_cmd_bind_group: resources.draw_cmd_bind_group,
+            },
+        );
+        encoder.profile_end();
+    }
 }
 
 impl Visibility {
+    pub fn new(world: &World) -> Result<Self> {
+        Ok(Self {
+            geometry: Geometry::new(world)?,
+            emit_draws: EmitDraws::new(world)?,
+        })
+    }
+}
+
+pub struct Geometry {
+    pipeline: RenderHandle,
+}
+
+impl Geometry {
     pub fn new(world: &World) -> Result<Self> {
         let path = Path::new("shaders").join("visibility.wgsl");
         let textures = world.get::<TexturePool>()?;
@@ -82,18 +133,18 @@ impl Visibility {
     }
 }
 
-pub struct VisibilityResource<'a> {
+pub struct GeometryResource<'a> {
     pub gbuffer: &'a GBuffer,
 
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
 }
 
-impl Pass for Visibility {
-    type Resources<'a> = VisibilityResource<'a>;
+impl Pass for Geometry {
+    type Resources<'a> = GeometryResource<'a>;
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let meshes = world.unwrap::<MeshPool>();
@@ -175,7 +226,7 @@ impl Pass for EmitDraws {
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let camera = world.unwrap::<CameraUniformBinding>();

@@ -3,9 +3,9 @@ use std::{
     sync::atomic::{AtomicU8, Ordering},
 };
 
-use app::{
+use crate::{
     pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
-    CameraUniformBinding, GBuffer, ViewTarget, DEFAULT_SAMPLER_DESC,
+    CameraUniformBinding, GBuffer, ProfilerCommandEncoder, ViewTarget, DEFAULT_SAMPLER_DESC,
 };
 use color_eyre::Result;
 use components::{
@@ -311,7 +311,7 @@ impl Pass for Taa {
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut ProfilerCommandEncoder,
         resource: Self::Resources<'_>,
     ) {
         let input_history = self.active_texture.fetch_xor(1, Ordering::Relaxed) as usize;

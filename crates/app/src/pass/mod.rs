@@ -12,7 +12,7 @@ pub trait Pass {
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut crate::ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     );
 }

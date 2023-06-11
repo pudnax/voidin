@@ -1,6 +1,7 @@
-use app::{
-    pipeline::{PipelineArena, RenderPipelineDescriptor},
-    GlobalUniformBinding, ViewTarget, WrappedBindGroupLayout, DEFAULT_SAMPLER_DESC,
+use crate::{
+    pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
+    GlobalUniformBinding, ProfilerCommandEncoder, ViewTarget, WrappedBindGroupLayout,
+    DEFAULT_SAMPLER_DESC,
 };
 use color_eyre::Result;
 use components::{bind_group_layout::SingleTextureBindGroupLayout, world::World};
@@ -9,7 +10,7 @@ use std::path::Path;
 use super::Pass;
 
 pub struct PostProcess {
-    pipeline: app::pipeline::RenderHandle,
+    pipeline: RenderHandle,
     sampler: wgpu::BindGroup,
 }
 
@@ -69,7 +70,7 @@ impl Pass for PostProcess {
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut ProfilerCommandEncoder,
         resource: Self::Resources<'_>,
     ) {
         let global_ubo = world.unwrap::<GlobalUniformBinding>();

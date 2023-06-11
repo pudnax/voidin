@@ -3,10 +3,10 @@ use std::path::Path;
 use color_eyre::Result;
 use wgpu::util::align_to;
 
-use app::{
+use crate::{
     bind_group_layout::StorageReadBindGroupLayout,
     pipeline::{ComputeHandle, ComputePipelineDescriptor, PipelineArena},
-    GlobalUniformBinding, InstancePool,
+    GlobalUniformBinding, InstancePool, ProfilerCommandEncoder,
 };
 use components::world::World;
 
@@ -49,7 +49,7 @@ impl Pass for ComputeUpdate {
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let arena = world.unwrap::<PipelineArena>();

@@ -16,7 +16,9 @@ use winit::{
 pub use crate::app::App;
 mod app;
 pub mod models;
+pub mod pass;
 mod pool;
+pub mod prelude;
 
 pub use crate::models::GltfDocument;
 pub use app::DEFAULT_SAMPLER_DESC;

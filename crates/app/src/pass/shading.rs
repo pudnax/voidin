@@ -2,9 +2,10 @@ use std::path::Path;
 
 use color_eyre::Result;
 
-use app::{
+use crate::{
     pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
-    GBuffer, GlobalsBindGroup, ViewTarget, {LightPool, MaterialPool, TexturePool},
+    GBuffer, GlobalsBindGroup, ProfilerCommandEncoder, ViewTarget,
+    {LightPool, MaterialPool, TexturePool},
 };
 use components::world::World;
 
@@ -52,7 +53,7 @@ impl Pass for ShadingPass {
     fn record(
         &self,
         world: &World,
-        encoder: &mut app::ProfilerCommandEncoder,
+        encoder: &mut ProfilerCommandEncoder,
         resources: Self::Resources<'_>,
     ) {
         let globals = world.unwrap::<GlobalsBindGroup>();

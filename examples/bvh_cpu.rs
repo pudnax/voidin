@@ -4,13 +4,15 @@ use color_eyre::Result;
 use half::f16;
 use voidin::*;
 
-struct Triangle {
-    cpu_pixels: Vec<[f16; 4]>,
-    gpu_pixels: wgpu::Buffer,
-}
-
 const WIDTH: usize = 640;
 const HEIGHT: usize = 640;
+type Pixel = [f16; 4];
+const PIXEL_SIZE: usize = std::mem::size_of::<Pixel>();
+
+struct Triangle {
+    cpu_pixels: Vec<Pixel>,
+    gpu_pixels: wgpu::Buffer,
+}
 
 impl Example for Triangle {
     fn name() -> &'static str {
@@ -21,7 +23,7 @@ impl Example for Triangle {
         let cpu_pixels = vec![[f16::ZERO; 4]; WIDTH * HEIGHT];
         let gpu_pixels = app.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("Pixels"),
-            size: (WIDTH * HEIGHT * std::mem::size_of::<[f16; 4]>()) as wgpu::BufferAddress,
+            size: (WIDTH * HEIGHT * PIXEL_SIZE) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC
                 | wgpu::BufferUsages::STORAGE,
@@ -52,7 +54,7 @@ impl Example for Triangle {
                 buffer: &self.gpu_pixels,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: Some((WIDTH * std::mem::size_of::<[f16; 4]>()) as _),
+                    bytes_per_row: Some((WIDTH * PIXEL_SIZE) as _),
                     rows_per_image: None,
                 },
             },
