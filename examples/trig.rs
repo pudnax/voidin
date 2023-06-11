@@ -1,11 +1,7 @@
 use std::time::Duration;
 
-use app::{
-    egui,
-    pipeline::{self, PipelineArena, RenderHandle, VertexState},
-    run_default, App, Example, Gpu, RenderContext, UpdateContext,
-};
 use color_eyre::Result;
+use voidin::*;
 
 struct Triangle {
     pipeline: RenderHandle,

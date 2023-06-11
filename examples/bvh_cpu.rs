@@ -1,11 +1,7 @@
 use std::time::Duration;
 
-use app::{
-    egui,
-    pipeline::{self, PipelineArena, RenderHandle, VertexState},
-    run_default, App, Example, Gpu, RenderContext, UpdateContext,
-};
 use color_eyre::Result;
+use voidin::*;
 
 struct Triangle {
     pipeline: RenderHandle,
@@ -13,7 +9,7 @@ struct Triangle {
 
 impl Example for Triangle {
     fn name() -> &'static str {
-        "Triangle"
+        "Bvh CPU"
     }
 
     fn init(app: &mut App) -> Result<Self> {
@@ -73,5 +69,10 @@ impl Example for Triangle {
 }
 
 fn main() -> Result<()> {
-    run_default::<Triangle>()
+    let window = WindowBuilder::new()
+        .with_inner_size(LogicalSize::new(1280, 1024))
+        .with_resizable(false);
+
+    let camera = Camera::new(vec3(0., 0., 0.), 0., 0.);
+    run::<Triangle>(window, camera)
 }

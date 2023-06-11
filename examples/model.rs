@@ -1,14 +1,8 @@
 use std::time::Duration;
 
-use app::{
-    egui, models, run, Camera, CameraUniform, Example, GltfDocument, Gpu, Instance, LogicalSize,
-    MaterialId, ResizableBuffer, ResizableBufferExt, UpdateContext, WindowBuilder,
-    {self, InstanceId, InstancePool}, {App, RenderContext}, {Light, LightPool},
-};
 use color_eyre::Result;
-use glam::{vec3, Mat4, Vec3};
-use pass::Pass;
 use rand::Rng;
+use voidin::*;
 
 struct Model {
     visibility_pass: pass::visibility::Visibility,
