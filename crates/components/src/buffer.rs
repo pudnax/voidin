@@ -99,7 +99,6 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
             return false;
         }
 
-        log::info!("Buffer<{}> has been resized.", pretty_type_name::<T>());
         let max_buffer_size = device.limits().max_buffer_size;
         let new_cap = (new_len + 1)
             .checked_next_power_of_two()

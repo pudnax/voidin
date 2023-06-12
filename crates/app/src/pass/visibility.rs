@@ -23,6 +23,15 @@ pub struct Visibility {
     emit_draws: EmitDraws,
 }
 
+impl Visibility {
+    pub fn new(world: &World) -> Result<Self> {
+        Ok(Self {
+            geometry: Geometry::new(world)?,
+            emit_draws: EmitDraws::new(world)?,
+        })
+    }
+}
+
 pub struct VisibilityResource<'a> {
     pub gbuffer: &'a GBuffer,
 
@@ -59,16 +68,7 @@ impl Pass for Visibility {
     }
 }
 
-impl Visibility {
-    pub fn new(world: &World) -> Result<Self> {
-        Ok(Self {
-            geometry: Geometry::new(world)?,
-            emit_draws: EmitDraws::new(world)?,
-        })
-    }
-}
-
-pub struct Geometry {
+struct Geometry {
     pipeline: RenderHandle,
 }
 
@@ -133,7 +133,7 @@ impl Geometry {
     }
 }
 
-pub struct GeometryResource<'a> {
+struct GeometryResource<'a> {
     pub gbuffer: &'a GBuffer,
 
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
@@ -186,7 +186,7 @@ impl Pass for Geometry {
     }
 }
 
-pub struct EmitDraws {
+struct EmitDraws {
     pipeline: ComputeHandle,
 }
 
@@ -215,7 +215,7 @@ impl EmitDraws {
     }
 }
 
-pub struct EmitDrawsResource<'a> {
+struct EmitDrawsResource<'a> {
     pub draw_cmd_bind_group: &'a wgpu::BindGroup,
     pub draw_cmd_buffer: &'a ResizableBuffer<DrawIndexedIndirect>,
 }

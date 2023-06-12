@@ -1,6 +1,6 @@
 [package]
 name = "voidin"
-version = "0.1.0"
+version = "0.69.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -38,8 +38,14 @@ half = { workspace = true }
 [profile.dev.package."*"]
 opt-level = 1
 
-[profile.release]
-# panic = "abort"   # Strip expensive panic clean-up logic
+[profile.dev.package.app]
+opt-level = 0
+[profile.dev.package.dyn_import]
+opt-level = 0
+
+[profile.hyper]
+inherits = "release"
+panic = "abort"   # Strip expensive panic clean-up logic
 codegen-units = 1 # Compile crates one after another so the compiler can optimize better
 lto = true        # Enables link to optimizations
 strip = true      # Remove debug symbols

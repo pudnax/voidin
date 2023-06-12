@@ -195,7 +195,7 @@ impl MeshPool {
             layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: mesh_info.as_entire_binding(),
+                resource: mesh_info.as_tight_binding(),
             }],
         });
 
@@ -231,11 +231,9 @@ impl MeshPool {
             bounding_sphere: mesh.bounding_sphere,
         };
         self.mesh_cpu.push(mesh_info);
-        let was_resized = self.mesh_info.push(&self.gpu, &[mesh_info]);
-        if was_resized {
-            self.mesh_info_bind_group =
-                Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
-        }
+        self.mesh_info.push(&self.gpu, &[mesh_info]);
+        self.mesh_info_bind_group =
+            Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
 
         log::info!("Added new mesh with id: {mesh_index}");
         MeshId(mesh_index)

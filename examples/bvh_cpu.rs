@@ -24,9 +24,7 @@ impl Example for Triangle {
         let gpu_pixels = app.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("Pixels"),
             size: (WIDTH * HEIGHT * PIXEL_SIZE) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::COPY_DST
-                | wgpu::BufferUsages::COPY_SRC
-                | wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
         Ok(Self {
@@ -45,10 +43,10 @@ impl Example for Triangle {
             let y = (i / HEIGHT) as f32 / HEIGHT as f32;
             *p = [f16::from_f32(x), f16::from_f32(y), f16::ZERO, f16::ONE];
         }
+
         ctx.gpu
             .queue()
             .write_buffer(&self.gpu_pixels, 0, bytemuck::cast_slice(&self.cpu_pixels));
-
         ctx.encoder.copy_buffer_to_texture(
             wgpu::ImageCopyBuffer {
                 buffer: &self.gpu_pixels,

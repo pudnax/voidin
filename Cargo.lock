@@ -100,7 +100,7 @@ dependencies = [
 
 [[package]]
 name = "app"
-version = "0.1.0"
+version = "0.69.0"
 dependencies = [
  "ahash 0.8.3",
  "bytemuck",
@@ -257,7 +257,7 @@ checksum = "0d261e256854913907f67ed06efbc3338dfe6179796deefc1ff763fc1aee5535"
 
 [[package]]
 name = "bvh"
-version = "0.1.0"
+version = "0.69.0"
 
 [[package]]
 name = "bytemuck"
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "components"
-version = "0.1.0"
+version = "0.69.0"
 dependencies = [
  "ahash 0.8.3",
  "bytemuck",
@@ -606,7 +606,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
 name = "dyn_import"
-version = "0.1.0"
+version = "0.69.0"
 dependencies = [
  "app",
 ]
@@ -2319,7 +2319,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "voidin"
-version = "0.1.0"
+version = "0.69.0"
 dependencies = [
  "app",
  "bvh",
