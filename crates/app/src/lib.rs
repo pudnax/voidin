@@ -121,7 +121,6 @@ pub fn run<E: Example>(
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        app_state.input.update(&event, &window);
         match event {
             Event::MainEventsCleared => {
                 let new_instant = Instant::now();
@@ -186,8 +185,14 @@ pub fn run<E: Example>(
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
+            Event::DeviceEvent { event, .. } =>
+                app_state.input.on_device_event(&event),
             Event::WindowEvent { event, .. } => {
-                let _ = app.egui_state.on_event(&app.egui_context, &event);
+                if app.egui_state.on_event(&app.egui_context, &event).consumed {
+                    return;
+                }
+
+                app_state.input.on_window_event(&window, &event);
             }
             Event::UserEvent(path) => {
                 app.handle_events(path);

@@ -3,7 +3,7 @@ use glam::{vec2, Vec2};
 use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     event::{
-        DeviceEvent, ElementState, Event, KeyboardInput, MouseButton, MouseScrollDelta,
+        DeviceEvent, ElementState, KeyboardInput, MouseButton, MouseScrollDelta,
         VirtualKeyCode, WindowEvent,
     },
     window::Window,
@@ -165,74 +165,72 @@ impl Input {
         });
     }
 
-    pub fn update<T>(&mut self, event: &Event<'_, T>, window: &Window) -> bool {
+    pub fn on_device_event(&mut self, event: &DeviceEvent) {
+        match event {
+            DeviceEvent::MouseWheel { delta, .. } => {
+                self.mouse_state.scroll = -match delta {
+                    MouseScrollDelta::LineDelta(_, scroll) => *scroll,
+                    MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => {
+                        *scroll as f32
+                    }
+                };
+            }
+            DeviceEvent::MouseMotion { delta: (dx, dy) } => {
+                self.mouse_state.delta = vec2(*dx as _, *dy as _);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn on_window_event(&mut self, window: &Window, event: &WindowEvent) {
         let mouse = &mut self.mouse_state;
         let keyb = &mut self.keyboard_state.keys_down;
 
         match event {
-            Event::DeviceEvent { event, .. } => match event {
-                DeviceEvent::MouseWheel { delta, .. } => {
-                    mouse.scroll = -match delta {
-                        MouseScrollDelta::LineDelta(_, scroll) => *scroll,
-                        MouseScrollDelta::PixelDelta(PhysicalPosition { y: scroll, .. }) => {
-                            *scroll as f32
-                        }
+            WindowEvent::CursorMoved {
+                position: PhysicalPosition { x, y },
+                ..
+            } => {
+                let PhysicalSize { width, height } = window.inner_size();
+                let x = (*x as f32 / width as f32 - 0.5) * 2.;
+                let y = -(*y as f32 / height as f32 - 0.5) * 2.;
+                mouse.screen_position = vec2(x, y);
+            }
+            WindowEvent::MouseInput { button, state, .. } => {
+                let button_id = {
+                    let button = match button {
+                        MouseButton::Right => MouseState::RIGHT,
+                        MouseButton::Middle => MouseState::MIDDLE,
+                        MouseButton::Left => MouseState::LEFT,
+                        _ => MouseState::LEFT,
                     };
-                }
-                DeviceEvent::MouseMotion { delta: (dx, dy) } => {
-                    mouse.delta = vec2(*dx as _, *dy as _);
-                }
-                _ => {}
-            },
-            Event::WindowEvent { event, window_id } if *window_id == window.id() => match event {
-                WindowEvent::CursorMoved {
-                    position: PhysicalPosition { x, y },
-                    ..
-                } => {
-                    let PhysicalSize { width, height } = window.inner_size();
-                    let x = (*x as f32 / width as f32 - 0.5) * 2.;
-                    let y = -(*y as f32 / height as f32 - 0.5) * 2.;
-                    mouse.screen_position = vec2(x, y);
-                }
-                WindowEvent::MouseInput { button, state, .. } => {
-                    let button_id = {
-                        let button = match button {
-                            MouseButton::Right => MouseState::RIGHT,
-                            MouseButton::Middle => MouseState::MIDDLE,
-                            MouseButton::Left => MouseState::LEFT,
-                            _ => MouseState::LEFT,
-                        };
-                        1 << button
-                    };
+                    1 << button
+                };
 
-                    if let ElementState::Pressed = state {
-                        mouse.buttons_held |= button_id;
-                        mouse.buttons_pressed |= button_id;
-                    } else {
-                        mouse.buttons_held &= !button_id;
-                        mouse.buttons_released |= button_id;
-                    }
+                if let ElementState::Pressed = state {
+                    mouse.buttons_held |= button_id;
+                    mouse.buttons_pressed |= button_id;
+                } else {
+                    mouse.buttons_held &= !button_id;
+                    mouse.buttons_released |= button_id;
                 }
-                WindowEvent::KeyboardInput {
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(keycode),
-                            state,
-                            ..
-                        },
-                    ..
-                } => {
-                    if state == &ElementState::Pressed {
-                        keyb.entry(*keycode).or_insert(KeyState { ticks: 0 });
-                    } else {
-                        keyb.remove(keycode);
-                    }
+            }
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(keycode),
+                        state,
+                        ..
+                    },
+                ..
+            } => {
+                if state == &ElementState::Pressed {
+                    keyb.entry(*keycode).or_insert(KeyState { ticks: 0 });
+                } else {
+                    keyb.remove(keycode);
                 }
-                _ => {}
-            },
-
+            }
             _ => {}
         }
-        true
     }
 }

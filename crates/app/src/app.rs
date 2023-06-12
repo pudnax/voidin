@@ -78,7 +78,6 @@ pub struct App {
     pub(crate) egui_context: egui::Context,
     egui_renderer: egui_wgpu::Renderer,
     pub(crate) egui_state: egui_winit::State,
-    pixels_per_point: f64,
 }
 
 impl App {
@@ -207,7 +206,6 @@ impl App {
             egui_renderer,
             egui_context,
             egui_state,
-            pixels_per_point: window.scale_factor(),
         })
     }
 
@@ -282,7 +280,6 @@ impl App {
             egui_context: &self.egui_context,
             egui_renderer: &mut self.egui_renderer,
             egui_state: &mut self.egui_state,
-            pixels_per_point: self.pixels_per_point,
         };
 
         draw(render_context);
@@ -545,14 +542,13 @@ pub struct RenderContext<'a> {
     egui_context: &'a egui::Context,
     egui_renderer: &'a mut egui_wgpu::Renderer,
     egui_state: &'a mut egui_winit::State,
-    pixels_per_point: f64,
 }
 
 impl<'a> RenderContext<'a> {
     pub fn ui(&mut self, ui_builder: impl FnOnce(&egui::Context)) {
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [self.width, self.height],
-            pixels_per_point: self.pixels_per_point as _,
+            pixels_per_point: self.egui_state.pixels_per_point(),
         };
 
         let full_output = self
