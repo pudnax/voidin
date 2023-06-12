@@ -12,16 +12,16 @@ members = ["crates/*"]
 
 [workspace.dependencies]
 glam = { version = "0.23.0", features = ["rand", "bytemuck"] }
-bytemuck = { version = "1.13.1", features = ["derive"] }
-color-eyre = "0.6.2"
-log = "0.4.17"
+bytemuck = { version = "^1.13", features = ["derive"] }
+color-eyre = "^0.6"
+log = "^0.4"
 env_logger = "0.10.0"
-ahash = "0.8.3"
-wgpu = { version = "0.16.0", features = ["spirv", "naga"] }
-rand = { version = "0.8.5", features = ["small_rng"] }
-winit = "0.28.3"
-png = "0.17.8"
-dolly = "0.4.1"
+ahash = "^0.8"
+wgpu = { version = "^0.16", features = ["spirv", "naga"] }
+rand = { version = "^0.8", features = ["small_rng"] }
+winit = "^0.28"
+png = "^0.17"
+dolly = "0.4.2"
 either = "1.8.1"
 half = { version = "2.2.1", features = ["bytemuck"] }
 
