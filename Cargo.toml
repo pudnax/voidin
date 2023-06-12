@@ -3,6 +3,8 @@ name = "voidin"
 version = "0.69.0"
 edition = "2021"
 
+default-run = "model"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [workspace]
