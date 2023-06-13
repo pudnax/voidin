@@ -15,12 +15,11 @@ const PIXEL_SIZE: usize = std::mem::size_of::<Pixel>();
 struct Ray {
     orig: Vec3,
     dir: Vec3,
-    t: f32,
 }
 
 impl Ray {
-    fn new(orig: Vec3, dir: Vec3, t: f32) -> Self {
-        Self { orig, dir, t }
+    fn new(orig: Vec3, dir: Vec3) -> Self {
+        Self { orig, dir }
     }
 
     fn intersect(&self, Trig { v0, v1, v2 }: Trig) -> Option<f32> {
@@ -44,7 +43,7 @@ impl Ray {
         }
         let t = f * edge2.dot(q);
         match t > EPS {
-            true => Some(t.min(self.t)),
+            true => Some(t),
             false => None,
         }
     }
@@ -102,15 +101,15 @@ impl Example for Triangle {
         for (i, p) in self.cpu_pixels.iter_mut().enumerate() {
             let x = (i % WIDTH) as f32 / WIDTH as f32;
             let y = (i / HEIGHT) as f32 / HEIGHT as f32;
-            let uv = (vec2(x, y) - 0.5) * vec2(2., -2.);
+            let Vec2 { x, y } = (vec2(x, y) - 0.5) * vec2(2., -2.);
 
-            let view_pos = camera.clip_to_world * vec4(uv.x, uv.y, 1., 1.);
-            let view_tang = camera.clip_to_world * vec4(uv.x, uv.y, 0., 1.);
+            let view_pos = camera.clip_to_world * vec4(x, y, 1., 1.);
+            let view_tang = camera.clip_to_world * vec4(x, y, 0., 1.);
 
             let eye = view_pos.xyz() / view_pos.w;
             let dir = view_tang.xyz().normalize();
 
-            let ray = Ray::new(eye, dir, 1e30);
+            let ray = Ray::new(eye, dir);
             let hit = self.triangles.iter().fold(None, |hit, &trig| {
                 let new_hit = ray.intersect(trig);
                 match (hit, new_hit) {
