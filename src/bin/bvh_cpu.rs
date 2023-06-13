@@ -1,6 +1,7 @@
 use std::{array, time::Duration};
 
 use color_eyre::Result;
+use glam::Vec4Swizzles;
 use half::f16;
 use rand::Rng;
 use voidin::*;
@@ -81,7 +82,7 @@ impl Example for Triangle {
             let v0 = Vec3::from_array(array::from_fn(|_| rng.gen_range(0. ..1.)));
             let v1 = Vec3::from_array(array::from_fn(|_| rng.gen_range(0. ..1.)));
             let v2 = Vec3::from_array(array::from_fn(|_| rng.gen_range(0. ..1.)));
-            trig.v0 = v0 * 9. - vec3(5., 5., 5.);
+            trig.v0 = v0 * 9. - vec3(5., 5., 0.);
             trig.v1 = trig.v0 + v1;
             trig.v2 = trig.v0 + v2;
         }
@@ -97,16 +98,19 @@ impl Example for Triangle {
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
 
     fn render(&mut self, mut ctx: RenderContext) {
-        let cam_pos = vec3(0., 0., -18.);
-        let p0 = vec3(-1., 1., -15.);
-        let p1 = vec3(1., 1., -15.);
-        let p2 = vec3(-1., -1., -15.);
+        let camera = ctx.app_state.camera.get_uniform(None, None);
         for (i, p) in self.cpu_pixels.iter_mut().enumerate() {
             let x = (i % WIDTH) as f32 / WIDTH as f32;
             let y = (i / HEIGHT) as f32 / HEIGHT as f32;
+            let uv = (vec2(x, y) - 0.5) * vec2(2., -2.);
 
-            let pixel_pos = p0 + (p1 - p0) * x + (p2 - p0) * y;
-            let ray = Ray::new(cam_pos, (pixel_pos - cam_pos).normalize(), 1e30);
+            let view_pos = camera.clip_to_world * vec4(uv.x, uv.y, 1., 1.);
+            let view_tang = camera.clip_to_world * vec4(uv.x, uv.y, 0., 1.);
+
+            let eye = view_pos.xyz() / view_pos.w;
+            let dir = view_tang.xyz().normalize();
+
+            let ray = Ray::new(eye, dir, 1e30);
             let hit = self.triangles.iter().fold(None, |hit, &trig| {
                 let new_hit = ray.intersect(trig);
                 match (hit, new_hit) {
@@ -160,6 +164,6 @@ fn main() -> Result<()> {
         .with_inner_size(LogicalSize::new(WIDTH as u32, HEIGHT as u32))
         .with_resizable(false);
 
-    let camera = Camera::new(vec3(0., 0., 0.), 0., 0.);
+    let camera = Camera::new(vec3(0., 0., 15.), 0., 0.);
     run::<Triangle>(window, camera)
 }

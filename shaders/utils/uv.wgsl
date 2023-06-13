@@ -29,7 +29,7 @@ fn view_position_from_depth(uv: vec2<f32>, raw_depth: f32, inverse_projection: m
 }
 
 fn raw_depth_to_linear_depth(raw_depth: f32, near: f32, far: f32) -> f32 {
-    // NOTE(marco): Vulkan depth is [0, 1]
+    // NOTE: Vulkan depth is [0, 1]
     return near * far / (far + raw_depth * (near - far));
 }
 

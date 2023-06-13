@@ -105,8 +105,8 @@ pub struct Camera {
 }
 
 impl Camera {
-    const ZNEAR: f32 = 0.001;
-    const FOVY: f32 = std::f32::consts::PI / 2.0;
+    pub const ZNEAR: f32 = 0.001;
+    pub const FOVY: f32 = std::f32::consts::PI / 2.0;
 
     pub fn new(position: Vec3, yaw: f32, pitch: f32) -> Self {
         let rig: CameraRig = CameraRig::builder()
@@ -169,5 +169,9 @@ impl Camera {
             prev_jitter,
             _padding: [0.; 2],
         }
+    }
+
+    pub fn aspect(&self) -> f32 {
+        self.aspect
     }
 }
