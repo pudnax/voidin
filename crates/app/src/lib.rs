@@ -31,7 +31,7 @@ pub use app::{
 };
 pub use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
-    Camera, Gpu, NonZeroSized, ResizableBuffer, ResizableBufferExt, Watcher,
+    Camera, Gpu, LerpExt, NonZeroSized, ResizableBuffer, ResizableBufferExt, Watcher,
     {CameraUniform, CameraUniformBinding}, {KeyMap, KeyboardMap},
 };
 pub use egui;
@@ -140,6 +140,7 @@ pub fn run<E: Example>(
                 }
                 app.update(&app_state, actions, |ctx| example.update(ctx))
                     .unwrap();
+                app_state.input.mouse_state.refresh();
             }
             Event::RedrawEventsCleared => window.request_redraw(),
             Event::RedrawRequested(_) => {
@@ -185,8 +186,7 @@ pub fn run<E: Example>(
                     },
                 ..
             } => *control_flow = ControlFlow::Exit,
-            Event::DeviceEvent { event, .. } =>
-                app_state.input.on_device_event(&event),
+            Event::DeviceEvent { event, .. } => app_state.input.on_device_event(&event),
             Event::WindowEvent { event, .. } => {
                 if app.egui_state.on_event(&app.egui_context, &event).consumed {
                     return;

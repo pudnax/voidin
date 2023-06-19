@@ -77,6 +77,22 @@ pub trait NonZeroSized: Sized {
 }
 impl<T> NonZeroSized for T where T: Sized {}
 
+pub trait LerpExt {
+    fn lerp(self, rhs: Self, t: Self) -> Self;
+}
+
+impl LerpExt for f32 {
+    fn lerp(self, rhs: Self, t: Self) -> Self {
+        self * (1. - t) + rhs * t
+    }
+}
+
+impl LerpExt for f64 {
+    fn lerp(self, rhs: Self, t: Self) -> Self {
+        self * (1. - t) + rhs * t
+    }
+}
+
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
 pub struct DrawIndexedIndirect {

@@ -164,7 +164,7 @@ impl Example for Model {
             dispatch_size: self.moving_instances.len() as u32,
         };
         self.update_pass
-            .record(&ctx.world, &mut ctx.encoder, resources);
+            .record(ctx.world, &mut ctx.encoder, resources);
     }
 
     fn resize(&mut self, gpu: &Gpu, width: u32, height: u32) {
@@ -184,42 +184,42 @@ impl Example for Model {
             ..
         }: RenderContext,
     ) {
-        let mut encoder = &mut ctx.encoder;
+        let encoder = &mut ctx.encoder;
 
         self.visibility_pass.record(
-            &world,
-            &mut encoder,
+            world,
+            encoder,
             pass::visibility::VisibilityResource {
-                gbuffer: &gbuffer,
-                draw_cmd_buffer: &draw_cmd_buffer,
-                draw_cmd_bind_group: &draw_cmd_bind_group,
+                gbuffer,
+                draw_cmd_buffer,
+                draw_cmd_bind_group,
             },
         );
 
         self.shading_pass.record(
-            &world,
-            &mut encoder,
+            world,
+            encoder,
             pass::shading::ShadingResource {
-                gbuffer: &gbuffer,
-                view_target: &view_target,
+                gbuffer,
+                view_target,
             },
         );
 
         self.taa_pass.record(
-            &world,
-            &mut encoder,
+            world,
+            encoder,
             pass::taa::TaaResource {
-                gbuffer: &gbuffer,
-                view_target: &view_target,
+                gbuffer,
+                view_target,
                 width_height: (width, height),
             },
         );
 
         self.postprocess_pass.record(
-            &world,
-            &mut encoder,
+            world,
+            encoder,
             pass::postprocess::PostProcessResource {
-                view_target: &view_target,
+                view_target,
             },
         );
 

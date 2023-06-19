@@ -30,6 +30,7 @@ bvh = { path = "crates/bvh" }
 app = { path = "crates/app" }
 dyn_import = { path = "crates/dyn_import" }
 wgpu = { workspace = true }
+winit = { workspace = true }
 color-eyre = { workspace = true }
 glam = { workspace = true }
 rand = { workspace = true }
@@ -47,10 +48,10 @@ opt-level = 0
 
 [profile.hyper]
 inherits = "release"
-panic = "abort"   # Strip expensive panic clean-up logic
-codegen-units = 1 # Compile crates one after another so the compiler can optimize better
-lto = true        # Enables link to optimizations
-strip = true      # Remove debug symbols
+panic = "abort"      # Strip expensive panic clean-up logic
+codegen-units = 1    # Compile crates one after another so the compiler can optimize better
+lto = true           # Enables link to optimizations
+strip = true         # Remove debug symbols
 
 [profile.profiling]
 inherits = "release"

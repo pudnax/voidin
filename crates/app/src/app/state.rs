@@ -65,8 +65,6 @@ impl AppState {
         self.camera.position = self.camera.rig.final_transform.position;
         self.camera.rotation = self.camera.rig.final_transform.rotation;
 
-        self.input.mouse_state.refresh();
-
         if self.keyboard().was_just_pressed(VirtualKeyCode::F3) {
             actions.push(StateAction::Screenshot);
         };
