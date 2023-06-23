@@ -1,76 +1,42 @@
+use bytemuck::{Pod, Zeroable};
 use glam::Vec3;
+
+mod intersection;
+use intersection::intersect_aabb;
+pub use intersection::{Dist, Ray};
+use Dist::*;
 
 const MAX_DIST: f32 = 1e30;
 
-#[derive(Clone, Copy, Default, Debug)]
-pub struct Trig([Vec3; 3]);
-
-impl Trig {
-    pub fn new(v0: Vec3, v1: Vec3, v2: Vec3) -> Self {
-        Self([v0, v1, v2])
-    }
-}
-
-#[derive(PartialOrd, PartialEq)]
-pub enum Dist {
-    Hit(f32),
-    Miss,
-}
-use Dist::*;
-
-impl From<Option<f32>> for Dist {
-    fn from(value: Option<f32>) -> Self {
-        match value {
-            Some(tee) => Self::Hit(tee),
-            None => Self::Miss,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Default, Debug)]
-pub struct Ray {
-    orig: Vec3,
-    dir: Vec3,
-}
-
-impl Ray {
-    pub fn new(orig: Vec3, dir: Vec3) -> Self {
-        Self { orig, dir }
-    }
-
-    pub fn intersect(&self, Trig([v0, v1, v2]): Trig) -> Dist {
-        const EPS: f32 = 0.0001;
-        let (edge1, edge2) = (v1 - v0, v2 - v0);
-        let h = self.dir.cross(edge2);
-        let a = edge1.dot(h);
-        if -EPS < a && a < EPS {
-            return Miss;
-        }
-        let f = 1. / a;
-        let s = self.orig - v0;
-        let u = f * s.dot(h);
-        if !(0. ..=1.).contains(&u) {
-            return Miss;
-        }
-        let q = s.cross(edge1);
-        let v = f * self.dir.dot(q);
-        if v < 0. || u + v > 1. {
-            return Miss;
-        }
-        let t = f * edge2.dot(q);
-        match t > EPS {
-            true => Hit(t),
-            false => Miss,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Default)]
+#[repr(C)]
+#[derive(Copy, Clone, Default, Pod, Zeroable)]
 pub struct BVHNode {
     pub min: Vec3,
     pub left_first: u32,
     pub max: Vec3,
     pub count: u32,
+}
+
+impl BVHNode {
+    pub fn triangle_count(&self) -> usize {
+        self.count as usize
+    }
+
+    pub fn triangle_start(&self) -> usize {
+        self.left_first as usize
+    }
+
+    pub fn left_node_index(&self) -> usize {
+        self.left_first as usize
+    }
+
+    pub fn right_node_index(&self) -> usize {
+        self.left_first as usize + 1
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        self.count > 0
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -86,152 +52,48 @@ impl Aabb {
     }
 }
 
-pub struct Bvh {
-    pub triangles: Vec<[Vec3; 3]>,
-    pub indices: Vec<u32>,
-    pub nodes: Vec<BVHNode>,
-    pub centroids: Vec<Vec3>,
+pub struct BvhBuilder<'a> {
+    num_bins: usize,
+    vertices: &'a [Vec3],
+    indices: &'a mut [[u32; 3]],
+    centroids: Vec<Vec3>,
+    nodes: Vec<BVHNode>,
+    triangle_indices: Vec<usize>,
 }
 
-impl BVHNode {
-    fn is_leaf(&self) -> bool {
-        self.count > 0
-    }
-}
+impl<'a> BvhBuilder<'a> {
+    pub fn new(vertices: &'a [Vec3], indices: &'a mut [u32]) -> Self {
+        let nodes = vec![BVHNode::default(); indices.len() * 2 - 1];
+        let (_, indices, _) = unsafe { indices.align_to_mut() };
 
-fn intersect_aabb(ray: Ray, bmin: Vec3, bmax: Vec3, t: f32) -> Dist {
-    let tx1 = (bmin - ray.orig) / ray.dir;
-    let tx2 = (bmax - ray.orig) / ray.dir;
-    let tmax = tx1.max(tx2).min_element();
-    let tmin = tx1.min(tx2).max_element();
-    (tmax >= tmin && tmin < t && tmax > 0.)
-        .then_some(tmin)
-        .into()
-}
-
-impl Bvh {
-    pub fn new(triangles: &[Trig]) -> Bvh {
-        let triangles: Vec<_> = triangles.iter().map(|t| t.0).collect();
-
-        let indices: Vec<u32> = (0..triangles.len() as u32).collect();
-
-        let bvh_nodes = vec![BVHNode::default(); triangles.len() * 2];
-
-        Bvh {
-            triangles,
+        Self {
+            num_bins: 8,
+            vertices,
             indices,
-            nodes: bvh_nodes,
-            centroids: Default::default(),
+            centroids: vec![],
+            nodes,
+            triangle_indices: vec![],
         }
     }
 
-    #[allow(dead_code)]
-    pub fn traverse(&self, ray: Ray, node_idx: usize, mut t: f32) -> Dist {
-        let node = &self.nodes[node_idx];
-        let Hit(_) = intersect_aabb(ray, node.min , node.max, t) else { return Miss };
-        if node.is_leaf() {
-            for i in 0..node.count as usize {
-                let [v0, v1, v2] = self.triangles[node.left_first as usize + i];
-                let trig = Trig::new(v0, v1, v2);
-                if let Hit(dist) = ray.intersect(trig) {
-                    t = t.min(dist);
-                }
-            }
-            return Hit(t);
-        } else {
-            if let Hit(dist) = self.traverse(ray, node.left_first as _, t) {
-                t = t.min(dist);
-            }
-            if let Hit(dist) = self.traverse(ray, node.left_first as usize + 1, t) {
-                t = t.min(dist);
-            }
-        }
-        Hit(t)
+    pub fn set_bin_number(mut self, num_bins: usize) -> Self {
+        self.num_bins = num_bins;
+        self
     }
 
-    pub fn traverse_iter(&self, ray: Ray) -> Dist {
-        #[derive(Default, Clone, Copy)]
-        struct StackNode {
-            node_idx: usize,
-            dist: f32,
-        }
-        let mut node_idx = 0;
-        let mut stack = [StackNode::default(); 64];
-        let mut stack_ptr = 0;
-        let mut ray_t = MAX_DIST;
-        loop {
-            let node = self.nodes[node_idx];
-            if node.is_leaf() {
-                for i in 0..node.count as usize {
-                    let [v0, v1, v2] = self.triangles[node.left_first as usize + i];
-                    if let Hit(dist) = ray.intersect(Trig::new(v0, v1, v2)) {
-                        ray_t = ray_t.min(dist);
-                    }
-                }
-
-                if stack_ptr == 0 {
-                    break Hit(ray_t);
-                } else {
-                    let mut t = MAX_DIST;
-                    while t >= ray_t {
-                        if stack_ptr == 0 {
-                            return Hit(ray_t);
-                        }
-                        stack_ptr -= 1;
-                        let snode = stack[stack_ptr];
-                        t = snode.dist;
-                        node_idx = snode.node_idx;
-                    }
-                    continue;
-                }
-            }
-
-            let mut child_idx1 = node.left_first as usize;
-            let mut child_idx2 = node.left_first as usize + 1;
-
-            let child1 = self.nodes[child_idx1];
-            let child2 = self.nodes[child_idx2];
-            let mut dist1 = intersect_aabb(ray, child1.min, child1.max, ray_t);
-            let mut dist2 = intersect_aabb(ray, child2.min, child2.max, ray_t);
-            if dist1 > dist2 {
-                (dist1, dist2) = (dist2, dist1);
-                (child_idx1, child_idx2) = (child_idx2, child_idx1);
-            }
-            if matches!(dist1, Hit(_)) {
-                node_idx = child_idx1;
-                if let Hit(dist2) = dist2 {
-                    stack[stack_ptr].node_idx = child_idx2;
-                    stack[stack_ptr].dist = dist2;
-                    stack_ptr += 1;
-                }
-            } else if stack_ptr == 0 {
-                return Miss;
-            } else {
-                let mut t = MAX_DIST;
-                while t >= ray_t {
-                    if stack_ptr == 0 {
-                        return Hit(ray_t);
-                    }
-                    stack_ptr -= 1;
-                    let snode = stack[stack_ptr];
-                    t = snode.dist;
-                    node_idx = snode.node_idx;
-                }
-            }
-        }
-    }
-
-    pub fn build_bvh(&mut self) {
+    pub fn build(mut self) -> Bvh {
         self.centroids = self
-            .triangles
+            .indices
             .iter()
-            .map(|t| (t[0] + t[1] + t[2]) / 3f32)
+            .map(|idx| idx.map(|i| self.vertices[i as usize]))
+            .map(|trig| (trig[0] + trig[1] + trig[2]) / 3f32)
             .collect();
 
+        self.triangle_indices = (0..self.centroids.len()).collect();
         self.nodes[0].left_first = 0;
-        self.nodes[0].count = self.triangles.len() as u32;
+        self.nodes[0].count = self.triangle_indices.len() as u32;
 
-        let aabb = self.calculate_bounds(0, self.triangles.len() as u32, false);
+        let aabb = self.calculate_bounds(0, self.nodes[0].count, false);
         self.set_bound(0, &aabb);
 
         let mut new_node_index = 2;
@@ -239,26 +101,15 @@ impl Bvh {
         self.subdivide(0, 0, &mut new_node_index);
         self.nodes.truncate(new_node_index as usize);
 
-        self.triangles = self
-            .indices
-            .iter()
-            .map(|index| self.triangles[*index as usize])
+        let indices_copy = std::mem::take(&mut self.triangle_indices);
+        let indices_copy: Vec<_> = indices_copy
+            .into_iter()
+            .map(usize::from)
+            .map(|i| self.indices[i])
             .collect();
-    }
+        self.indices.copy_from_slice(&indices_copy);
 
-    pub fn refit(&mut self) {
-        for i in (0..self.nodes.len()).filter(|&i| i != 1).rev() {
-            let node = self.nodes[i];
-            if node.is_leaf() {
-                self.calculate_bounds(node.left_first as _, node.count as _, false);
-                continue;
-            }
-
-            let left = self.nodes[node.left_first as usize];
-            let right = self.nodes[node.left_first as usize + 1];
-            self.nodes[i].min = left.min.min(right.min);
-            self.nodes[i].max = left.max.max(right.max);
-        }
+        Bvh { nodes: self.nodes }
     }
 
     fn subdivide(&mut self, current_bvh_index: usize, start: u32, pool_index: &mut u32) {
@@ -329,10 +180,10 @@ impl Bvh {
         let mut i = start as usize;
 
         while i < end {
-            if self.centroids[self.indices[i] as usize][axis] < pos {
+            if self.centroids[self.triangle_indices[i]][axis] < pos {
                 i += 1;
             } else {
-                self.indices.swap(i, end);
+                self.triangle_indices.swap(i, end);
                 end -= 1;
             }
         }
@@ -343,18 +194,131 @@ impl Bvh {
     fn calculate_bounds(&self, first: u32, amount: u32, centroids: bool) -> Aabb {
         let mut max = Vec3::splat(-MAX_DIST);
         let mut min = Vec3::splat(MAX_DIST);
-        for &idx in &self.indices[first as usize..][..amount as usize] {
+        for &idx in &self.triangle_indices[first as usize..][..amount as usize] {
             if centroids {
                 let vertex = self.centroids[idx as usize];
                 max = max.max(vertex);
                 min = min.min(vertex);
             } else {
-                self.triangles[idx as usize].iter().for_each(|&vertex| {
-                    max = max.max(vertex);
-                    min = min.min(vertex);
-                });
+                self.indices[idx]
+                    .iter()
+                    .map(|&i| self.vertices[i as usize])
+                    .for_each(|vertex| {
+                        max = max.max(vertex);
+                        min = min.min(vertex);
+                    });
             }
         }
         Aabb { max, min }
+    }
+}
+
+pub struct Bvh {
+    nodes: Vec<BVHNode>,
+}
+
+impl Bvh {
+    pub fn traverse(
+        &self,
+        vertices: &[Vec3],
+        indices: &[u32],
+        ray: Ray,
+        node_idx: usize,
+        mut t: f32,
+    ) -> Dist {
+        let node = &self.nodes[node_idx];
+        let Hit(_) = intersect_aabb(ray, node.min , node.max, t) else { return Miss };
+        if node.is_leaf() {
+            for i in 0..node.triangle_count() {
+                let (_, indices, _) = unsafe { indices.align_to::<[u32; 3]>() };
+                let trig = indices[node.triangle_start() + i].map(|i| vertices[i as usize]);
+                if let Hit(dist) = ray.intersect(trig) {
+                    t = t.min(dist);
+                }
+            }
+            return Hit(t);
+        } else {
+            if let Hit(dist) = self.traverse(vertices, indices, ray, node.left_node_index(), t) {
+                t = t.min(dist);
+            }
+            if let Hit(dist) = self.traverse(vertices, indices, ray, node.right_node_index(), t) {
+                t = t.min(dist);
+            }
+        }
+        Hit(t)
+    }
+
+    pub fn traverse_iter(&self, vertices: &[Vec3], indices: &[u32], ray: Ray) -> Dist {
+        let mut stack = Stack::new();
+        stack.push(0);
+
+        let mut hit = Dist::Miss;
+        while !stack.is_empty() {
+            let node = self.nodes[stack.pop()];
+            if node.is_leaf() {
+                for i in 0..node.triangle_count() {
+                    let (_, indices, _) = unsafe { indices.align_to::<[u32; 3]>() };
+                    let trig = indices[node.triangle_start() + i].map(|i| vertices[i as usize]);
+                    if let Hit(dist) = ray.intersect(trig) {
+                        hit = match hit {
+                            Hit(t) => Hit(t.min(dist)),
+                            Miss => Hit(dist),
+                        }
+                    }
+                }
+            } else {
+                let mut min_index = node.left_node_index();
+                let mut max_index = node.right_node_index();
+
+                let min_child = self.nodes[min_index];
+                let max_child = self.nodes[max_index];
+
+                let mut min_dist =
+                    intersect_aabb(ray, min_child.min, min_child.max, hit.unwrap_or(MAX_DIST));
+                let mut max_dist =
+                    intersect_aabb(ray, max_child.min, max_child.max, hit.unwrap_or(MAX_DIST));
+                if min_dist > max_dist {
+                    (min_index, max_index) = (max_index, min_index);
+                    (min_dist, max_dist) = (max_dist, min_dist);
+                }
+
+                match min_dist {
+                    Hit(_) => stack.push(min_index),
+                    Miss => continue,
+                }
+                if let Hit(_) = max_dist {
+                    stack.push(max_index);
+                }
+            }
+        }
+        hit
+    }
+}
+
+struct Stack {
+    arr: [usize; 32],
+    head: usize,
+}
+
+impl Stack {
+    fn new() -> Self {
+        Self {
+            arr: [usize::MAX; 32],
+            head: 0,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.head == 0
+    }
+
+    fn push(&mut self, val: usize) {
+        self.arr[self.head] = val;
+        self.head += 1;
+    }
+
+    fn pop(&mut self) -> usize {
+        self.head -= 1;
+        self.arr[self.head]
     }
 }

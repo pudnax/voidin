@@ -1,6 +1,6 @@
 use std::{array, time::Duration};
 
-use bvh::{Bvh, Dist::*, Ray, Trig};
+use bvh::{Bvh, Dist::*, Ray};
 
 use color_eyre::Result;
 use glam::Vec4Swizzles;
@@ -16,6 +16,9 @@ const PIXEL_SIZE: usize = std::mem::size_of::<Pixel>();
 struct Demo {
     cpu_pixels: Vec<Pixel>,
     gpu_pixels: wgpu::Buffer,
+
+    vertices: Vec<Vec3>,
+    indices: Vec<u32>,
 
     bvh: Bvh,
 }
@@ -34,21 +37,27 @@ impl Example for Demo {
             mapped_at_creation: false,
         });
         let mut rng = rand::thread_rng();
-        let mut triangles = vec![Trig::default(); 64];
-        for trig in triangles.iter_mut() {
+        let n = 64;
+        let mut vertices = Vec::with_capacity(n * 3);
+        for _ in 0..n {
             let v0 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
             let v1 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
             let v2 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
             let base = v0 * 9. - vec3(5., 5., 0.);
-            *trig = Trig::new(base, base + v1, base + v2);
+            vertices.push(base);
+            vertices.push(base + v1);
+            vertices.push(base + v2);
         }
+        let mut indices: Vec<_> = (0..vertices.len() as u32).collect();
 
-        let mut bvh = Bvh::new(&triangles);
-        bvh.build_bvh();
+        let bvh = bvh::BvhBuilder::new(&vertices, &mut indices).build();
 
         Ok(Self {
             cpu_pixels,
             gpu_pixels,
+
+            vertices,
+            indices,
 
             bvh,
         })
@@ -73,8 +82,8 @@ impl Example for Demo {
 
             let ray = Ray::new(eye, dir);
 
-            // let hit = self.bvh.traverse(ray, 0, MAX_DIST);
-            let hit = self.bvh.traverse_iter(ray);
+            // let hit = self.bvh.traverse(&self.vertices, &self.indices, ray, 0, 1e30);
+            let hit = self.bvh.traverse_iter(&self.vertices, &self.indices, ray);
             let val = match hit {
                 Hit(dist) => {
                     let limit = 50.;
