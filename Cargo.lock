@@ -2331,6 +2331,7 @@ dependencies = [
  "half",
  "log",
  "rand",
+ "tobj",
  "wgpu",
  "winit",
 ]

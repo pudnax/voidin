@@ -14,7 +14,7 @@ struct Camera {
 	position: vec4<f32>,
 	proj: mat4x4<f32>,
 	view: mat4x4<f32>,
-	inv_proj_view: mat4x4<f32>,
+	clip_to_world: mat4x4<f32>,
 	prev_world_to_clip: mat4x4<f32>,
 	frustum: vec4<f32>,
 	zfar: f32, znear: f32,

@@ -49,7 +49,7 @@ impl ObjModel {
                 normals: bytemuck::cast_slice(&mesh.normals),
                 tangents: &vec![Vec4::ZERO; mesh.positions.len()],
                 tex_coords: bytemuck::cast_slice(&mesh.texcoords),
-                indices: bytemuck::cast_slice(&mesh.indices),
+                indices: &mesh.indices,
                 bounding_sphere: mesh_bounding_sphere(bytemuck::cast_slice(&mesh.positions)),
             });
             let material_id = match mesh.material_id {

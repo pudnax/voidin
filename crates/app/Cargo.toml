@@ -17,6 +17,7 @@ ahash = { workspace = true }
 winit = { workspace = true }
 dolly = { workspace = true }
 either = { workspace = true }
+tobj = { workspace = true }
 components = { path = "../components" }
 pollster = { version = "0.3.0", features = ["macro"] }
 wgpu-profiler = "0.12.1"
@@ -26,7 +27,6 @@ image = { version = "0.24.5", default-features = false, features = [
 	"jpeg",
 	"png",
 ] }
-tobj = "4.0.0"
 egui = "0.22.0"
 egui-winit = "0.22.0"
 egui-wgpu = "0.22.0"

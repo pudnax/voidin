@@ -19,8 +19,8 @@ pub trait ResizableBufferExt {
 
     fn create_resizable_buffer_init<T: Pod>(
         &self,
-        usages: BufferUsages,
         data: &[T],
+        usages: BufferUsages,
     ) -> ResizableBuffer<T>;
 }
 
@@ -31,10 +31,10 @@ impl ResizableBufferExt for wgpu::Device {
 
     fn create_resizable_buffer_init<T: Pod>(
         &self,
-        usages: BufferUsages,
         data: &[T],
+        usages: BufferUsages,
     ) -> ResizableBuffer<T> {
-        ResizableBuffer::new_with_data(self, usages, data)
+        ResizableBuffer::new_with_data(self, data, usages)
     }
 }
 
@@ -73,7 +73,7 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
         }
     }
 
-    pub fn new_with_data(device: &Device, usages: BufferUsages, data: &[T]) -> Self {
+    pub fn new_with_data(device: &Device, data: &[T], usages: BufferUsages) -> Self {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
             contents: bytemuck::cast_slice(data),

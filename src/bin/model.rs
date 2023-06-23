@@ -218,9 +218,7 @@ impl Example for Model {
         self.postprocess_pass.record(
             world,
             encoder,
-            pass::postprocess::PostProcessResource {
-                view_target,
-            },
+            pass::postprocess::PostProcessResource { view_target },
         );
 
         ctx.ui(|egui_ctx| {

@@ -10,14 +10,14 @@ const MAX_DIST: f32 = 1e30;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, Pod, Zeroable)]
-pub struct BVHNode {
+pub struct BvhNode {
     pub min: Vec3,
     pub left_first: u32,
     pub max: Vec3,
     pub count: u32,
 }
 
-impl BVHNode {
+impl BvhNode {
     pub fn triangle_count(&self) -> usize {
         self.count as usize
     }
@@ -57,14 +57,14 @@ pub struct BvhBuilder<'a> {
     vertices: &'a [Vec3],
     indices: &'a mut [[u32; 3]],
     centroids: Vec<Vec3>,
-    nodes: Vec<BVHNode>,
+    nodes: Vec<BvhNode>,
     triangle_indices: Vec<usize>,
 }
 
 impl<'a> BvhBuilder<'a> {
     pub fn new(vertices: &'a [Vec3], indices: &'a mut [u32]) -> Self {
-        let nodes = vec![BVHNode::default(); indices.len() * 2 - 1];
-        let (_, indices, _) = unsafe { indices.align_to_mut() };
+        let nodes = vec![BvhNode::default(); indices.len() * 2 - 1];
+        let indices = bytemuck::cast_slice_mut(indices);
 
         Self {
             num_bins: 8,
@@ -214,7 +214,7 @@ impl<'a> BvhBuilder<'a> {
 }
 
 pub struct Bvh {
-    nodes: Vec<BVHNode>,
+    pub nodes: Vec<BvhNode>,
 }
 
 impl Bvh {
@@ -230,7 +230,7 @@ impl Bvh {
         let Hit(_) = intersect_aabb(ray, node.min , node.max, t) else { return Miss };
         if node.is_leaf() {
             for i in 0..node.triangle_count() {
-                let (_, indices, _) = unsafe { indices.align_to::<[u32; 3]>() };
+                let indices = bytemuck::cast_slice::<_, [u32; 3]>(indices);
                 let trig = indices[node.triangle_start() + i].map(|i| vertices[i as usize]);
                 if let Hit(dist) = ray.intersect(trig) {
                     t = t.min(dist);
@@ -257,7 +257,7 @@ impl Bvh {
             let node = self.nodes[stack.pop()];
             if node.is_leaf() {
                 for i in 0..node.triangle_count() {
-                    let (_, indices, _) = unsafe { indices.align_to::<[u32; 3]>() };
+                    let indices = bytemuck::cast_slice::<_, [u32; 3]>(indices);
                     let trig = indices[node.triangle_start() + i].map(|i| vertices[i as usize]);
                     if let Hit(dist) = ray.intersect(trig) {
                         hit = match hit {

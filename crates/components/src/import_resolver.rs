@@ -81,7 +81,7 @@ impl ImportResolver {
         Self {
             search_path: search_path
                 .iter()
-                .map(|p| p.as_ref().to_path_buf())
+                .map(|p| p.as_ref().canonicalize().unwrap())
                 .collect(),
         }
     }

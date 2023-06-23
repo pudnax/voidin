@@ -61,7 +61,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let emissive = textureSample(texture_array[material.emissive], t_sampler, uv).rgb;
     let metallic_roughness = textureSample(texture_array[material.metallic_roughness], t_sampler, uv);
 
-    let pos = world_position_from_depth(in.uv, depth, camera.inv_proj_view);
+    let pos = world_position_from_depth(in.uv, depth, camera.clip_to_world);
     let nor = decode_octahedral_32(norm_uv_tex.x);
     let rd = normalize(camera.position.xyz - pos);
 

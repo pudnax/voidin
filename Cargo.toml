@@ -23,6 +23,7 @@ winit = "^0.28"
 png = "^0.17"
 dolly = "0.4.2"
 either = "1.8.1"
+tobj = "4.0.0"
 half = { version = "2.2.1", features = ["bytemuck"] }
 
 [dependencies]
@@ -37,6 +38,7 @@ rand = { workspace = true }
 bytemuck = { workspace = true }
 log = { workspace = true }
 half = { workspace = true }
+tobj = { workspace = true }
 
 [profile.dev.package."*"]
 opt-level = 1

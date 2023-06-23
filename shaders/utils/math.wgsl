@@ -1,5 +1,15 @@
 const PI = 3.141592;
 const TAU = 6.283185;
+const EPS: f32 = 0.0001;
+const MAX_DIST: f32 = 1e30;
+
+fn min_element(x: vec3<f32>) -> f32 {
+    return min(x.x, min(x.y, x.z));
+}
+
+fn max_element(x: vec3<f32>) -> f32 {
+    return max(x.x, max(x.y, x.z));
+}
 
 fn mat4_to_mat3(m: mat4x4<f32>) -> mat3x3<f32> {
     return mat3x3<f32>(m[0].xyz, m[1].xyz, m[2].xyz);

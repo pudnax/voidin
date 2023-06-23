@@ -27,7 +27,7 @@ fn cs_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     let curr_position_ndc = vec4(ndc_from_uv_raw_depth(uv, depth), 1.);
 
-    let pos_ws = world_position_from_depth(uv, depth, camera.inv_proj_view);
+    let pos_ws = world_position_from_depth(uv, depth, camera.clip_to_world);
     let prev_position_ndc_w = camera.prev_world_to_clip * vec4(pos_ws, 1.);
     let prev_position_ndc = prev_position_ndc_w.xyz / prev_position_ndc_w.w;
 

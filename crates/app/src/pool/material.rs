@@ -55,10 +55,10 @@ impl MaterialPool {
     pub const LIGHT_MATERIAL: MaterialId = MaterialId::new(1);
     pub fn new(gpu: Arc<Gpu>) -> Self {
         let buffer = gpu.device().create_resizable_buffer_init(
+            &[Material::default(), Material::default()],
             wgpu::BufferUsages::STORAGE
                 | wgpu::BufferUsages::COPY_DST
                 | wgpu::BufferUsages::COPY_SRC,
-            &[Material::default(), Material::default()],
         );
 
         let bind_group_layout =
