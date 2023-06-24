@@ -48,20 +48,20 @@ impl Pass for Visibility {
         resources: Self::Resources<'_>,
     ) {
         encoder.profile_start("Visibility");
-        self.geometry.record(
-            world,
-            encoder,
-            GeometryResource {
-                gbuffer: resources.gbuffer,
-                draw_cmd_buffer: resources.draw_cmd_buffer,
-            },
-        );
         self.emit_draws.record(
             world,
             encoder,
             EmitDrawsResource {
                 draw_cmd_buffer: resources.draw_cmd_buffer,
                 draw_cmd_bind_group: resources.draw_cmd_bind_group,
+            },
+        );
+        self.geometry.record(
+            world,
+            encoder,
+            GeometryResource {
+                gbuffer: resources.gbuffer,
+                draw_cmd_buffer: resources.draw_cmd_buffer,
             },
         );
         encoder.profile_end();

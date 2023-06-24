@@ -2,7 +2,7 @@ use dolly::{
     prelude::{Position, Smooth, YawPitch},
     rig::CameraRig,
 };
-use glam::{vec4, Mat4, Quat, Vec3, Vec4};
+use glam::{vec4, Mat4, Quat, Vec2, Vec3, Vec4};
 use wgpu::util::DeviceExt;
 
 use crate::{
@@ -102,6 +102,7 @@ pub struct Camera {
     pub position: Vec3,
     pub rotation: Quat,
     pub aspect: f32,
+    pub jitter: Vec2,
 }
 
 impl Camera {
@@ -119,6 +120,7 @@ impl Camera {
             aspect: 1.25,
             position,
             rotation: Quat::IDENTITY,
+            jitter: Vec2::ZERO,
         }
     }
 
@@ -129,17 +131,11 @@ impl Camera {
         (proj, view)
     }
 
-    pub fn get_uniform(
-        &self,
-        jitter: Option<[f32; 2]>,
-        previous: Option<&CameraUniform>,
-    ) -> CameraUniform {
+    pub fn get_uniform(&self, previous: Option<&CameraUniform>) -> CameraUniform {
         let pos = Vec4::from((self.rig.final_transform.position, 1.));
         let (mut projection, view) = self.build_projection_view_matrix();
-        if let Some([x, y]) = jitter {
-            projection.z_axis[0] += x;
-            projection.z_axis[1] += y;
-        }
+        projection.z_axis[0] += self.jitter.x;
+        projection.z_axis[1] += self.jitter.y;
         let proj_view = projection * view;
 
         // https://github.com/zeux/niagara/blob/3fafe000ba8fe6e309b41e915b81242b4ca3db28/src/niagara.cpp#L836-L852
@@ -165,7 +161,7 @@ impl Camera {
             frustum: frustum.to_array(),
             zfar: f32::INFINITY,
             znear: Camera::ZNEAR,
-            jitter: jitter.unwrap_or([0.; 2]),
+            jitter: self.jitter.to_array(),
             prev_jitter,
             _padding: [0.; 2],
         }

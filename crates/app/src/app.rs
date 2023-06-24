@@ -83,6 +83,7 @@ pub struct App {
 impl App {
     pub const SAMPLE_COUNT: u32 = 1;
 
+    // TODO: call resize right after
     pub fn new(window: &Window, file_watcher: Watcher) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::VULKAN,
@@ -330,7 +331,7 @@ impl App {
 
     pub fn update(
         &mut self,
-        state: &AppState,
+        state: &mut AppState,
         actions: Vec<StateAction>,
         update: impl FnOnce(UpdateContext),
     ) -> Result<()> {
@@ -360,7 +361,8 @@ impl App {
             .get_mut::<global_ubo::GlobalUniformBinding>()?
             .update(self.gpu.queue(), &self.global_uniform);
 
-        let camera_uniform = self.world.get::<CameraUniform>()?;
+        let mut camera_uniform = self.world.unwrap_mut::<CameraUniform>();
+        *camera_uniform = state.camera.get_uniform(Some(&camera_uniform));
         self.world
             .get_mut::<CameraUniformBinding>()?
             .update(self.gpu.queue(), &camera_uniform);
@@ -519,7 +521,7 @@ impl Display for RendererInfo {
 }
 
 pub struct UpdateContext<'a> {
-    pub app_state: &'a AppState,
+    pub app_state: &'a mut AppState,
     pub encoder: ProfilerCommandEncoder<'a>,
     pub world: &'a World,
     pub width: u32,

@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use glam::Vec3;
+use glam::{UVec4, Vec3, Vec4};
 
 mod intersection;
 use intersection::intersect_aabb;
@@ -54,15 +54,15 @@ impl Aabb {
 
 pub struct BvhBuilder<'a> {
     num_bins: usize,
-    vertices: &'a [Vec3],
-    indices: &'a mut [[u32; 3]],
+    vertices: &'a [Vec4],
+    indices: &'a mut [[u32; 4]],
     centroids: Vec<Vec3>,
     nodes: Vec<BvhNode>,
     triangle_indices: Vec<usize>,
 }
 
 impl<'a> BvhBuilder<'a> {
-    pub fn new(vertices: &'a [Vec3], indices: &'a mut [u32]) -> Self {
+    pub fn new(vertices: &'a [Vec4], indices: &'a mut [UVec4]) -> Self {
         let nodes = vec![BvhNode::default(); indices.len() * 2 - 1];
         let indices = bytemuck::cast_slice_mut(indices);
 
@@ -85,7 +85,13 @@ impl<'a> BvhBuilder<'a> {
         self.centroids = self
             .indices
             .iter()
-            .map(|idx| idx.map(|i| self.vertices[i as usize]))
+            .map(|idx| {
+                [
+                    self.vertices[idx[0] as usize].truncate(),
+                    self.vertices[idx[1] as usize].truncate(),
+                    self.vertices[idx[2] as usize].truncate(),
+                ]
+            })
             .map(|trig| (trig[0] + trig[1] + trig[2]) / 3f32)
             .collect();
 
@@ -200,12 +206,12 @@ impl<'a> BvhBuilder<'a> {
                 max = max.max(vertex);
                 min = min.min(vertex);
             } else {
-                self.indices[idx]
+                self.indices[idx][..3]
                     .iter()
                     .map(|&i| self.vertices[i as usize])
                     .for_each(|vertex| {
-                        max = max.max(vertex);
-                        min = min.min(vertex);
+                        max = max.max(vertex.truncate());
+                        min = min.min(vertex.truncate());
                     });
             }
         }
@@ -220,8 +226,8 @@ pub struct Bvh {
 impl Bvh {
     pub fn traverse(
         &self,
-        vertices: &[Vec3],
-        indices: &[u32],
+        vertices: &[Vec4],
+        indices: &[[u32; 4]],
         ray: Ray,
         node_idx: usize,
         mut t: f32,
@@ -230,8 +236,12 @@ impl Bvh {
         let Hit(_) = intersect_aabb(ray, node.min , node.max, t) else { return Miss };
         if node.is_leaf() {
             for i in 0..node.triangle_count() {
-                let indices = bytemuck::cast_slice::<_, [u32; 3]>(indices);
-                let trig = indices[node.triangle_start() + i].map(|i| vertices[i as usize]);
+                let idx = indices[node.triangle_start() + i];
+                let trig = [
+                    vertices[idx[0] as usize].truncate(),
+                    vertices[idx[1] as usize].truncate(),
+                    vertices[idx[2] as usize].truncate(),
+                ];
                 if let Hit(dist) = ray.intersect(trig) {
                     t = t.min(dist);
                 }
@@ -248,7 +258,7 @@ impl Bvh {
         Hit(t)
     }
 
-    pub fn traverse_iter(&self, vertices: &[Vec3], indices: &[u32], ray: Ray) -> Dist {
+    pub fn traverse_iter(&self, vertices: &[Vec4], indices: &[UVec4], ray: Ray) -> Dist {
         let mut stack = Stack::new();
         stack.push(0);
 
@@ -257,8 +267,12 @@ impl Bvh {
             let node = self.nodes[stack.pop()];
             if node.is_leaf() {
                 for i in 0..node.triangle_count() {
-                    let indices = bytemuck::cast_slice::<_, [u32; 3]>(indices);
-                    let trig = indices[node.triangle_start() + i].map(|i| vertices[i as usize]);
+                    let idx = indices[node.triangle_start() + i];
+                    let trig = [
+                        vertices[idx[0] as usize].truncate(),
+                        vertices[idx[1] as usize].truncate(),
+                        vertices[idx[2] as usize].truncate(),
+                    ];
                     if let Hit(dist) = ray.intersect(trig) {
                         hit = match hit {
                             Hit(t) => Hit(t.min(dist)),

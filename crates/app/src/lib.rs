@@ -138,7 +138,7 @@ pub fn run<E: Example>(
 
                     accumulated_time -= FIXED_TIME_STEP;
                 }
-                app.update(&app_state, actions, |ctx| example.update(ctx))
+                app.update(&mut app_state, actions, |ctx| example.update(ctx))
                     .unwrap();
                 app_state.input.mouse_state.refresh();
             }

@@ -83,13 +83,12 @@ fn traverse_bvh(ray: Ray) -> f32 {
     var hit = MAX_DIST;
     while stack.head != 0u {
         let node = nodes[stack_pop(&stack)];
-		// is leaf
-        if node.count > 0u {
+        if node.count > 0u { // is leaf
             for (var i = 0u; i < node.count; i += 1u) {
-                let idx = indices[3u * (node.left_first + i)];
-                let v0 = vertices[ idx + 0u ];
-                let v1 = vertices[ idx + 1u ];
-                let v2 = vertices[ idx + 2u ];
+                let idx = indices[node.left_first + i];
+                let v0 = vertices[ idx[0] ].xyz;
+                let v1 = vertices[ idx[1] ].xyz;
+                let v2 = vertices[ idx[2] ].xyz;
                 let t = intersect_trig(ray, v0, v1, v2);
                 hit = min(hit, t);
             }
@@ -127,8 +126,8 @@ fn traverse_bvh(ray: Ray) -> f32 {
 
 @group(0) @binding(0) var<uniform> cam: Camera;
 
-@group(1) @binding(0) var<storage, read> vertices: array<vec3<f32>>;
-@group(1) @binding(1) var<storage, read> indices: array<u32>;
+@group(1) @binding(0) var<storage, read> vertices: array<vec4<f32>>;
+@group(1) @binding(1) var<storage, read> indices: array<vec4<u32>>;
 @group(1) @binding(2) var<storage, read> nodes: array<BvhNode>;
 
 struct VertexOutput {
@@ -147,7 +146,7 @@ fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let uv = in.uv - 0.5;
+    let uv = (in.uv - 0.5) * vec2(2., 2.);
 
     let view_pos = cam.clip_to_world * vec4(uv, 1., 1.);
     let view_dir = cam.clip_to_world * vec4(uv, 0., 1.);

@@ -150,14 +150,9 @@ impl Example for Model {
     }
 
     fn update(&mut self, mut ctx: UpdateContext) {
-        let jitter =
+        ctx.app_state.camera.jitter =
             self.taa_pass
                 .get_jitter(ctx.app_state.frame_count as u32, ctx.width, ctx.height);
-        let mut camera_uniform = ctx.world.get_mut::<CameraUniform>().unwrap();
-        *camera_uniform = ctx
-            .app_state
-            .camera
-            .get_uniform(Some(jitter.to_array()), Some(&camera_uniform));
 
         let resources = pass::compute_update::ComputeUpdateResourse {
             idx_bind_group: &self.moving_instances_bind_group,

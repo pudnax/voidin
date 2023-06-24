@@ -17,8 +17,8 @@ struct Demo {
     cpu_pixels: Vec<Pixel>,
     gpu_pixels: wgpu::Buffer,
 
-    vertices: Vec<Vec3>,
-    indices: Vec<u32>,
+    vertices: Vec<Vec4>,
+    indices: Vec<UVec4>,
 
     bvh: Bvh,
 }
@@ -40,15 +40,19 @@ impl Example for Demo {
         let n = 64;
         let mut vertices = Vec::with_capacity(n * 3);
         for _ in 0..n {
-            let v0 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
-            let v1 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
-            let v2 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
-            let base = v0 * 9. - vec3(5., 5., 0.);
+            let v0 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
+            let v1 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
+            let v2 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
+            let base = v0 * 9. - vec4(5., 5., 0., 0.);
             vertices.push(base);
             vertices.push(base + v1);
             vertices.push(base + v2);
         }
-        let mut indices: Vec<_> = (0..vertices.len() as u32).collect();
+        let indices: Vec<_> = (0..vertices.len() as u32).collect();
+        let mut indices: Vec<_> = indices
+            .chunks_exact(3)
+            .map(|i| UVec3::from_slice(i).extend(0))
+            .collect();
 
         let bvh = bvh::BvhBuilder::new(&vertices, &mut indices).build();
 
@@ -68,7 +72,7 @@ impl Example for Demo {
     fn resize(&mut self, _gpu: &Gpu, _width: u32, _height: u32) {}
 
     fn render(&mut self, mut ctx: RenderContext) {
-        let camera = ctx.app_state.camera.get_uniform(None, None);
+        let camera = ctx.app_state.camera.get_uniform(None);
         for (i, p) in self.cpu_pixels.iter_mut().enumerate() {
             let x = (i % WIDTH) as f32 / WIDTH as f32;
             let y = (i / HEIGHT) as f32 / HEIGHT as f32;
