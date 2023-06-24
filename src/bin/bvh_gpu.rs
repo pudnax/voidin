@@ -91,23 +91,6 @@ impl Example for Demo {
                     .map(|i| UVec3::from_slice(i).extend(0)),
             );
         }
-        let mut rng = rand::thread_rng();
-        let n = 64;
-        let mut vertices = Vec::with_capacity(n * 3);
-        for _ in 0..n {
-            let v0 = Vec3::from(std::array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
-            let v1 = Vec3::from(std::array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
-            let v2 = Vec3::from(std::array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
-            let base = v0 * 9. - vec4(5., 5., 0., 0.);
-            vertices.push(base);
-            vertices.push(base + v1);
-            vertices.push(base + v2);
-        }
-        let indices: Vec<_> = (0..vertices.len() as u32).collect();
-        let mut indices: Vec<_> = indices
-            .chunks_exact(3)
-            .map(|i| UVec3::from_slice(i).extend(0))
-            .collect();
 
         let bvh = BvhBuilder::new(&vertices, &mut indices).build();
 

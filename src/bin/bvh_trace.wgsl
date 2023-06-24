@@ -90,7 +90,9 @@ fn traverse_bvh(ray: Ray) -> f32 {
                 let v1 = vertices[ idx[1] ].xyz;
                 let v2 = vertices[ idx[2] ].xyz;
                 let t = intersect_trig(ray, v0, v1, v2);
-                hit = min(hit, t);
+                if t < MAX_DIST {
+                    hit = min(hit, t);
+                }
             }
         } else {
             var min_index = node.left_first;
@@ -103,11 +105,11 @@ fn traverse_bvh(ray: Ray) -> f32 {
             var max_dist = intersect_aabb(ray, max_child.min, max_child.max, hit);
             if min_dist > max_dist {
                 var tmpd = min_dist;
-                max_dist = min_dist;
-                min_dist = tmpd;
+                min_dist = max_dist;
+                max_dist = tmpd;
                 var tmpi = min_index;
-                max_index = min_index;
-                min_index = tmpi;
+                min_index = max_index;
+                max_index = tmpi;
             }
 
             if min_dist < MAX_DIST {
@@ -140,13 +142,12 @@ fn vs_main(@builtin(vertex_index) vertex_idx: u32) -> VertexOutput {
     var out: VertexOutput;
     out.uv = vec2<f32>(vec2((vertex_idx << 1u) & 2u, vertex_idx & 2u));
     out.pos = vec4(2.0 * out.uv - 1.0, 0.0, 1.0);
-    // out.pos = vec4(2.0 * out.uv.x - 1.0, 1.0 - out.uv.y * 2.0, 0.0, 1.0);
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let uv = (in.uv - 0.5) * vec2(2., 2.);
+    let uv = in.uv * 2. - 1.0;
 
     let view_pos = cam.clip_to_world * vec4(uv, 1., 1.);
     let view_dir = cam.clip_to_world * vec4(uv, 0., 1.);
@@ -156,11 +157,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let ray = ray_new(eye, dir);
 
-    var color = vec3(0.13);
-    let t = traverse_bvh(ray);
+    var color = vec3(0.05);
+    var t = traverse_bvh(ray);
     if t < MAX_DIST {
         let limit = 50.;
-        color = vec3((limit - t) / limit);
+        let scale = (limit - clamp(t, 0., limit)) / limit;
+        color = mix(color, vec3(1.), scale);
     }
 
     return vec4(color, 1.0);
