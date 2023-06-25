@@ -9,7 +9,7 @@ use Dist::*;
 const MAX_DIST: f32 = 1e30;
 
 #[repr(C)]
-#[derive(Copy, Clone, Default, Pod, Zeroable)]
+#[derive(Copy, Clone, Default, Debug, Pod, Zeroable)]
 pub struct BvhNode {
     pub min: Vec3,
     pub left_first: u32,
@@ -107,11 +107,10 @@ impl<'a> BvhBuilder<'a> {
         self.subdivide(0, 0, &mut new_node_index);
         self.nodes.truncate(new_node_index as usize);
 
-        let indices_copy = std::mem::take(&mut self.triangle_indices);
-        let indices_copy: Vec<_> = indices_copy
+        let indices_copy: Vec<_> = self
+            .triangle_indices
             .into_iter()
-            .map(usize::from)
-            .map(|i| self.indices[i])
+            .map(|i| self.indices[i as usize])
             .collect();
         self.indices.copy_from_slice(&indices_copy);
 
@@ -227,7 +226,7 @@ impl Bvh {
     pub fn traverse(
         &self,
         vertices: &[Vec4],
-        indices: &[[u32; 4]],
+        indices: &[UVec4],
         ray: Ray,
         node_idx: usize,
         mut t: f32,

@@ -97,6 +97,7 @@ impl CameraUniformBinding {
     }
 }
 
+#[derive(Debug)]
 pub struct Camera {
     pub rig: CameraRig,
     pub position: Vec3,

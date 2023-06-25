@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use bvh::{Bvh, BvhBuilder, BvhNode};
 use color_eyre::Result;
-use rand::Rng;
 use voidin::*;
 
 #[allow(dead_code)]
@@ -180,6 +179,6 @@ impl Example for Demo {
 fn main() -> Result<()> {
     let window = WindowBuilder::new();
 
-    let camera = Camera::new(vec3(0., 0., 15.), 0., 0.);
+    let camera = Camera::new(vec3(-0.16, 0.75, 1.5), 0., 0.);
     run::<Demo>(window, camera)
 }

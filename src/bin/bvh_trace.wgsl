@@ -48,25 +48,32 @@ fn intersect_aabb(ray: Ray, bmin: vec3<f32>, bmax: vec3<f32>, t: f32) -> f32 {
     }
 }
 
-fn intersect_trig(ray: Ray, v0: vec3<f32>, v1: vec3<f32>, v2: vec3<f32>) -> f32 {
+fn intersect_trig(ray: Ray, v0: vec3<f32>, v1: vec3<f32>, v2: vec3<f32>, hit: ptr<function,f32>) -> bool {
     let edge1 = v1 - v0;
     let edge2 = v2 - v0;
     let uvec = cross(ray.dir, edge2);
     let det = dot(edge1, uvec);
-    if -EPS < det && det < EPS { return MAX_DIST; }
+    if det < 1e-10 { return false; } // cull backface
     let inv_det = 1. / det;
     let orig = ray.eye - v0;
     let u = inv_det * dot(orig, uvec);
-    if u < 0. || 1. < u { return MAX_DIST; }
+    if u < 0. || 1. < u { return false; }
     let vvec = cross(orig, edge1);
     let v = inv_det * dot(ray.dir, vvec);
-    if v < 0. || u + v > 1. { return MAX_DIST; }
+    if v < 0. || u + v > 1. { return false; }
     let t = inv_det * dot(edge2, vvec);
-    if t > EPS {
-        return t;
+    if t > 0.0 && t < *hit {
+        *hit = t;
+        return true;
     } else {
-        return MAX_DIST;
+        return false;
     }
+}
+
+fn triangle_normal(v0: vec3<f32>, v1: vec3<f32>, v2: vec3<f32>) -> vec3<f32> {
+    let  p1 = v1 - v0;
+    let p2 = v1 - v2;
+    return normalize(cross(normalize(p1), normalize(p2)));
 }
 
 struct BvhNode {
@@ -76,11 +83,20 @@ struct BvhNode {
 	count: u32,
 }
 
-fn traverse_bvh(ray: Ray) -> f32 {
+struct TraceResult {
+	v0: vec3<f32>,
+	v1: vec3<f32>,
+	v2: vec3<f32>,
+	hit: bool,
+	dist: f32,
+}
+
+fn traverse_bvh(ray: Ray) -> TraceResult {
     var stack = stack_new();
     stack_push(&stack, 0u);
 
     var hit = MAX_DIST;
+    var res: TraceResult;
     while stack.head != 0u {
         let node = nodes[stack_pop(&stack)];
         if node.count > 0u { // is leaf
@@ -89,9 +105,12 @@ fn traverse_bvh(ray: Ray) -> f32 {
                 let v0 = vertices[ idx[0] ].xyz;
                 let v1 = vertices[ idx[1] ].xyz;
                 let v2 = vertices[ idx[2] ].xyz;
-                let t = intersect_trig(ray, v0, v1, v2);
-                if t < MAX_DIST {
-                    hit = min(hit, t);
+                if intersect_trig(ray, v0, v1, v2, &hit) {
+                    res.dist = hit;
+                    res.hit = true;
+                    res.v0 = v0;
+                    res.v1 = v1;
+                    res.v2 = v2;
                 }
             }
         } else {
@@ -104,26 +123,22 @@ fn traverse_bvh(ray: Ray) -> f32 {
             var min_dist = intersect_aabb(ray, min_child.min, min_child.max, hit);
             var max_dist = intersect_aabb(ray, max_child.min, max_child.max, hit);
             if min_dist > max_dist {
-                var tmpd = min_dist;
-                min_dist = max_dist;
-                max_dist = tmpd;
-                var tmpi = min_index;
-                min_index = max_index;
-                max_index = tmpi;
+                swapu(&min_index, &max_index);
+                swapf(&min_dist, &max_dist);
             }
 
-            if min_dist < MAX_DIST {
-                stack_push(&stack, min_index);
-            } else {
-				continue;
+            if min_dist >= MAX_DIST {
+				 continue;
             }
+
             if max_dist < MAX_DIST {
                 stack_push(&stack, max_index);
             }
+            stack_push(&stack, min_index);
         }
     }
 
-    return hit;
+    return res;
 }
 
 @group(0) @binding(0) var<uniform> cam: Camera;
@@ -158,11 +173,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ray = ray_new(eye, dir);
 
     var color = vec3(0.05);
-    var t = traverse_bvh(ray);
-    if t < MAX_DIST {
-        let limit = 50.;
-        let scale = (limit - clamp(t, 0., limit)) / limit;
-        color = mix(color, vec3(1.), scale);
+    let res = traverse_bvh(ray);
+    if res.hit {
+        let nor = triangle_normal(res.v0, res.v1, res.v2);
+        color = vec3(length(sin(-nor * 2.5) * 0.5 + 0.5) / sqrt(3.));
     }
 
     return vec4(color, 1.0);

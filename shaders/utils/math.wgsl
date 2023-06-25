@@ -1,7 +1,19 @@
 const PI = 3.141592;
 const TAU = 6.283185;
-const EPS: f32 = 0.0001;
+const EPS: f32 = 0.00001;
 const MAX_DIST: f32 = 1e30;
+
+fn swapf(a: ptr<function, f32>, b: ptr<function, f32>) {
+    let tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+fn swapu(a: ptr<function, u32>, b: ptr<function, u32>) {
+    let tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
 
 fn min_element(x: vec3<f32>) -> f32 {
     return min(x.x, min(x.y, x.z));
