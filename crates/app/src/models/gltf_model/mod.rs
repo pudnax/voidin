@@ -12,8 +12,7 @@ use glam::{Mat4, Vec3, Vec4};
 
 use crate::{
     app::App,
-    Instance, {mesh_bounding_sphere, MeshId, MeshRef}, {Material, MaterialId},
-    {TextureId, BLACK_TEXTURE, WHITE_TEXTURE},
+    Instance, {Material, MaterialId}, {MeshId, MeshRef}, {TextureId, BLACK_TEXTURE, WHITE_TEXTURE},
 };
 use components::{FormatConversions, UnwrapRepeat};
 
@@ -148,7 +147,6 @@ impl GltfDocument {
                     tangents: bytemuck::cast_slice(&tangents),
                     tex_coords: bytemuck::cast_slice(&tex_coords),
                     indices: &indices,
-                    bounding_sphere: mesh_bounding_sphere(&vertices),
                 };
                 let mesh = app.add_mesh(mesh);
                 meshes.insert((gltf_mesh_id, primitive.index()), mesh);

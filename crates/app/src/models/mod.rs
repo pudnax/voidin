@@ -11,7 +11,7 @@ pub use gltf_model::*;
 
 use crate::{
     app::App,
-    {mesh_bounding_sphere, MeshId, MeshRef}, {Material, MaterialId},
+    {Material, MaterialId}, {MeshId, MeshRef},
 };
 
 pub struct ObjModel;
@@ -55,7 +55,6 @@ impl ObjModel {
                 tangents: &vec![Vec4::ZERO; mesh.positions.len()],
                 tex_coords: bytemuck::cast_slice(&mesh.texcoords),
                 indices: &mesh.indices,
-                bounding_sphere: mesh_bounding_sphere(&vertices),
             });
             let material_id = match mesh.material_id {
                 Some(id) => materials[id],

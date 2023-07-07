@@ -1,6 +1,6 @@
-use glam::{vec4, Vec2, Vec3, Vec4};
+use glam::{vec4, Vec2, Vec4};
 
-use crate::{BoundingSphere, Mesh};
+use crate::Mesh;
 
 pub fn make_cube_mesh(scale: f32) -> Mesh {
     let vertices = [
@@ -103,16 +103,11 @@ pub fn make_cube_mesh(scale: f32) -> Mesh {
     ];
     let tangents = vec![vec4(1., 0., 0., -1.); vertices.len()];
 
-    let bounding_sphere = BoundingSphere {
-        center: Vec3::ZERO,
-        radius: scale * 3f32.sqrt(),
-    };
     Mesh {
         vertices,
         normals,
         tangents,
         tex_coords,
         indices,
-        bounding_sphere,
     }
 }

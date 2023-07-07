@@ -17,15 +17,11 @@ pub use cube::make_cube_mesh;
 pub use plane::make_plane_mesh;
 pub use sphere::make_uv_sphere;
 
-pub fn mesh_bounding_sphere(positions: &[Vec4]) -> BoundingSphere {
-    let (min, max) = positions.iter().fold(
+pub fn calculate_bounds(positions: &[Vec4]) -> (Vec3, Vec3) {
+    positions.iter().fold(
         (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
         |(min, max), &pos| (min.min(pos.truncate()), max.max(pos.truncate())),
-    );
-    let center = (min + max) / 2.;
-    let radius = center.distance(max);
-
-    BoundingSphere { center, radius }
+    )
 }
 
 #[repr(C)]
@@ -55,19 +51,14 @@ impl MeshId {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
-pub struct BoundingSphere {
-    pub center: Vec3,
-    pub radius: f32,
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
 pub struct MeshInfo {
+    min: Vec3,
     index_count: u32,
+    max: Vec3,
     base_index: u32,
     vertex_offset: i32,
-    _padding: f32,
-    bounding_sphere: BoundingSphere,
+    bvh_index: u32,
+    junk: [u32; 2],
 }
 
 pub struct Mesh {
@@ -76,7 +67,6 @@ pub struct Mesh {
     pub tangents: Vec<Vec4>,
     pub tex_coords: Vec<Vec2>,
     pub indices: Vec<u32>,
-    pub bounding_sphere: BoundingSphere,
 }
 
 impl Mesh {
@@ -87,7 +77,6 @@ impl Mesh {
             tangents: &self.tangents,
             tex_coords: &self.tex_coords,
             indices: &self.indices,
-            bounding_sphere: self.bounding_sphere,
         }
     }
 }
@@ -98,7 +87,6 @@ pub struct MeshRef<'a> {
     pub tangents: &'a [Vec4],
     pub tex_coords: &'a [Vec2],
     pub indices: &'a [u32],
-    pub bounding_sphere: BoundingSphere,
 }
 
 pub struct MeshPool {
@@ -220,12 +208,16 @@ impl MeshPool {
         self.indices.push(&self.gpu, mesh.indices);
         let mesh_index = self.mesh_index.fetch_add(1, Ordering::Relaxed);
 
+        let (min, max) = calculate_bounds(mesh.vertices);
+
         let mesh_info = MeshInfo {
+            min,
             vertex_offset: vertex_offset as i32,
+            max,
             base_index,
             index_count,
-            _padding: 0.,
-            bounding_sphere: mesh.bounding_sphere,
+            bvh_index: 0,
+            junk: [0; 2],
         };
         self.mesh_info.push(&self.gpu, &[mesh_info]);
         self.mesh_info_bind_group =

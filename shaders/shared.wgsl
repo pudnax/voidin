@@ -41,11 +41,13 @@ struct BoundingSphere {
 }
 
 struct MeshInfo {
+	min: vec3<f32>,
 	index_count: u32,
+	max: vec3<f32>,
 	base_index: u32,
     vertex_offset: i32,
-	padding: f32,
-	bounding_sphere: BoundingSphere,
+	bvh_index: u32,
+	junk: vec2<f32>,
 }
 
 struct Instance {

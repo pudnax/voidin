@@ -1,7 +1,7 @@
-use glam::{vec2, vec4, Vec3};
+use glam::{vec2, vec4};
 use std::f32::consts::PI;
 
-use crate::{BoundingSphere, Mesh};
+use crate::Mesh;
 
 pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
     let vside = 4 * resolution; // stack
@@ -57,16 +57,11 @@ pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
         }
     }
 
-    let bounding_sphere = BoundingSphere {
-        center: Vec3::ZERO,
-        radius,
-    };
     Mesh {
         vertices,
         normals,
         tangents,
         tex_coords: uv,
         indices,
-        bounding_sphere,
     }
 }
