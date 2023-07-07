@@ -1,21 +1,26 @@
+mod cube;
+mod plane;
+mod sphere;
+
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3, Vec4};
 
-use crate::{
-    models::{make_uv_sphere, plane_mesh},
-    Gpu,
-};
+use components::Gpu;
 
 use components::bind_group_layout::{self, WrappedBindGroupLayout};
 use components::{NonZeroSized, ResizableBuffer, ResizableBufferExt};
 
-pub fn mesh_bounding_sphere(positions: &[Vec3]) -> BoundingSphere {
+pub use cube::make_cube_mesh;
+pub use plane::make_plane_mesh;
+pub use sphere::make_uv_sphere;
+
+pub fn mesh_bounding_sphere(positions: &[Vec4]) -> BoundingSphere {
     let (min, max) = positions.iter().fold(
         (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
-        |(min, max), &pos| (min.min(pos), max.max(pos)),
+        |(min, max), &pos| (min.min(pos.truncate()), max.max(pos.truncate())),
     );
     let center = (min + max) / 2.;
     let radius = center.distance(max);
@@ -66,8 +71,8 @@ pub struct MeshInfo {
 }
 
 pub struct Mesh {
-    pub vertices: Vec<Vec3>,
-    pub normals: Vec<Vec3>,
+    pub vertices: Vec<Vec4>,
+    pub normals: Vec<Vec4>,
     pub tangents: Vec<Vec4>,
     pub tex_coords: Vec<Vec2>,
     pub indices: Vec<u32>,
@@ -88,8 +93,8 @@ impl Mesh {
 }
 
 pub struct MeshRef<'a> {
-    pub vertices: &'a [Vec3],
-    pub normals: &'a [Vec3],
+    pub vertices: &'a [Vec4],
+    pub normals: &'a [Vec4],
     pub tangents: &'a [Vec4],
     pub tex_coords: &'a [Vec2],
     pub indices: &'a [u32],
@@ -104,10 +109,9 @@ pub struct MeshPool {
     pub mesh_info_layout: bind_group_layout::BindGroupLayout,
     pub mesh_info_bind_group: wgpu::BindGroup,
     pub mesh_info: ResizableBuffer<MeshInfo>,
-    pub mesh_cpu: Vec<MeshInfo>,
 
-    pub vertices: ResizableBuffer<Vec3>,
-    pub normals: ResizableBuffer<Vec3>,
+    pub vertices: ResizableBuffer<Vec4>,
+    pub normals: ResizableBuffer<Vec4>,
     pub tangents: ResizableBuffer<Vec4>,
     pub tex_coords: ResizableBuffer<Vec2>,
     pub indices: ResizableBuffer<u32>,
@@ -124,22 +128,6 @@ impl MeshPool {
         let mesh_info = gpu
             .device()
             .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
-        let vertices = gpu
-            .device()
-            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
-        let normals = gpu
-            .device()
-            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
-        let tangents = gpu
-            .device()
-            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
-        let tex_coords = gpu
-            .device()
-            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
-        let indices = gpu
-            .device()
-            .create_resizable_buffer(wgpu::BufferUsages::INDEX);
-
         let mesh_info_layout =
             gpu.device()
                 .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
@@ -167,18 +155,27 @@ impl MeshPool {
             mesh_info_layout,
             mesh_info_bind_group,
             mesh_info,
-            mesh_cpu: vec![],
 
-            vertices,
-            normals,
-            tangents,
-            tex_coords,
-            indices,
+            vertices: gpu
+                .device()
+                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
+            normals: gpu
+                .device()
+                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
+            tangents: gpu
+                .device()
+                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
+            tex_coords: gpu
+                .device()
+                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
+            indices: gpu
+                .device()
+                .create_resizable_buffer(wgpu::BufferUsages::INDEX),
 
             gpu,
         };
 
-        this.add(plane_mesh(1., 1.).as_ref());
+        this.add(make_plane_mesh(1., 1.).as_ref());
         this.add(make_uv_sphere(1., 1).as_ref());
         this.add(make_uv_sphere(1., 10).as_ref());
 
@@ -230,7 +227,6 @@ impl MeshPool {
             _padding: 0.,
             bounding_sphere: mesh.bounding_sphere,
         };
-        self.mesh_cpu.push(mesh_info);
         self.mesh_info.push(&self.gpu, &[mesh_info]);
         self.mesh_info_bind_group =
             Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);

@@ -1,6 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use glam::{UVec4, Vec3, Vec4};
 
+mod tlas;
+
 mod intersection;
 use intersection::intersect_aabb;
 pub use intersection::{Dist, Ray};
@@ -63,7 +65,7 @@ pub struct BvhBuilder<'a> {
 
 impl<'a> BvhBuilder<'a> {
     pub fn new(vertices: &'a [Vec4], indices: &'a mut [UVec4]) -> Self {
-        let nodes = vec![BvhNode::default(); indices.len() * 2 - 1];
+        let nodes = vec![BvhNode::default(); indices.len() * 2];
         let indices = bytemuck::cast_slice_mut(indices);
 
         Self {

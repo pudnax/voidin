@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use app::make_uv_sphere;
 use color_eyre::Result;
 use rand::Rng;
 use voidin::*;
@@ -115,7 +116,7 @@ impl Example for Model {
         );
         app.world.get_mut::<InstancePool>()?.add(&instances);
 
-        let sphere_mesh = models::make_uv_sphere(1.0, 10);
+        let sphere_mesh = make_uv_sphere(1.0, 10);
         let sphere_mesh_id = app.get_mesh_pool_mut().add(sphere_mesh.as_ref());
 
         let mut moving_instances = vec![];

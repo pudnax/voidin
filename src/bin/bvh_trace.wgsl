@@ -106,11 +106,8 @@ fn traverse_bvh(ray: Ray) -> TraceResult {
                 let v1 = vertices[ idx[1] ].xyz;
                 let v2 = vertices[ idx[2] ].xyz;
                 if intersect_trig(ray, v0, v1, v2, &hit) {
-                    res.dist = hit;
-                    res.hit = true;
-                    res.v0 = v0;
-                    res.v1 = v1;
-                    res.v2 = v2;
+                    res.dist = hit; res.hit = true;
+                    res.v0 = v0; res.v1 = v1; res.v2 = v2;
                 }
             }
         } else {

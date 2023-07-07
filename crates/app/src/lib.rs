@@ -17,7 +17,6 @@ pub use crate::app::App;
 mod app;
 pub mod models;
 pub mod pass;
-mod pool;
 pub mod prelude;
 
 pub use crate::models::GltfDocument;
@@ -35,7 +34,7 @@ pub use components::{
     {CameraUniform, CameraUniformBinding}, {KeyMap, KeyboardMap},
 };
 pub use egui;
-pub use pool::*;
+pub use pools::*;
 pub use winit::{dpi::LogicalSize, window::WindowBuilder};
 
 pub const UPDATES_PER_SECOND: u32 = 60;

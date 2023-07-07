@@ -7,8 +7,6 @@ use components::{
     create_solid_color_texture, Gpu,
 };
 
-use crate::app::DEFAULT_SAMPLER_DESC;
-
 pub const WHITE_TEXTURE: TextureId = TextureId(0);
 pub const BLACK_TEXTURE: TextureId = TextureId(1);
 pub const LTC1_TEXTURE: TextureId = TextureId(2);
@@ -77,7 +75,20 @@ impl TexturePool {
                         },
                     ],
                 });
-        let sampler = gpu.device().create_sampler(&DEFAULT_SAMPLER_DESC);
+        let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Gltf Default Sampler"),
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            address_mode_w: wgpu::AddressMode::Repeat,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: std::f32::MAX,
+            compare: None,
+            anisotropy_clamp: 1,
+            border_color: None,
+        });
         let ltc_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             label: Some("Ltc Sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,

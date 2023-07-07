@@ -20,7 +20,7 @@ impl InstanceId {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Debug, Copy, Clone, Pod, Zeroable)]
 pub struct Instance {
     pub transform: glam::Mat4,
     pub mesh: MeshId,

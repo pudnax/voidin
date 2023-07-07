@@ -1,7 +1,4 @@
-mod cube;
 mod gltf_model;
-mod plane;
-mod sphere;
 
 use color_eyre::{
     eyre::{eyre, Context},
@@ -10,10 +7,7 @@ use color_eyre::{
 use glam::{Vec3, Vec4};
 use std::path::Path;
 
-pub use cube::cube_mesh;
 pub use gltf_model::*;
-pub use plane::plane_mesh;
-pub use sphere::make_uv_sphere;
 
 use crate::{
     app::App,
@@ -44,13 +38,24 @@ impl ObjModel {
 
         let mut meshes = vec![];
         for mesh in model_meshes.iter().map(|m| &m.mesh) {
+            let vertices: Vec<_> = mesh
+                .positions
+                .chunks_exact(3)
+                .map(|n| Vec3::from_slice(n).extend(0.))
+                .collect();
+            let normals: Vec<_> = mesh
+                .normals
+                .chunks_exact(3)
+                .map(|n| Vec3::from_slice(n).extend(0.))
+                .collect();
+
             let mesh_id = app.add_mesh(MeshRef {
-                vertices: bytemuck::cast_slice(&mesh.positions),
-                normals: bytemuck::cast_slice(&mesh.normals),
+                vertices: &vertices,
+                normals: &normals,
                 tangents: &vec![Vec4::ZERO; mesh.positions.len()],
                 tex_coords: bytemuck::cast_slice(&mesh.texcoords),
                 indices: &mesh.indices,
-                bounding_sphere: mesh_bounding_sphere(bytemuck::cast_slice(&mesh.positions)),
+                bounding_sphere: mesh_bounding_sphere(&vertices),
             });
             let material_id = match mesh.material_id {
                 Some(id) => materials[id],
