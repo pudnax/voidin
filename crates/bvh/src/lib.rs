@@ -112,7 +112,7 @@ impl<'a> BvhBuilder<'a> {
         let indices_copy: Vec<_> = self
             .triangle_indices
             .into_iter()
-            .map(|i| self.indices[i as usize])
+            .map(|i| self.indices[i])
             .collect();
         self.indices.copy_from_slice(&indices_copy);
 
@@ -128,7 +128,7 @@ impl<'a> BvhBuilder<'a> {
         *pool_index += 2;
         self.nodes[current_bvh_index].left_first = index;
 
-        let pivot = self.partition(start, self.nodes[current_bvh_index].count as u32);
+        let pivot = self.partition(start, self.nodes[current_bvh_index].count);
         let left_count = pivot - start;
         self.nodes[index as usize].count = left_count;
         let bounds = self.calculate_bounds(start, left_count, false);
@@ -136,7 +136,7 @@ impl<'a> BvhBuilder<'a> {
 
         let right_count = self.nodes[current_bvh_index].count - left_count;
         self.nodes[index as usize + 1].count = right_count;
-        let bounds = self.calculate_bounds(pivot, right_count as u32, false);
+        let bounds = self.calculate_bounds(pivot, right_count, false);
         self.set_bound(index as usize + 1, &bounds);
 
         self.subdivide(index as usize, start, pool_index);
@@ -203,7 +203,7 @@ impl<'a> BvhBuilder<'a> {
         let mut min = Vec3::splat(MAX_DIST);
         for &idx in &self.triangle_indices[first as usize..][..amount as usize] {
             if centroids {
-                let vertex = self.centroids[idx as usize];
+                let vertex = self.centroids[idx];
                 max = max.max(vertex);
                 min = min.min(vertex);
             } else {
@@ -234,7 +234,9 @@ impl Bvh {
         mut t: f32,
     ) -> Dist {
         let node = &self.nodes[node_idx];
-        let Hit(_) = intersect_aabb(ray, node.min , node.max, t) else { return Miss };
+        let Hit(_) = intersect_aabb(ray, node.min, node.max, t) else {
+            return Miss;
+        };
         if node.is_leaf() {
             for i in 0..node.triangle_count() {
                 let idx = indices[node.triangle_start() + i];

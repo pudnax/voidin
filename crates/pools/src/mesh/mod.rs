@@ -96,6 +96,7 @@ pub struct MeshPool {
 
     pub mesh_info_layout: bind_group_layout::BindGroupLayout,
     pub mesh_info_bind_group: wgpu::BindGroup,
+    pub mesh_info_cpu: Vec<MeshInfo>,
     pub mesh_info: ResizableBuffer<MeshInfo>,
 
     pub vertices: ResizableBuffer<Vec4>,
@@ -142,6 +143,7 @@ impl MeshPool {
 
             mesh_info_layout,
             mesh_info_bind_group,
+            mesh_info_cpu: vec![],
             mesh_info,
 
             vertices: gpu
@@ -219,6 +221,7 @@ impl MeshPool {
             bvh_index: 0,
             junk: [0; 2],
         };
+        self.mesh_info_cpu.push(mesh_info);
         self.mesh_info.push(&self.gpu, &[mesh_info]);
         self.mesh_info_bind_group =
             Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);

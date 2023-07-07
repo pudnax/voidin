@@ -98,7 +98,7 @@ impl Example for Demo {
             wgpu::BufferUsages::STORAGE,
         );
         let indices = app.device().create_resizable_buffer_init(
-            &bytemuck::cast_slice(&indices),
+            bytemuck::cast_slice(&indices),
             wgpu::BufferUsages::STORAGE,
         );
         let bvh_nodes = app
