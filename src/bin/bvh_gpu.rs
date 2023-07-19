@@ -8,8 +8,8 @@ use voidin::*;
 struct Demo {
     pipeline: RenderHandle,
 
-    vertices: ResizableBuffer<Vec4>,
-    indices: ResizableBuffer<UVec4>,
+    vertices: ResizableBuffer<Vec3>,
+    indices: ResizableBuffer<UVec3>,
 
     bvh: Bvh,
     bvh_nodes: ResizableBuffer<BvhNode>,
@@ -34,7 +34,7 @@ impl Example for Demo {
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
-                                min_binding_size: Some(Vec4::NSIZE),
+                                min_binding_size: Some(f32::NSIZE),
                             },
                             count: None,
                         },
@@ -44,7 +44,7 @@ impl Example for Demo {
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
-                                min_binding_size: Some(UVec4::NSIZE),
+                                min_binding_size: Some(u32::NSIZE),
                             },
                             count: None,
                         },
@@ -79,28 +79,18 @@ impl Example for Demo {
         let mut indices = vec![];
         let (bnuuy, _) = tobj::load_obj("assets/bunny.obj", &tobj::GPU_LOAD_OPTIONS)?;
         for mesh in bnuuy.into_iter().map(|m| m.mesh) {
-            vertices.extend(
-                mesh.positions
-                    .chunks_exact(3)
-                    .map(|v| Vec3::from_slice(v).extend(0.)),
-            );
-            indices.extend(
-                mesh.indices
-                    .chunks_exact(3)
-                    .map(|i| UVec3::from_slice(i).extend(0)),
-            );
+            vertices.extend(mesh.positions.chunks_exact(3).map(|v| Vec3::from_slice(v)));
+            indices.extend(mesh.indices.chunks_exact(3).map(|i| UVec3::from_slice(i)));
         }
 
         let bvh = BvhBuilder::new(&vertices, &mut indices).build();
 
-        let vertices = app.device().create_resizable_buffer_init(
-            bytemuck::cast_slice(&vertices),
-            wgpu::BufferUsages::STORAGE,
-        );
-        let indices = app.device().create_resizable_buffer_init(
-            bytemuck::cast_slice(&indices),
-            wgpu::BufferUsages::STORAGE,
-        );
+        let vertices = app
+            .device()
+            .create_resizable_buffer_init(&vertices, wgpu::BufferUsages::STORAGE);
+        let indices = app
+            .device()
+            .create_resizable_buffer_init(&indices, wgpu::BufferUsages::STORAGE);
         let bvh_nodes = app
             .device()
             .create_resizable_buffer_init(&bvh.nodes, wgpu::BufferUsages::STORAGE);

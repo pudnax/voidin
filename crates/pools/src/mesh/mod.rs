@@ -26,7 +26,7 @@ pub fn calculate_bounds(positions: &[Vec4]) -> (Vec3, Vec3) {
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Pod, Zeroable)]
-pub struct MeshId(u32);
+pub struct MeshId(pub u32);
 
 impl From<MeshId> for u32 {
     fn from(value: MeshId) -> u32 {
@@ -52,12 +52,12 @@ impl MeshId {
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
 pub struct MeshInfo {
-    min: Vec3,
+    pub min: Vec3,
     index_count: u32,
-    max: Vec3,
+    pub max: Vec3,
     base_index: u32,
     vertex_offset: i32,
-    bvh_index: u32,
+    pub bvh_index: u32,
     junk: [u32; 2],
 }
 

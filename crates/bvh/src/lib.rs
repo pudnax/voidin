@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use glam::{UVec4, Vec3, Vec4};
+use glam::{UVec3, UVec4, Vec3, Vec4};
 
 mod tlas;
 
@@ -48,6 +48,10 @@ pub struct Aabb {
 }
 
 impl Aabb {
+    pub fn new(min: Vec3, max: Vec3) -> Self {
+        Self { min, max }
+    }
+
     fn area(&self) -> f32 {
         let diff = self.max - self.min;
         (diff.x * diff.y + diff.x * diff.z + diff.y * diff.z) * 2.
@@ -56,17 +60,16 @@ impl Aabb {
 
 pub struct BvhBuilder<'a> {
     num_bins: usize,
-    vertices: &'a [Vec4],
-    indices: &'a mut [[u32; 4]],
+    vertices: &'a [Vec3],
+    indices: &'a mut [UVec3],
     centroids: Vec<Vec3>,
     nodes: Vec<BvhNode>,
     triangle_indices: Vec<usize>,
 }
 
 impl<'a> BvhBuilder<'a> {
-    pub fn new(vertices: &'a [Vec4], indices: &'a mut [UVec4]) -> Self {
+    pub fn new(vertices: &'a [Vec3], indices: &'a mut [UVec3]) -> Self {
         let nodes = vec![BvhNode::default(); indices.len() * 2];
-        let indices = bytemuck::cast_slice_mut(indices);
 
         Self {
             num_bins: 8,
@@ -89,15 +92,15 @@ impl<'a> BvhBuilder<'a> {
             .iter()
             .map(|idx| {
                 [
-                    self.vertices[idx[0] as usize].truncate(),
-                    self.vertices[idx[1] as usize].truncate(),
-                    self.vertices[idx[2] as usize].truncate(),
+                    self.vertices[idx[0] as usize],
+                    self.vertices[idx[1] as usize],
+                    self.vertices[idx[2] as usize],
                 ]
             })
             .map(|trig| (trig[0] + trig[1] + trig[2]) / 3f32)
             .collect();
 
-        self.triangle_indices = (0..self.centroids.len()).collect();
+        self.triangle_indices = (0..self.indices.len()).collect();
         self.nodes[0].left_first = 0;
         self.nodes[0].count = self.triangle_indices.len() as u32;
 
@@ -207,12 +210,12 @@ impl<'a> BvhBuilder<'a> {
                 max = max.max(vertex);
                 min = min.min(vertex);
             } else {
-                self.indices[idx][..3]
+                self.indices[idx].to_array()[..3]
                     .iter()
                     .map(|&i| self.vertices[i as usize])
                     .for_each(|vertex| {
-                        max = max.max(vertex.truncate());
-                        min = min.min(vertex.truncate());
+                        max = max.max(vertex);
+                        min = min.min(vertex);
                     });
             }
         }

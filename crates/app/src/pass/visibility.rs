@@ -124,6 +124,13 @@ impl Geometry {
                 cull_mode: Some(wgpu::Face::Back),
                 ..Default::default()
             },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: GBuffer::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Greater,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             ..Default::default()
         };
         let pipeline = world

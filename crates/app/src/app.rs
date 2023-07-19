@@ -369,7 +369,7 @@ impl App {
 
         if state.frame_count % 500 == 0 && std::env::var("GPU_PROFILING").is_ok() {
             let mut last_profile = vec![];
-            while let Some(profiling_data) = self.profiler.borrow_mut().process_finished_frame() {
+            while let Some(profiling_data) = profiler.process_finished_frame() {
                 last_profile = profiling_data;
             }
             scopes_to_console_recursive(&last_profile, 0);

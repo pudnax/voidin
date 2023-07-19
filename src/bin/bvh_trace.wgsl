@@ -9,9 +9,6 @@ struct Stack {
 
 fn stack_new() -> Stack {
     var arr: array<u32, STACK_LEN>;
-    for (var i = 0u; i < STACK_LEN; i += 1u) {
-        arr[i] = 0u;
-    }
     return Stack(arr, 0u);
 }
 
@@ -91,6 +88,12 @@ struct TraceResult {
 	dist: f32,
 }
 
+fn fetch_vertex(idx: u32) -> vec3<f32> {
+    let i = indices[idx];
+    return vec3(vertices[3u * i + 0u], vertices[3u * i + 1u], vertices[3u * i + 2u]);
+}
+
+
 fn traverse_bvh(ray: Ray) -> TraceResult {
     var stack = stack_new();
     stack_push(&stack, 0u);
@@ -101,10 +104,10 @@ fn traverse_bvh(ray: Ray) -> TraceResult {
         let node = nodes[stack_pop(&stack)];
         if node.count > 0u { // is leaf
             for (var i = 0u; i < node.count; i += 1u) {
-                let idx = indices[node.left_first + i];
-                let v0 = vertices[ idx[0] ].xyz;
-                let v1 = vertices[ idx[1] ].xyz;
-                let v2 = vertices[ idx[2] ].xyz;
+                let base_index = node.left_first + i;
+                let v0 = fetch_vertex(3u * base_index + 0u);
+                let v1 = fetch_vertex(3u * base_index + 1u);
+                let v2 = fetch_vertex(3u * base_index + 2u);
                 if intersect_trig(ray, v0, v1, v2, &hit) {
                     res.dist = hit; res.hit = true;
                     res.v0 = v0; res.v1 = v1; res.v2 = v2;
@@ -140,8 +143,8 @@ fn traverse_bvh(ray: Ray) -> TraceResult {
 
 @group(0) @binding(0) var<uniform> cam: Camera;
 
-@group(1) @binding(0) var<storage, read> vertices: array<vec4<f32>>;
-@group(1) @binding(1) var<storage, read> indices: array<vec4<u32>>;
+@group(1) @binding(0) var<storage, read> vertices: array<f32>;
+@group(1) @binding(1) var<storage, read> indices: array<u32>;
 @group(1) @binding(2) var<storage, read> nodes: array<BvhNode>;
 
 struct VertexOutput {
