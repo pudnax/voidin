@@ -110,20 +110,18 @@ impl GltfDocument {
             let gltf_mesh_id = mesh.index();
             for primitive in mesh.primitives() {
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-                let Some(vertices) = reader.read_positions() else {
+                let get_data = |semantic: &gltf::Semantic| -> Option<&[u8]> {
+                    primitive
+                        .get(semantic)
+                        .and_then(|sem| data_of_accessor(buffers, &sem))
+                };
+                let Some(vertices) = get_data(&gltf::Semantic::Positions) else {
                     continue;
                 };
-                let Some(normals) = reader.read_normals() else {
+                let Some(normals) = get_data(&gltf::Semantic::Normals) else {
                     continue;
                 };
-                let vertices: Vec<_> = vertices
-                    .into_iter()
-                    .map(|vtx| Vec3::from_array(vtx).extend(0.))
-                    .collect();
-                let normals: Vec<_> = normals
-                    .into_iter()
-                    .map(|nor| Vec3::from_array(nor).extend(0.))
-                    .collect();
+                let vertices: &[Vec3] = bytemuck::cast_slice(vertices);
                 let tangents: Vec<[f32; 4]> = reader
                     .read_tangents()
                     .into_iter()
@@ -142,8 +140,8 @@ impl GltfDocument {
                     None => (0..vertices.len() as u32).collect(),
                 };
                 let mesh = MeshRef {
-                    vertices: &vertices,
-                    normals: &normals,
+                    vertices,
+                    normals: bytemuck::cast_slice(normals),
                     tangents: bytemuck::cast_slice(&tangents),
                     tex_coords: bytemuck::cast_slice(&tex_coords),
                     indices: &indices,

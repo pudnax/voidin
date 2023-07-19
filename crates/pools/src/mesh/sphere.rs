@@ -1,4 +1,4 @@
-use glam::{vec2, vec4};
+use glam::{vec2, vec3, vec4};
 use std::f32::consts::PI;
 
 use crate::Mesh;
@@ -23,7 +23,7 @@ pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
             let y = -phi.cos() * radius;
             let z = theta.sin() * phi.sin() * radius;
 
-            let vertex = vec4(x, y, z, 0.);
+            let vertex = vec3(x, y, z);
             vertices.push(vertex);
             normals.push(vertex.normalize());
             tangents.push(tangent);

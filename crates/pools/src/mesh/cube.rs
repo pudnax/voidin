@@ -1,69 +1,69 @@
-use glam::{vec4, Vec2, Vec4};
+use glam::{vec4, Vec2, Vec3};
 
 use crate::Mesh;
 
 pub fn make_cube_mesh(scale: f32) -> Mesh {
     let vertices = [
         // Front face
-        [-scale, -scale, scale, 0.],
-        [scale, -scale, scale, 0.],
-        [scale, scale, scale, 0.],
-        [-scale, scale, scale, 0.],
+        [-scale, -scale, scale],
+        [scale, -scale, scale],
+        [scale, scale, scale],
+        [-scale, scale, scale],
         // Back face
-        [-scale, -scale, -scale, 0.],
-        [-scale, scale, -scale, 0.],
-        [scale, scale, -scale, 0.],
-        [scale, -scale, -scale, 0.],
+        [-scale, -scale, -scale],
+        [-scale, scale, -scale],
+        [scale, scale, -scale],
+        [scale, -scale, -scale],
         // Top face
-        [-scale, scale, -scale, 0.],
-        [-scale, scale, scale, 0.],
-        [scale, scale, scale, 0.],
-        [scale, scale, -scale, 0.],
+        [-scale, scale, -scale],
+        [-scale, scale, scale],
+        [scale, scale, scale],
+        [scale, scale, -scale],
         // Bottom face
-        [-scale, -scale, -scale, 0.],
-        [scale, -scale, -scale, 0.],
-        [scale, -scale, scale, 0.],
-        [-scale, -scale, scale, 0.],
+        [-scale, -scale, -scale],
+        [scale, -scale, -scale],
+        [scale, -scale, scale],
+        [-scale, -scale, scale],
         // Right face
-        [scale, -scale, -scale, 0.],
-        [scale, scale, -scale, 0.],
-        [scale, scale, scale, 0.],
-        [scale, -scale, scale, 0.],
+        [scale, -scale, -scale],
+        [scale, scale, -scale],
+        [scale, scale, scale],
+        [scale, -scale, scale],
         // Left face
-        [-scale, -scale, -scale, 0.],
-        [-scale, -scale, scale, 0.],
-        [-scale, scale, scale, 0.],
-        [-scale, scale, -scale, 0.],
+        [-scale, -scale, -scale],
+        [-scale, -scale, scale],
+        [-scale, scale, scale],
+        [-scale, scale, -scale],
     ]
-    .map(Vec4::from)
+    .map(Vec3::from)
     .to_vec();
     let normals = [
-        [0.0, 0.0, 1.0, 0.],
-        [0.0, 0.0, -1.0, 0.],
-        [1.0, 0.0, 0.0, 0.],
-        [-1.0, 0.0, 0.0, 0.],
-        [0.0, 1.0, 0.0, 0.],
-        [0.0, -1.0, 0.0, 0.],
-        [0.0, 0.0, 1.0, 0.],
-        [0.0, 0.0, -1.0, 0.],
-        [1.0, 0.0, 0.0, 0.],
-        [-1.0, 0.0, 0.0, 0.],
-        [0.0, 1.0, 0.0, 0.],
-        [0.0, -1.0, 0.0, 0.],
-        [0.0, 0.0, 1.0, 0.],
-        [0.0, 0.0, -1.0, 0.],
-        [1.0, 0.0, 0.0, 0.],
-        [-1.0, 0.0, 0.0, 0.],
-        [0.0, 1.0, 0.0, 0.],
-        [0.0, -1.0, 0.0, 0.],
-        [0.0, 0.0, 1.0, 0.],
-        [0.0, 0.0, -1.0, 0.],
-        [1.0, 0.0, 0.0, 0.],
-        [-1.0, 0.0, 0.0, 0.],
-        [0.0, 1.0, 0.0, 0.],
-        [0.0, -1.0, 0.0, 0.],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
     ]
-    .map(Vec4::from)
+    .map(Vec3::from)
     .to_vec();
     let tex_coords = [
         [0.0, 0.0],

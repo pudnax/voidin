@@ -17,10 +17,10 @@ pub use cube::make_cube_mesh;
 pub use plane::make_plane_mesh;
 pub use sphere::make_uv_sphere;
 
-pub fn calculate_bounds(positions: &[Vec4]) -> (Vec3, Vec3) {
+pub fn calculate_bounds(positions: &[Vec3]) -> (Vec3, Vec3) {
     positions.iter().fold(
         (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
-        |(min, max), &pos| (min.min(pos.truncate()), max.max(pos.truncate())),
+        |(min, max), &pos| (min.min(pos), max.max(pos)),
     )
 }
 
@@ -62,8 +62,8 @@ pub struct MeshInfo {
 }
 
 pub struct Mesh {
-    pub vertices: Vec<Vec4>,
-    pub normals: Vec<Vec4>,
+    pub vertices: Vec<Vec3>,
+    pub normals: Vec<Vec3>,
     pub tangents: Vec<Vec4>,
     pub tex_coords: Vec<Vec2>,
     pub indices: Vec<u32>,
@@ -82,8 +82,8 @@ impl Mesh {
 }
 
 pub struct MeshRef<'a> {
-    pub vertices: &'a [Vec4],
-    pub normals: &'a [Vec4],
+    pub vertices: &'a [Vec3],
+    pub normals: &'a [Vec3],
     pub tangents: &'a [Vec4],
     pub tex_coords: &'a [Vec2],
     pub indices: &'a [u32],
@@ -99,8 +99,8 @@ pub struct MeshPool {
     pub mesh_info_cpu: Vec<MeshInfo>,
     pub mesh_info: ResizableBuffer<MeshInfo>,
 
-    pub vertices: ResizableBuffer<Vec4>,
-    pub normals: ResizableBuffer<Vec4>,
+    pub vertices: ResizableBuffer<Vec3>,
+    pub normals: ResizableBuffer<Vec3>,
     pub tangents: ResizableBuffer<Vec4>,
     pub tex_coords: ResizableBuffer<Vec2>,
     pub indices: ResizableBuffer<u32>,

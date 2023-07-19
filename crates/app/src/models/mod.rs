@@ -38,20 +38,9 @@ impl ObjModel {
 
         let mut meshes = vec![];
         for mesh in model_meshes.iter().map(|m| &m.mesh) {
-            let vertices: Vec<_> = mesh
-                .positions
-                .chunks_exact(3)
-                .map(|n| Vec3::from_slice(n).extend(0.))
-                .collect();
-            let normals: Vec<_> = mesh
-                .normals
-                .chunks_exact(3)
-                .map(|n| Vec3::from_slice(n).extend(0.))
-                .collect();
-
             let mesh_id = app.add_mesh(MeshRef {
-                vertices: &vertices,
-                normals: &normals,
+                vertices: bytemuck::cast_slice(&mesh.positions),
+                normals: bytemuck::cast_slice(&mesh.normals),
                 tangents: &vec![Vec4::ZERO; mesh.positions.len()],
                 tex_coords: bytemuck::cast_slice(&mesh.texcoords),
                 indices: &mesh.indices,

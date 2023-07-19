@@ -4,7 +4,7 @@ use color_eyre::Result;
 use components::bind_group_layout::StorageWriteBindGroupLayout;
 use components::world::World;
 use components::{DrawIndexedIndirect, NonZeroSized, ResizableBuffer};
-use glam::{Vec2, Vec4};
+use glam::{Vec2, Vec3, Vec4};
 use wgpu::{util::align_to, IndexFormat};
 
 use super::Pass;
@@ -92,13 +92,13 @@ impl Geometry {
                 buffers: vec![
                     // Positions
                     pipeline::VertexBufferLayout {
-                        array_stride: Vec4::SIZE as _,
+                        array_stride: Vec3::SIZE as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: wgpu::vertex_attr_array![0 => Float32x3].to_vec(),
                     },
                     // Normals
                     pipeline::VertexBufferLayout {
-                        array_stride: Vec4::SIZE as _,
+                        array_stride: Vec3::SIZE as _,
                         step_mode: wgpu::VertexStepMode::Vertex,
                         attributes: wgpu::vertex_attr_array![1 => Float32x3].to_vec(),
                     },
