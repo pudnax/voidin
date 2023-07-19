@@ -17,8 +17,8 @@ struct Demo {
     cpu_pixels: Vec<Pixel>,
     gpu_pixels: wgpu::Buffer,
 
-    vertices: Vec<Vec4>,
-    indices: Vec<UVec4>,
+    vertices: Vec<Vec3>,
+    indices: Vec<UVec3>,
 
     bvh: Bvh,
 }
@@ -40,10 +40,10 @@ impl Example for Demo {
         let n = 64;
         let mut vertices = Vec::with_capacity(n * 3);
         for _ in 0..n {
-            let v0 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
-            let v1 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
-            let v2 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.))).extend(0.);
-            let base = v0 * 9. - vec4(5., 5., 0., 0.);
+            let v0 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
+            let v1 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
+            let v2 = Vec3::from(array::from_fn(|_| rng.gen_range(0. ..1.)));
+            let base = v0 * 9. - vec3(5., 5., 0.);
             vertices.push(base);
             vertices.push(base + v1);
             vertices.push(base + v2);
@@ -51,7 +51,7 @@ impl Example for Demo {
         let indices: Vec<_> = (0..vertices.len() as u32).collect();
         let mut indices: Vec<_> = indices
             .chunks_exact(3)
-            .map(|i| UVec3::from_slice(i).extend(0))
+            .map(|i| UVec3::from_slice(i))
             .collect();
 
         let bvh = bvh::BvhBuilder::new(&vertices, &mut indices).build();

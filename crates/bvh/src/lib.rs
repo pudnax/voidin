@@ -264,7 +264,7 @@ impl Bvh {
         Hit(t)
     }
 
-    pub fn traverse_iter(&self, vertices: &[Vec4], indices: &[UVec4], ray: Ray) -> Dist {
+    pub fn traverse_iter(&self, vertices: &[Vec3], indices: &[UVec3], ray: Ray) -> Dist {
         let mut stack = Stack::new();
         stack.push(0);
 
@@ -275,9 +275,9 @@ impl Bvh {
                 for i in 0..node.triangle_count() {
                     let idx = indices[node.triangle_start() + i];
                     let trig = [
-                        vertices[idx[0] as usize].truncate(),
-                        vertices[idx[1] as usize].truncate(),
-                        vertices[idx[2] as usize].truncate(),
+                        vertices[idx[0] as usize],
+                        vertices[idx[1] as usize],
+                        vertices[idx[2] as usize],
                     ];
                     if let Hit(dist) = ray.intersect(trig) {
                         hit = match hit {
