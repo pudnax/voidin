@@ -98,9 +98,9 @@ fn trace_result_new() -> TraceResult {
     return TraceResult(vec3(0.), vec3(0.), vec3(0.), false, MAX_DIST);
 }
 
-fn fetch_vertex(idx: u32, vertex_offset: u32) -> vec3<f32> {
-    let i = vertex_offset + 3u * indices[idx];
-    return vec3(vertices[i + 0u], vertices[i + 1u], vertices[i + 2u]);
+fn fetch_vertex(idx: u32, mesh: MeshInfo) -> vec3<f32> {
+    let i = u32(mesh.vertex_offset) + indices[mesh.base_index + idx];
+    return vec3(vertices[3u * i + 0u], vertices[3u * i + 1u], vertices[3u * i + 2u]);
 }
 
 fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) {
@@ -112,10 +112,10 @@ fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) {
         let node = bvh_nodes[stack_pop(&stack)];
         if node.count > 0u { // is leaf
             for (var i = 0u; i < node.count; i += 1u) {
-                let base_index = node.left_first + i;
-                let v0 = fetch_vertex(mesh.base_index + 3u * base_index + 0u, u32(mesh.vertex_offset));
-                let v1 = fetch_vertex(mesh.base_index + 3u * base_index + 1u, u32(mesh.vertex_offset));
-                let v2 = fetch_vertex(mesh.base_index + 3u * base_index + 2u, u32(mesh.vertex_offset));
+                let idx = node.left_first + i;
+                let v0 = fetch_vertex(3u * idx + 0u, mesh);
+                let v1 = fetch_vertex(3u * idx + 1u, mesh);
+                let v2 = fetch_vertex(3u * idx + 2u, mesh);
                 if intersect_trig(ray, v0, v1, v2, &hit) {
                     *res = TraceResult(v0, v1, v2, true, hit);
                 }

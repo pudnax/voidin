@@ -57,7 +57,7 @@ impl Tlas {
         let mut node_indices: Vec<_> = (1..).take(instance_count).collect();
         let mut a = 0;
         let mut b = self.find_best_match(&node_indices, instance_count, a);
-        while instance_count >= 1 {
+        while instance_count > 0 {
             let c = self.find_best_match(&node_indices, instance_count, b);
             if a == c {
                 let idx_a = node_indices[a];
@@ -84,7 +84,7 @@ impl Tlas {
     }
 
     fn find_best_match(&self, indices: &[usize], num_unused: usize, target: usize) -> usize {
-        let mut smallest = 1e-30;
+        let mut smallest = 1e30;
         let mut best_idx = target;
         for i in 0..num_unused {
             if target == i {

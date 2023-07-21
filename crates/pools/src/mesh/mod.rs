@@ -134,9 +134,9 @@ impl MeshPool {
             gpu,
         };
 
-        // this.add(make_plane_mesh(1., 1.).as_ref());
-        // this.add(make_uv_sphere(1., 1).as_ref());
-        // this.add(make_uv_sphere(1., 10).as_ref());
+        this.add(make_plane_mesh(1., 1.).as_ref());
+        this.add(make_uv_sphere(1., 1).as_ref());
+        this.add(make_uv_sphere(1., 10).as_ref());
 
         this
     }

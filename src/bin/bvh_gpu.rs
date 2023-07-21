@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use app::MeshInfo;
-use bvh::{Bvh, BvhBuilder, BvhNode, Tlas, TlasNode};
+use app::{MeshInfo, MeshPool};
+use bvh::{BvhNode, Tlas, TlasNode};
 use color_eyre::Result;
 use voidin::*;
 
@@ -9,11 +9,6 @@ use voidin::*;
 struct Demo {
     pipeline: RenderHandle,
 
-    vertices: ResizableBuffer<Vec3>,
-    indices: ResizableBuffer<UVec3>,
-
-    bvh: Bvh,
-    bvh_nodes: ResizableBuffer<BvhNode>,
     tlas: Tlas,
     tlas_nodes: ResizableBuffer<TlasNode>,
 
@@ -109,36 +104,27 @@ impl Example for Demo {
                 )?
         };
 
-        let mut vertices = vec![];
-        let mut indices = vec![];
-        let (bnuuy, _) = tobj::load_obj("assets/bunny.obj", &tobj::GPU_LOAD_OPTIONS)?;
-        for mesh in bnuuy.into_iter().map(|m| m.mesh) {
-            vertices.extend(mesh.positions.chunks_exact(3).map(|v| Vec3::from_slice(v)));
-            indices.extend(mesh.indices.chunks_exact(3).map(|i| UVec3::from_slice(i)));
-        }
-
-        let bvh = BvhBuilder::new(&vertices, &mut indices).build();
-
         let mut instances = vec![];
         let bnuuy_mesh = models::ObjModel::import(app, "assets/bunny.obj")?;
         for (mesh, material) in bnuuy_mesh {
-            instances.push(Instance::new(Mat4::IDENTITY, mesh, material));
+            instances.push(Instance::new(
+                Mat4::from_translation(vec3(0., -2., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
+                mesh,
+                material,
+            ));
+        }
+        for [x, y] in [[10., 0.], [-10., 0.], [0., 10.], [0., -10.]] {
+            instances.push(Instance::new(
+                Mat4::from_translation(vec3(x, y, 0.)) * Mat4::from_scale(Vec3::splat(2.)),
+                MeshPool::SPHERE_10_MESH,
+                MaterialId::default(),
+            ));
         }
 
         app.get_instance_pool_mut().add(&instances);
         let mut tlas = Tlas::empty();
         tlas.build(&instances, &app.get_mesh_pool().mesh_info_cpu);
-        dbg!(&app.get_mesh_pool().mesh_info_cpu);
 
-        let vertices = app
-            .device()
-            .create_resizable_buffer_init(&vertices, wgpu::BufferUsages::STORAGE);
-        let indices = app
-            .device()
-            .create_resizable_buffer_init(&indices, wgpu::BufferUsages::STORAGE);
-        let bvh_nodes = app
-            .device()
-            .create_resizable_buffer_init(&bvh.nodes, wgpu::BufferUsages::STORAGE);
         let tlas_nodes = app
             .device()
             .create_resizable_buffer_init(&tlas.nodes, wgpu::BufferUsages::STORAGE);
@@ -176,10 +162,6 @@ impl Example for Demo {
 
         Ok(Self {
             pipeline,
-            vertices,
-            indices,
-            bvh,
-            bvh_nodes,
             tlas,
             tlas_nodes,
             geometry_bind_group,
@@ -231,6 +213,6 @@ impl Example for Demo {
 fn main() -> Result<()> {
     let window = WindowBuilder::new();
 
-    let camera = Camera::new(vec3(-0.16, 0.75, 1.5), 0., 0.);
+    let camera = Camera::new(vec3(0., 0., 15.), 0., 0.);
     run::<Demo>(window, camera)
 }

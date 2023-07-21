@@ -183,6 +183,12 @@ impl App {
             Self::SAMPLE_COUNT,
         );
         let egui_context = egui::Context::default();
+        {
+            let mut arc_style = egui_context.style();
+            let style = Arc::make_mut(&mut arc_style);
+            style.visuals.window_shadow = egui::epaint::Shadow::NONE;
+            egui_context.set_style(style.clone());
+        }
         let egui_state = egui_winit::State::new(window);
 
         Ok(Self {
