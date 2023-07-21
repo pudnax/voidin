@@ -1,6 +1,9 @@
 #import <shared.wgsl>
 #import <utils/math.wgsl>
 
+var<private> BDEPTH: f32 = 0.;
+var<private> TDEPTH: f32 = -1.;
+
 const STACK_LEN: u32 = 24u;
 struct Stack {
     arr: array<u32, STACK_LEN>,
@@ -103,14 +106,13 @@ fn fetch_vertex(idx: u32, mesh: MeshInfo) -> vec3<f32> {
     return vec3(vertices[3u * i + 0u], vertices[3u * i + 1u], vertices[3u * i + 2u]);
 }
 
-fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) -> f32 {
+fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) {
     var stack = stack_new();
     stack_push(&stack, mesh.bvh_index);
 
-    var depth = -1.;
     var hit = (*res).dist;
     while stack.head > 0u {
-        depth += 1.;
+        BDEPTH += 1.;
         let node = bvh_nodes[stack_pop(&stack)];
         if node.count > 0u { // is leaf
             for (var i = 0u; i < node.count; i += 1u) {
@@ -146,10 +148,9 @@ fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) -> f3
             stack_push(&stack, min_index);
         }
     }
-    return depth;
 }
 
-fn instance_intersect(ray: Ray, instance: Instance, res: ptr<function, TraceResult>) -> f32 {
+fn instance_intersect(ray: Ray, instance: Instance, res: ptr<function, TraceResult>) {
     var new_ray = ray;
 
     let mesh = meshes[instance.mesh_id];
@@ -157,21 +158,19 @@ fn instance_intersect(ray: Ray, instance: Instance, res: ptr<function, TraceResu
     new_ray.dir = (instance.inv_transform * vec4(ray.dir, 0.)).xyz;
     new_ray.inv_dir = 1. / new_ray.dir;
 
-    return traverse_bvh(new_ray, mesh, res);
+    traverse_bvh(new_ray, mesh, res);
 }
 
-fn traverse_tlas(ray: Ray, dd: ptr<function, vec2<f32>>) -> TraceResult {
+fn traverse_tlas(ray: Ray) -> TraceResult {
     var stack = stack_new();
     stack_push(&stack, 0u);
 
-    var td = -2.;
-    var bd = 0.;
     var res = trace_result_new();
     while stack.head > 0u {
-        td += 1.;
+        TDEPTH += 1.;
         let node = tlas_nodes[stack_pop(&stack)];
         if node.left_right == 0u { // is leaf
-            bd += instance_intersect(ray, instances[node.instance_idx], &res);
+            instance_intersect(ray, instances[node.instance_idx], &res);
 		} else {
             var min_index = node.left_right & 0xffffu;
             var max_index = node.left_right >> 16u;
@@ -196,7 +195,6 @@ fn traverse_tlas(ray: Ray, dd: ptr<function, vec2<f32>>) -> TraceResult {
             stack_push(&stack, min_index);
         }
     }
-    *dd = vec2(td, bd);
     return res;
 }
 
@@ -235,14 +233,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ray = ray_new(eye, dir);
 
     var color = vec3(0.05);
-    var depth: vec2<f32>;
-    let res = traverse_tlas(ray, &depth);
+    let res = traverse_tlas(ray);
     if res.hit {
         let nor = triangle_normal(res.v0, res.v1, res.v2);
         color = vec3(length(sin(-nor * 2.5) * 0.5 + 0.5) / sqrt(3.));
     }
-    color.r += depth[0] / 40.;
-    color.g += depth[1] / 40.;
+    color.r += TDEPTH / 100.;
+    color.g += BDEPTH / 100.;
 
     return vec4(color, 1.0);
 }
