@@ -1,7 +1,7 @@
 #import <shared.wgsl>
 #import <utils/math.wgsl>
 
-const STACK_LEN: u32 = 12u;
+const STACK_LEN: u32 = 24u;
 struct Stack {
     arr: array<u32, STACK_LEN>,
 	head: u32,
@@ -164,14 +164,14 @@ fn traverse_tlas(ray: Ray, dd: ptr<function, vec2<f32>>) -> TraceResult {
     var stack = stack_new();
     stack_push(&stack, 0u);
 
-    var d = -2.;
-    var ddd = 0.;
+    var td = -2.;
+    var bd = 0.;
     var res = trace_result_new();
     while stack.head > 0u {
-        d += 1.;
+        td += 1.;
         let node = tlas_nodes[stack_pop(&stack)];
         if node.left_right == 0u { // is leaf
-            ddd = instance_intersect(ray, instances[node.instance_idx], &res);
+            bd += instance_intersect(ray, instances[node.instance_idx], &res);
 		} else {
             var min_index = node.left_right & 0xffffu;
             var max_index = node.left_right >> 16u;
@@ -196,7 +196,7 @@ fn traverse_tlas(ray: Ray, dd: ptr<function, vec2<f32>>) -> TraceResult {
             stack_push(&stack, min_index);
         }
     }
-    *dd = vec2(d, ddd);
+    *dd = vec2(td, bd);
     return res;
 }
 
@@ -235,14 +235,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ray = ray_new(eye, dir);
 
     var color = vec3(0.05);
-    var dd: vec2<f32>;
-    let res = traverse_tlas(ray, &dd);
+    var depth: vec2<f32>;
+    let res = traverse_tlas(ray, &depth);
     if res.hit {
         let nor = triangle_normal(res.v0, res.v1, res.v2);
         color = vec3(length(sin(-nor * 2.5) * 0.5 + 0.5) / sqrt(3.));
     }
-    color.r += dd[0] / 30.;
-    color.g += dd[1] / 30.;
+    color.r += depth[0] / 40.;
+    color.g += depth[1] / 40.;
 
     return vec4(color, 1.0);
 }
