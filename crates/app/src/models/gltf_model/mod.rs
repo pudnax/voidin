@@ -144,7 +144,7 @@ impl GltfDocument {
                     normals: bytemuck::cast_slice(normals),
                     tangents: bytemuck::cast_slice(&tangents),
                     tex_coords: bytemuck::cast_slice(&tex_coords),
-                    indices: &indices,
+                    indices,
                 };
                 let mesh = app.add_mesh(mesh);
                 meshes.insert((gltf_mesh_id, primitive.index()), mesh);

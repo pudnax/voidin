@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use bvh::{Bvh, BvhBuilder, BvhNode};
+use app::MeshInfo;
+use bvh::{Bvh, BvhBuilder, BvhNode, Tlas, TlasNode};
 use color_eyre::Result;
 use voidin::*;
 
@@ -13,6 +14,8 @@ struct Demo {
 
     bvh: Bvh,
     bvh_nodes: ResizableBuffer<BvhNode>,
+    tlas: Tlas,
+    tlas_nodes: ResizableBuffer<TlasNode>,
 
     geometry_bind_group: wgpu::BindGroup,
 }
@@ -34,7 +37,7 @@ impl Example for Demo {
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
-                                min_binding_size: Some(f32::NSIZE),
+                                min_binding_size: Some(TlasNode::NSIZE),
                             },
                             count: None,
                         },
@@ -44,7 +47,7 @@ impl Example for Demo {
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
-                                min_binding_size: Some(u32::NSIZE),
+                                min_binding_size: Some(Instance::NSIZE),
                             },
                             count: None,
                         },
@@ -54,26 +57,57 @@ impl Example for Demo {
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
+                                min_binding_size: Some(MeshInfo::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: Some(BvhNode::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(f32::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 5,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(u32::NSIZE),
                             },
                             count: None,
                         },
                     ],
                 });
-        let camera_binding = app.world.get::<CameraUniformBinding>()?;
-        let pipeline = app
-            .get_pipeline_arena_mut()
-            .process_render_pipeline_from_path(
-                "src/bin/bvh_trace.wgsl",
-                pipeline::RenderPipelineDescriptor {
-                    layout: vec![
-                        camera_binding.bind_group_layout.clone(),
-                        geometry_bgl.clone(),
-                    ],
-                    depth_stencil: None,
-                    ..Default::default()
-                },
-            )?;
+        let pipeline = {
+            let camera_binding = app.world.get::<CameraUniformBinding>()?;
+            app.get_pipeline_arena_mut()
+                .process_render_pipeline_from_path(
+                    "src/bin/bvh_trace.wgsl",
+                    pipeline::RenderPipelineDescriptor {
+                        layout: vec![
+                            camera_binding.bind_group_layout.clone(),
+                            geometry_bgl.clone(),
+                        ],
+                        depth_stencil: None,
+                        ..Default::default()
+                    },
+                )?
+        };
 
         let mut vertices = vec![];
         let mut indices = vec![];
@@ -85,6 +119,17 @@ impl Example for Demo {
 
         let bvh = BvhBuilder::new(&vertices, &mut indices).build();
 
+        let mut instances = vec![];
+        let bnuuy_mesh = models::ObjModel::import(app, "assets/bunny.obj")?;
+        for (mesh, material) in bnuuy_mesh {
+            instances.push(Instance::new(Mat4::IDENTITY, mesh, material));
+        }
+
+        app.get_instance_pool_mut().add(&instances);
+        let mut tlas = Tlas::empty();
+        tlas.build(&instances, &app.get_mesh_pool().mesh_info_cpu);
+        dbg!(&app.get_mesh_pool().mesh_info_cpu);
+
         let vertices = app
             .device()
             .create_resizable_buffer_init(&vertices, wgpu::BufferUsages::STORAGE);
@@ -94,6 +139,9 @@ impl Example for Demo {
         let bvh_nodes = app
             .device()
             .create_resizable_buffer_init(&bvh.nodes, wgpu::BufferUsages::STORAGE);
+        let tlas_nodes = app
+            .device()
+            .create_resizable_buffer_init(&tlas.nodes, wgpu::BufferUsages::STORAGE);
 
         let geometry_bind_group = app.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Geometry Bind Group"),
@@ -101,15 +149,27 @@ impl Example for Demo {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: vertices.as_entire_binding(),
+                    resource: tlas_nodes.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: indices.as_entire_binding(),
+                    resource: app.get_instance_pool().instances.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: bvh_nodes.as_entire_binding(),
+                    resource: app.get_mesh_pool().mesh_info.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: app.get_mesh_pool().bvh_nodes.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: app.get_mesh_pool().vertices.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: app.get_mesh_pool().indices.as_entire_binding(),
                 },
             ],
         });
@@ -120,6 +180,8 @@ impl Example for Demo {
             indices,
             bvh,
             bvh_nodes,
+            tlas,
+            tlas_nodes,
             geometry_bind_group,
         })
     }

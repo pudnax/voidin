@@ -30,6 +30,7 @@ pub use app::{
 };
 pub use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
+    shared::*,
     Camera, Gpu, LerpExt, NonZeroSized, ResizableBuffer, ResizableBufferExt, Watcher,
     {CameraUniform, CameraUniformBinding}, {KeyMap, KeyboardMap},
 };
@@ -81,7 +82,7 @@ pub fn run<E: Example>(
         .init();
 
     let event_loop = winit::event_loop::EventLoopBuilder::with_user_event().build();
-    let window = window_builder.build(&event_loop)?;
+    let window = window_builder.with_title(E::name()).build(&event_loop)?;
 
     let PhysicalSize { width, height } = window.inner_size();
     camera.aspect = width as f32 / height as f32;

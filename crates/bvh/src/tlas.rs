@@ -1,8 +1,8 @@
 use bytemuck::{Pod, Zeroable};
+use components::{Instance, MeshInfo};
 use glam::{vec3, Vec3};
-use pools::{Instance, MeshInfo};
 
-use crate::Aabb;
+use crate::intersection::Aabb;
 
 #[repr(C)]
 #[derive(Copy, Clone, Default, Debug, Pod, Zeroable)]
@@ -10,7 +10,7 @@ pub struct TlasNode {
     pub min: Vec3,
     pub left_right: u32,
     pub max: Vec3,
-    pub blas_idx: u32,
+    pub instance_idx: u32,
 }
 
 impl TlasNode {
@@ -20,7 +20,7 @@ impl TlasNode {
 }
 
 pub struct Tlas {
-    nodes: Vec<TlasNode>,
+    pub nodes: Vec<TlasNode>,
 }
 
 impl Tlas {
@@ -29,30 +29,27 @@ impl Tlas {
     }
 
     pub fn build(&mut self, instances: &[Instance], meshes: &[MeshInfo]) {
-        self.nodes = vec![TlasNode::default(); 2 * instances.len()];
+        self.nodes = vec![TlasNode::default(); 2 * instances.len() + 1];
 
-        // First node reserved for root
-        for (i, instance) in instances.iter().enumerate().map(|(i, x)| (i + 1, x)) {
+        for (i, instance) in instances.iter().enumerate() {
             let mesh = meshes[instance.mesh.0 as usize];
             let [min, max] = (0..8)
                 .map(|i| [i & 1, i & 2, i & 4].map(|i| i == 0).map(usize::from))
-                .fold(
-                    [Vec3::INFINITY, Vec3::NEG_INFINITY],
-                    |bound @ [min, max], [i, j, k]| {
-                        let bound = instance
-                            .transform
-                            .transform_point3(vec3(bound[i].x, bound[j].y, bound[k].z));
-                        [min.min(bound), max.max(bound)]
-                    },
-                );
+                .fold([mesh.min, mesh.max], |bound @ [min, max], [i, j, k]| {
+                    let bound = instance
+                        .transform
+                        .transform_point3(vec3(bound[i].x, bound[j].y, bound[k].z));
+                    [min.min(bound), max.max(bound)]
+                });
             let node = TlasNode {
                 min,
                 left_right: 0,
                 max,
-                blas_idx: mesh.bvh_index,
+                instance_idx: i as u32,
             };
 
-            self.nodes[i] = node;
+            // First node reserved for root
+            self.nodes[i + 1] = node;
         }
 
         let mut instance_count = instances.len();
@@ -60,7 +57,7 @@ impl Tlas {
         let mut node_indices: Vec<_> = (1..).take(instance_count).collect();
         let mut a = 0;
         let mut b = self.find_best_match(&node_indices, instance_count, a);
-        while instance_count > 1 {
+        while instance_count >= 1 {
             let c = self.find_best_match(&node_indices, instance_count, b);
             if a == c {
                 let idx_a = node_indices[a];
@@ -71,7 +68,7 @@ impl Tlas {
                     min: node_a.min.min(node_b.min),
                     max: node_a.max.max(node_b.max),
                     left_right: idx_a as u32 + ((idx_b as u32) << 16),
-                    blas_idx: u32::MAX,
+                    instance_idx: u32::MAX,
                 };
                 node_indices[a] = nodes_used;
                 nodes_used += 1;
@@ -84,8 +81,6 @@ impl Tlas {
             }
         }
         self.nodes[0] = self.nodes[node_indices[a]];
-
-        // TODO: untangle nodes from indices
     }
 
     fn find_best_match(&self, indices: &[usize], num_unused: usize, target: usize) -> usize {

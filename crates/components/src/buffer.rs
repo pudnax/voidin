@@ -73,6 +73,23 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
         }
     }
 
+    pub fn with_capasity(device: &Device, size: usize, usages: BufferUsages) -> Self {
+        let buffer = device.create_buffer(&BufferDescriptor {
+            label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),
+            size: (T::SIZE * size) as u64,
+            usage: usages | BufferUsages::COPY_SRC | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        Self {
+            buffer,
+
+            len: 0,
+            cap: size,
+            _phantom: PhantomData,
+        }
+    }
+
     pub fn new_with_data(device: &Device, data: &[T], usages: BufferUsages) -> Self {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&format!("Buffer<{}>", pretty_type_name::<T>())),

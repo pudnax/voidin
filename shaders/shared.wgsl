@@ -52,6 +52,7 @@ struct MeshInfo {
 
 struct Instance {
     transform: mat4x4<f32>,
+    inv_transform: mat4x4<f32>,
 	mesh_id: u32,
 	material_id: u32,
 	padding: vec2<f32>,

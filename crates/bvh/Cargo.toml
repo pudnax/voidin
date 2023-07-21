@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 glam = { workspace = true }
 bytemuck = { workspace = true }
-pools = { path = "../pools" }
+components = { path = "../components" }

@@ -5,20 +5,10 @@ use glam::Vec4;
 
 use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
-    Gpu, NonZeroSized, ResizableBuffer, ResizableBufferExt,
+    Gpu, MaterialId, NonZeroSized, ResizableBuffer, ResizableBufferExt,
 };
 
 use super::texture::{TextureId, BLACK_TEXTURE, WHITE_TEXTURE};
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Pod, Zeroable)]
-pub struct MaterialId(u32);
-
-impl MaterialId {
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-}
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]

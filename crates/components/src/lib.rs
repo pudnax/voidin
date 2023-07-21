@@ -16,8 +16,11 @@ mod fps_counter;
 mod import_resolver;
 mod input;
 mod recorder;
+pub mod shared;
 mod watcher;
 pub mod world;
+
+pub use shared::*;
 
 pub use bind_group_layout::{BindGroupLayout, WrappedBindGroupLayout};
 pub use blitter::Blitter;

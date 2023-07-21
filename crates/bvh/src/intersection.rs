@@ -1,5 +1,24 @@
 use glam::Vec3;
 
+pub const MAX_DIST: f32 = 1e30;
+
+#[derive(Copy, Clone)]
+pub struct Aabb {
+    pub min: Vec3,
+    pub max: Vec3,
+}
+
+impl Aabb {
+    pub fn new(min: Vec3, max: Vec3) -> Self {
+        Self { min, max }
+    }
+
+    pub fn area(&self) -> f32 {
+        let diff = self.max - self.min;
+        (diff.x * diff.y + diff.x * diff.z + diff.y * diff.z) * 2.
+    }
+}
+
 #[derive(PartialOrd, PartialEq, Clone, Copy, Debug)]
 pub enum Dist {
     Hit(f32),

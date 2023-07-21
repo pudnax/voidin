@@ -5,13 +5,13 @@ mod sphere;
 use core::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3, Vec4};
 
-use components::Gpu;
-
 use components::bind_group_layout::{self, WrappedBindGroupLayout};
+use components::{Gpu, MeshId, MeshInfo};
 use components::{NonZeroSized, ResizableBuffer, ResizableBufferExt};
+
+use bvh::{BvhBuilder, BvhNode};
 
 pub use cube::make_cube_mesh;
 pub use plane::make_plane_mesh;
@@ -22,43 +22,6 @@ pub fn calculate_bounds(positions: &[Vec3]) -> (Vec3, Vec3) {
         (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
         |(min, max), &pos| (min.min(pos), max.max(pos)),
     )
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Pod, Zeroable)]
-pub struct MeshId(pub u32);
-
-impl From<MeshId> for u32 {
-    fn from(value: MeshId) -> u32 {
-        value.0
-    }
-}
-impl From<MeshId> for usize {
-    fn from(value: MeshId) -> usize {
-        value.0 as _
-    }
-}
-
-impl MeshId {
-    pub const fn new(id: u32) -> Self {
-        Self(id)
-    }
-
-    pub fn id(&self) -> u32 {
-        self.0
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default, Pod, Zeroable)]
-pub struct MeshInfo {
-    pub min: Vec3,
-    index_count: u32,
-    pub max: Vec3,
-    base_index: u32,
-    vertex_offset: i32,
-    pub bvh_index: u32,
-    junk: [u32; 2],
 }
 
 pub struct Mesh {
@@ -76,7 +39,7 @@ impl Mesh {
             normals: &self.normals,
             tangents: &self.tangents,
             tex_coords: &self.tex_coords,
-            indices: &self.indices,
+            indices: self.indices.to_vec(),
         }
     }
 }
@@ -86,13 +49,14 @@ pub struct MeshRef<'a> {
     pub normals: &'a [Vec3],
     pub tangents: &'a [Vec4],
     pub tex_coords: &'a [Vec2],
-    pub indices: &'a [u32],
+    pub indices: Vec<u32>,
 }
 
 pub struct MeshPool {
     vertex_offset: AtomicU32,
     base_index: AtomicU32,
     mesh_index: AtomicU32,
+    bvh_index: AtomicU32,
 
     pub mesh_info_layout: bind_group_layout::BindGroupLayout,
     pub mesh_info_bind_group: wgpu::BindGroup,
@@ -104,6 +68,7 @@ pub struct MeshPool {
     pub tangents: ResizableBuffer<Vec4>,
     pub tex_coords: ResizableBuffer<Vec2>,
     pub indices: ResizableBuffer<u32>,
+    pub bvh_nodes: ResizableBuffer<BvhNode>,
 
     gpu: Arc<Gpu>,
 }
@@ -140,6 +105,7 @@ impl MeshPool {
             vertex_offset: AtomicU32::new(0),
             base_index: AtomicU32::new(0),
             mesh_index: AtomicU32::new(0),
+            bvh_index: AtomicU32::new(0),
 
             mesh_info_layout,
             mesh_info_bind_group,
@@ -148,7 +114,7 @@ impl MeshPool {
 
             vertices: gpu
                 .device()
-                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
+                .create_resizable_buffer(wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE),
             normals: gpu
                 .device()
                 .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
@@ -160,14 +126,17 @@ impl MeshPool {
                 .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
             indices: gpu
                 .device()
-                .create_resizable_buffer(wgpu::BufferUsages::INDEX),
+                .create_resizable_buffer(wgpu::BufferUsages::INDEX | wgpu::BufferUsages::STORAGE),
+            bvh_nodes: gpu
+                .device()
+                .create_resizable_buffer(wgpu::BufferUsages::STORAGE),
 
             gpu,
         };
 
-        this.add(make_plane_mesh(1., 1.).as_ref());
-        this.add(make_uv_sphere(1., 1).as_ref());
-        this.add(make_uv_sphere(1., 10).as_ref());
+        // this.add(make_plane_mesh(1., 1.).as_ref());
+        // this.add(make_uv_sphere(1., 1).as_ref());
+        // this.add(make_uv_sphere(1., 10).as_ref());
 
         this
     }
@@ -193,7 +162,7 @@ impl MeshPool {
         self.mesh_index.load(Ordering::Relaxed)
     }
 
-    pub fn add(&mut self, mesh: MeshRef) -> MeshId {
+    pub fn add(&mut self, mut mesh: MeshRef) -> MeshId {
         let vertex_count = mesh.vertices.len() as u32;
         let vertex_offset = self
             .vertex_offset
@@ -204,10 +173,17 @@ impl MeshPool {
         self.tangents.push(&self.gpu, mesh.tangents);
         self.tex_coords.push(&self.gpu, mesh.tex_coords);
 
+        let bvh =
+            BvhBuilder::new(mesh.vertices, bytemuck::cast_slice_mut(&mut mesh.indices)).build();
+        let bvh_index = self
+            .bvh_index
+            .fetch_add(bvh.nodes.len() as u32, Ordering::Relaxed);
+        self.bvh_nodes.push(&self.gpu, &bvh.nodes);
+
         let index_count = mesh.indices.len() as u32;
         let base_index = self.base_index.fetch_add(index_count, Ordering::Relaxed);
 
-        self.indices.push(&self.gpu, mesh.indices);
+        self.indices.push(&self.gpu, &mesh.indices);
         let mesh_index = self.mesh_index.fetch_add(1, Ordering::Relaxed);
 
         let (min, max) = calculate_bounds(mesh.vertices);
@@ -218,7 +194,7 @@ impl MeshPool {
             max,
             base_index,
             index_count,
-            bvh_index: 0,
+            bvh_index,
             junk: [0; 2],
         };
         self.mesh_info_cpu.push(mesh_info);

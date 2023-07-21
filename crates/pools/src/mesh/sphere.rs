@@ -40,7 +40,7 @@ pub fn make_uv_sphere(radius: f32, resolution: usize) -> Mesh {
     //  |  / |
     //  | /  |
     //  k2--k2+1
-    for (i, k1) in (0..=stack_count).map(|i| (i, i * (sector_count + 1))) {
+    for (i, k1) in (0..stack_count).map(|i| (i, i * (sector_count + 1))) {
         // k1 - top row; k2 - bottom row
         for (k1, k2) in (0..sector_count).map(|j| (j + k1, j + k1 + sector_count + 1)) {
             if i != 0 {

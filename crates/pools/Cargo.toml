@@ -11,3 +11,4 @@ wgpu = { workspace = true }
 glam = { workspace = true }
 bytemuck = { workspace = true }
 components = { path = "../components" }
+bvh = { path = "../bvh" }

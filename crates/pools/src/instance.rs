@@ -1,62 +1,13 @@
-use bytemuck::{Pod, Zeroable};
-use glam::Mat4;
 use std::sync::Arc;
 
 use components::{
     bind_group_layout::{self, WrappedBindGroupLayout},
-    Gpu, NonZeroSized, ResizableBuffer, ResizableBufferExt,
+    Gpu, Instance, InstanceId, NonZeroSized, ResizableBuffer, ResizableBufferExt,
 };
-
-use super::{material::MaterialId, mesh::MeshId};
-
-#[repr(C)]
-#[derive(Debug, Default, Clone, Copy, Zeroable, Pod)]
-pub struct InstanceId(u32);
-
-impl InstanceId {
-    pub fn id(&self) -> u32 {
-        self.0
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Pod, Zeroable)]
-pub struct Instance {
-    pub transform: glam::Mat4,
-    pub mesh: MeshId,
-    pub material: MaterialId,
-    junk: [u32; 2],
-}
-
-impl Default for Instance {
-    fn default() -> Self {
-        Self {
-            transform: Mat4::IDENTITY,
-            mesh: MeshId::default(),
-            material: MaterialId::default(),
-            junk: [0; 2],
-        }
-    }
-}
-
-impl Instance {
-    pub fn new(transform: glam::Mat4, mesh: MeshId, material: MaterialId) -> Self {
-        Self {
-            transform,
-            mesh,
-            material,
-            junk: [0; 2],
-        }
-    }
-
-    pub fn transform(&mut self, transform: glam::Mat4) {
-        self.transform = transform * self.transform;
-    }
-}
 
 pub struct InstancePool {
     pub instances_data: Vec<Instance>,
-    pub(crate) instances: ResizableBuffer<Instance>,
+    pub instances: ResizableBuffer<Instance>,
 
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: bind_group_layout::BindGroupLayout,
