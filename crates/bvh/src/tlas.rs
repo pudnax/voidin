@@ -33,9 +33,10 @@ impl Tlas {
 
         for (i, instance) in instances.iter().enumerate() {
             let mesh = meshes[instance.mesh.0 as usize];
+            let bound = [mesh.min, mesh.max];
             let [min, max] = (0..8)
                 .map(|i| [i & 1, i & 2, i & 4].map(|i| i == 0).map(usize::from))
-                .fold([mesh.min, mesh.max], |bound @ [min, max], [i, j, k]| {
+                .fold([mesh.min, mesh.max], |[min, max], [i, j, k]| {
                     let bound = instance
                         .transform
                         .transform_point3(vec3(bound[i].x, bound[j].y, bound[k].z));
