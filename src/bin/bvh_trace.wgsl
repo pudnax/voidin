@@ -161,7 +161,6 @@ fn traverse_tlas(ray: Ray) -> TraceResult {
     var stack = stack_new();
     stack_push(&stack, 0u);
 
-    var hit = MAX_DIST;
     var res = trace_result_new();
     while stack.head > 0u {
         let node = tlas_nodes[stack_pop(&stack)];
@@ -174,8 +173,8 @@ fn traverse_tlas(ray: Ray) -> TraceResult {
             let min_child = tlas_nodes[min_index];
             let max_child = tlas_nodes[max_index];
 
-            var min_dist = intersect_aabb(ray, min_child.min, min_child.max, hit);
-            var max_dist = intersect_aabb(ray, max_child.min, max_child.max, hit);
+            var min_dist = intersect_aabb(ray, min_child.min, min_child.max, res.dist);
+            var max_dist = intersect_aabb(ray, max_child.min, max_child.max, res.dist);
             if min_dist > max_dist {
                 swapu(&min_index, &max_index);
                 swapf(&min_dist, &max_dist);
