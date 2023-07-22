@@ -27,6 +27,55 @@ fn integrate_edge(v1: vec3<f32>, v2: vec3<f32>) -> vec3<f32> {
     return cross(v1, v2) * theta_sintheta;
 }
 
+fn sdsquare(p: vec2<f32>) -> f32 {
+    var p = p - 0.5;
+    p = abs(p) - 0.5;
+    return length(max(p, vec2(0.))) + min(max(p.x, p.y), 0.);
+}
+
+fn gaussian_kernel(x: f32, sigma: f32) -> f32 {
+    let s = 1. / sigma;
+    return 0.39894 * exp(-0.5 * x * x * s * s) * s;
+}
+
+fn apply_texture(tex_idx: u32, p0: vec3<f32>, p1: vec3<f32>, p2: vec3<f32>) -> vec3<f32> {
+    let v1 = p0 - p1;
+    var v2 = p2 - p1;
+    let plane_orto = cross(v1, v2);
+    let plane_area_squared = dot(plane_orto, plane_orto);
+    let dist_x_area = dot(plane_orto, p1);
+    let p = dist_x_area * plane_orto / plane_area_squared - p1;
+
+    let dot_v1_v2 = dot(v1, v2);
+    let inv_dot_v1_v1 = 1. / dot(v1, v1);
+    v2 = v2 - v1 * dot_v1_v2 * inv_dot_v1_v1;
+    var uv: vec2<f32>;
+    uv.y = dot(v2, p) / dot(v2, v2);
+    uv.x = dot(v1, p) * inv_dot_v1_v1 - dot_v1_v2 * inv_dot_v1_v1 * uv.y;
+
+    var sigma = abs(dist_x_area) / pow(plane_area_squared, 0.75);
+    let add = max(0., sdsquare(uv));
+    sigma += add;
+
+    let y0 = gaussian_kernel(0., sigma);
+    let y1 = y0 * 0.75;
+    let x1 = gaussian_kernel(y1, sigma);
+    let y2 = y0 * 0.5;
+    let x2 = gaussian_kernel(y2, sigma);
+    let y3 = y0 * 0.25;
+    let x3 = gaussian_kernel(y3, sigma);
+
+    let dx = vec2(0.5, 0.0);
+    let dy = vec2(0.0, 0.5);
+
+    var col = vec3(0.);
+    col += textureSampleGrad(texture_array[tex_idx], tex_sampler, uv, dx * x3, dy * x3).rgb * 0.333;
+    col += textureSampleGrad(texture_array[tex_idx], tex_sampler, uv, dx * x2, dy * x2).rgb * 0.333;
+    col += textureSampleGrad(texture_array[tex_idx], tex_sampler, uv, dx * x1, dy * x1).rgb * 0.333;
+
+    return col;
+}
+
 fn ltc_evaluate_rect(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, minv: mat3x3<f32>, points: array<vec3<f32>,4>, two_sided: bool) -> vec3<f32> {
     let T1 = normalize(view - nor * dot(view, nor));
     let T2 = cross(nor, T1);
