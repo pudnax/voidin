@@ -1,6 +1,9 @@
 # Voidin
 
-<img src="./assets/clapping.gif" width=550 height=480>
+<p align="center">
+    <img src="./assets/clapping.gif" width=45% height=50%>
+    <img src="./assets/bvh.png" width=41% height=50%>
+</p>
 
 ## Overview
 

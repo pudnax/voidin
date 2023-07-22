@@ -149,7 +149,10 @@ impl<T: bytemuck::Pod + NonZeroSized> ResizableBuffer<T> {
 
     /// Returns `true` if internal buffer was resized
     pub fn push(&mut self, gpu: &Gpu, values: &[T]) -> bool {
-        assert!(!values.is_empty(), "Don't push empty values");
+        if values.is_empty() {
+            log::warn!("Attemped to push an empty array into gpu buffer");
+            return false;
+        }
         let new_len = self.len() + values.len();
         let mut encoder = gpu
             .device
