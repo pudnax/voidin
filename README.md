@@ -17,9 +17,10 @@ The goal of this project is to research and implement modern techniques for rend
 - Deferred renderer architecture
 - LTC based arealights
 - TAA
+- Handwritten BVH with SAH and TLAS over it for instanced rendering
 
 ## TODO
-[ ] Implement BVH for shadow rays
+[ ] Raytraced shadows for arealights
 
 ## Building
 
