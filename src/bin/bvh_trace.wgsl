@@ -236,14 +236,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let ray = ray_new(eye, dir);
 
-    var color = vec3(0.05);
+    var color = vec3(0.13);
     let res = traverse_tlas(ray);
     if res.hit {
         let nor = triangle_normal(res.v0, res.v1, res.v2);
         color = vec3(length(sin(-nor * 2.5) * 0.5 + 0.5) / sqrt(3.));
+        color = nor * 0.5 + 0.5;
+        color -= 0.0;
     }
     color.r += TDEPTH / 100.;
-    color.g += BDEPTH / 100.;
+    color += clamp(log2(BDEPTH) / 20., 0., 1.);
 
+    color = pow(color, vec3(1.4545));
     return vec4(color, 1.0);
 }

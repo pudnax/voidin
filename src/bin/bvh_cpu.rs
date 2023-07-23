@@ -49,10 +49,7 @@ impl Example for Demo {
             vertices.push(base + v2);
         }
         let indices: Vec<_> = (0..vertices.len() as u32).collect();
-        let mut indices: Vec<_> = indices
-            .chunks_exact(3)
-            .map(|i| UVec3::from_slice(i))
-            .collect();
+        let mut indices: Vec<_> = indices.chunks_exact(3).map(UVec3::from_slice).collect();
 
         let bvh = bvh::BvhBuilder::new(&vertices, &mut indices).build();
 

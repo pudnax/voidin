@@ -42,7 +42,7 @@ impl GltfDocument {
     }
 
     fn make_materials(
-        app: &mut App,
+        app: &App,
         document: &gltf::Document,
         images: &[gltf::image::Data],
     ) -> Result<Vec<MaterialId>> {
@@ -222,7 +222,7 @@ pub fn data_of_accessor<'a>(
 type TexKey = (usize, bool);
 
 fn process_texture_cached(
-    app: &mut App,
+    app: &App,
     image_map: &mut AHashMap<TexKey, TextureId>,
     images: &[gltf::image::Data],
     image: gltf::image::Image<'_>,
@@ -244,7 +244,7 @@ fn process_texture_cached(
 }
 
 fn process_texture(
-    app: &mut App,
+    app: &App,
     images: &[gltf::image::Data],
     image: gltf::image::Image<'_>,
     srgb: bool,
