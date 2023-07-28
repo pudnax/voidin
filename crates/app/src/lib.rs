@@ -110,8 +110,7 @@ pub fn run<E: Example>(
     let mut example = E::init(&mut app)?;
 
     let now = std::time::Instant::now();
-    example.setup_scene(&mut app)?;
-    app.setup_scene()?;
+    app.setup_scene(&mut example)?;
     println!("Scene finished: {:?}", now.elapsed());
 
     let mut current_instant = Instant::now();

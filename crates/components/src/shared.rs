@@ -39,12 +39,18 @@ pub struct MeshInfo {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, Pod, Zeroable)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Pod, Zeroable)]
 pub struct MaterialId(pub u32);
 
 impl MaterialId {
     pub const fn new(id: u32) -> Self {
         Self(id)
+    }
+}
+
+impl Default for MaterialId {
+    fn default() -> Self {
+        Self(1)
     }
 }
 

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use app::{MeshInfo, MeshPool};
+use app::MeshInfo;
 use bvh::{BvhNode, Tlas, TlasNode};
 use color_eyre::Result;
 use voidin::*;
@@ -105,20 +105,25 @@ impl Example for Demo {
         };
 
         let mut instances = vec![];
-        let bnuuy_mesh = models::ObjModel::import(app, "assets/bunny.obj")?;
-        for (mesh, material) in bnuuy_mesh {
+        let dragon_mesh = models::ObjModel::import(app, "assets/dragon.obj")?;
+        for (mesh, material) in dragon_mesh {
             instances.push(Instance::new(
-                Mat4::from_translation(vec3(0., -2., 0.)) * Mat4::from_scale(Vec3::splat(4.)),
+                Mat4::from_rotation_y(std::f32::consts::PI / 2.)
+                    * Mat4::from_translation(vec3(0., 2., 0.))
+                    * Mat4::from_scale(Vec3::splat(10.)),
                 mesh,
                 material,
             ));
         }
-        for [x, y] in [[10., 0.], [-10., 0.], [0., 10.], [0., -10.]] {
-            instances.push(Instance::new(
-                Mat4::from_translation(vec3(x, y, 0.)) * Mat4::from_scale(Vec3::splat(2.)),
-                MeshPool::SPHERE_10_MESH,
-                MaterialId::default(),
-            ));
+        let bnuuy_mesh = models::ObjModel::import(app, "assets/bunny.obj")?;
+        for [x, y] in [[8., 8.], [-8., 8.], [8., -8.], [-8., -8.]] {
+            for (mesh, material) in &bnuuy_mesh {
+                instances.push(Instance::new(
+                    Mat4::from_translation(vec3(x, y, 0.)) * Mat4::from_scale(Vec3::splat(3.)),
+                    *mesh,
+                    *material,
+                ));
+            }
         }
 
         app.get_instance_pool_mut().add(&instances);
@@ -213,6 +218,6 @@ impl Example for Demo {
 fn main() -> Result<()> {
     let window = WindowBuilder::new();
 
-    let camera = Camera::new(vec3(0., 0., 15.), 0., 0.);
+    let camera = Camera::new(vec3(0., 2.5, 15.), 0., 0.);
     run::<Demo>(window, camera)
 }

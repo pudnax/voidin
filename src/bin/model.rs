@@ -28,7 +28,8 @@ impl Example for Model {
     fn init(app: &mut App) -> Result<Self> {
         let visibility_pass = pass::visibility::Visibility::new(&app.world)?;
 
-        let shading_pass = pass::shading::ShadingPass::new(&app.world, &app.gbuffer)?;
+        let shading_pass =
+            pass::shading::ShadingPass::new("shaders/shading.wgsl", &app.world, &app.gbuffer)?;
 
         let postprocess_pass =
             pass::postprocess::PostProcess::new(&app.world, "shaders/postprocess.wgsl")?;

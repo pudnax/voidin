@@ -20,6 +20,7 @@ either = { workspace = true }
 tobj = { workspace = true }
 components = { path = "../components" }
 pools = { path = "../pools" }
+bvh = { path = "../bvh" }
 pollster = { version = "0.3.0", features = ["macro"] }
 wgpu-profiler = "0.12.1"
 slotmap = "1.0.6"

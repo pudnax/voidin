@@ -114,7 +114,6 @@ fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) {
     while stack.head > 0u {
         let node = bvh_nodes[stack_pop(&stack)];
         if node.count > 0u { // is leaf
-            BDEPTH -= 1.;
             for (var i = 0u; i < node.count; i += 1u) {
                 let idx = node.left_first + i;
                 let v0 = fetch_vertex(3u * idx + 0u, mesh);
@@ -138,13 +137,12 @@ fn traverse_bvh(ray: Ray, mesh: MeshInfo, res: ptr<function, TraceResult>) {
                 swapf(&min_dist, &max_dist);
             }
 
-            if min_dist >= MAX_DIST {
+            if min_dist >= hit {
 				 continue;
             }
 
-            if max_dist < MAX_DIST {
+            if max_dist <= hit {
                 stack_push(&stack, max_index);
-                BDEPTH += 1.;
             }
             stack_push(&stack, min_index);
             BDEPTH += 1.;
@@ -171,7 +169,6 @@ fn traverse_tlas(ray: Ray) -> TraceResult {
     while stack.head > 0u {
         let node = tlas_nodes[stack_pop(&stack)];
         if node.left_right == 0u { // is leaf
-            TDEPTH -= 1.;
             instance_intersect(ray, instances[node.instance_idx], &res);
 		} else {
             var min_index = node.left_right & 0xffffu;
@@ -187,13 +184,12 @@ fn traverse_tlas(ray: Ray) -> TraceResult {
                 swapf(&min_dist, &max_dist);
             }
 
-            if min_dist >= MAX_DIST {
+            if min_dist >= res.dist {
 				 continue;
             }
 
-            if max_dist < MAX_DIST {
+            if max_dist < res.dist {
                 stack_push(&stack, max_index);
-                TDEPTH += 1.;
             }
             stack_push(&stack, min_index);
             TDEPTH += 1.;

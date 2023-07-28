@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use color_eyre::Result;
+use pools::MeshPool;
 
 use crate::{
     pipeline::{PipelineArena, RenderHandle, RenderPipelineDescriptor},
@@ -16,12 +17,12 @@ pub struct ShadingPass {
 }
 
 impl ShadingPass {
-    pub fn new(world: &World, gbuffer: &GBuffer) -> Result<Self> {
+    pub fn new(shader: impl AsRef<Path>, world: &World, gbuffer: &GBuffer) -> Result<Self> {
         let globals = world.get::<GlobalsBindGroup>()?;
         let materials = world.get::<MaterialPool>()?;
         let textures = world.get::<TexturePool>()?;
         let lights = world.get::<LightPool>()?;
-        let shader_path = Path::new("shaders").join("shading.wgsl");
+        let meshes = world.get::<MeshPool>()?;
         let desc = RenderPipelineDescriptor {
             label: Some("Shading Pipeline".into()),
             layout: vec![
@@ -31,13 +32,14 @@ impl ShadingPass {
                 materials.bind_group_layout.clone(),
                 lights.point_bind_group_layout.clone(),
                 lights.area_bind_group_layout.clone(),
+                meshes.trace_bind_group_layout.clone(),
             ],
             depth_stencil: None,
             ..Default::default()
         };
         let pipeline = world
             .get_mut::<PipelineArena>()?
-            .process_render_pipeline_from_path(shader_path, desc)?;
+            .process_render_pipeline_from_path(shader, desc)?;
         Ok(Self { pipeline })
     }
 }
@@ -61,6 +63,7 @@ impl Pass for ShadingPass {
         let textures = world.unwrap::<TexturePool>();
         let materials = world.unwrap::<MaterialPool>();
         let lights = world.unwrap::<LightPool>();
+        let meshes = world.unwrap::<MeshPool>();
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Shading Pass"),
@@ -82,6 +85,7 @@ impl Pass for ShadingPass {
         rpass.set_bind_group(3, &materials.bind_group, &[]);
         rpass.set_bind_group(4, &lights.point_bind_group, &[]);
         rpass.set_bind_group(5, &lights.area_bind_group, &[]);
+        rpass.set_bind_group(6, &meshes.trace_bind_group, &[]);
 
         rpass.draw(0..3, 0..1);
     }

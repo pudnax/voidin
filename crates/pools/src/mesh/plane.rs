@@ -6,10 +6,10 @@ pub fn make_plane_mesh(width: f32, height: f32) -> Mesh {
     let width = width / 2.;
     let height = height / 2.;
     let vertices = [
-        [-width, -height, 0.],
-        [-width, height, 0.],
-        [width, height, 0.],
-        [width, -height, 0.],
+        [-width, 0., -height],
+        [-width, 0., height],
+        [width, 0., height],
+        [width, 0., -height],
     ]
     .map(Vec3::from)
     .to_vec();

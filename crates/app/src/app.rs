@@ -36,7 +36,7 @@ use self::{
     state::{AppState, StateAction},
 };
 use crate::{
-    AreaLight, Instance, InstancePool, LightPool, MaterialPool, TexturePool,
+    AreaLight, Example, Instance, InstancePool, LightPool, MaterialPool, TexturePool,
     {MeshId, MeshPool, MeshRef},
 };
 
@@ -228,13 +228,15 @@ impl App {
             .add_area_light(&[AreaLight::from_transform(color, intensity, wh, transform)]);
         self.get_instance_pool_mut().add(&[Instance::new(
             transform * Mat4::from_scale((wh / 2.).extend(1.)),
-            MeshPool::PLANE_MESH,
+            MeshPool::VERTICAL_PLANE_MESH,
             MaterialPool::LIGHT_MATERIAL,
         )]);
         Ok(())
     }
 
-    pub fn setup_scene(&mut self) -> Result<()> {
+    pub fn setup_scene(&mut self, example: &mut impl Example) -> Result<()> {
+        example.setup_scene(self)?;
+
         let mut encoder = self.device().create_command_encoder(&Default::default());
         self.draw_cmd_buffer.set_len(
             self.gpu.device(),
@@ -245,6 +247,43 @@ impl App {
         self.draw_cmd_bind_group = self
             .draw_cmd_buffer
             .create_storage_write_bind_group(&mut self.world);
+
+        let mut mesh_pool = self.get_mesh_pool_mut();
+        mesh_pool.generate_tlas(&self.get_instance_pool().instances_data);
+
+        mesh_pool.trace_bind_group = {
+            let instance_pool = self.get_instance_pool();
+            self.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Trace BG"),
+                layout: &mesh_pool.trace_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: mesh_pool.tlas_nodes.as_tight_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: instance_pool.instances.as_tight_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: mesh_pool.mesh_info.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: mesh_pool.bvh_nodes.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: mesh_pool.vertices.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: mesh_pool.indices.as_entire_binding(),
+                    },
+                ],
+            })
+        };
 
         Ok(())
     }

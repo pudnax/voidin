@@ -109,6 +109,7 @@ name = "app"
 version = "0.69.0"
 dependencies = [
  "ahash 0.8.3",
+ "bvh",
  "bytemuck",
  "color-eyre",
  "components",

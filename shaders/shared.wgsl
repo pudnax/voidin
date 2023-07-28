@@ -1,4 +1,4 @@
-const LIGHT_MATERIAL = 1u;
+const LIGHT_MATERIAL = 2u;
 const WHITE_TEXTURE = 0u;
 const BLACK_TEXTURE = 1u;
 

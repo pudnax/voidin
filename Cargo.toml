@@ -11,7 +11,7 @@ default-run = "model"
 members = ["crates/*"]
 
 [workspace.dependencies]
-glam = { version = "0.24.0", features = ["rand", "bytemuck"] }
+glam = { version = "^0.24", features = ["rand", "bytemuck"] }
 bytemuck = { version = "^1.13", features = ["derive"] }
 color-eyre = "^0.6"
 log = "^0.4"

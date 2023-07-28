@@ -1,3 +1,4 @@
+mod boxx;
 mod cube;
 mod plane;
 mod sphere;
@@ -8,11 +9,12 @@ use std::sync::Arc;
 use glam::{Vec2, Vec3, Vec4};
 
 use components::bind_group_layout::{self, WrappedBindGroupLayout};
-use components::{Gpu, MeshId, MeshInfo};
+use components::{BindGroupLayout, Gpu, Instance, MeshId, MeshInfo};
 use components::{NonZeroSized, ResizableBuffer, ResizableBufferExt};
 
-use bvh::{BvhBuilder, BvhNode};
+use bvh::{BvhBuilder, BvhNode, Tlas, TlasNode};
 
+pub use boxx::make_box_mesh;
 pub use cube::make_cube_mesh;
 pub use plane::make_plane_mesh;
 pub use sphere::make_uv_sphere;
@@ -70,15 +72,45 @@ pub struct MeshPool {
     pub indices: ResizableBuffer<u32>,
     pub bvh_nodes: ResizableBuffer<BvhNode>,
 
+    pub tlas: Tlas,
+    pub tlas_nodes: ResizableBuffer<TlasNode>,
+
+    pub trace_bind_group_layout: BindGroupLayout,
+    pub trace_bind_group: wgpu::BindGroup,
+
     gpu: Arc<Gpu>,
 }
 
 impl MeshPool {
-    pub const PLANE_MESH: MeshId = MeshId::new(0);
-    pub const SPHERE_1_MESH: MeshId = MeshId::new(1);
-    pub const SPHERE_10_MESH: MeshId = MeshId::new(2);
+    pub const HORISONTAL_PLANE_MESH: MeshId = MeshId::new(0);
+    pub const VERTICAL_PLANE_MESH: MeshId = MeshId::new(1);
+    pub const SPHERE_1_MESH: MeshId = MeshId::new(2);
+    pub const SPHERE_10_MESH: MeshId = MeshId::new(3);
 
     pub fn new(gpu: Arc<Gpu>) -> Self {
+        let vertices = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE);
+        let normals = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
+        let tangents = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
+        let tex_coords = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::VERTEX);
+        let indices = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::INDEX | wgpu::BufferUsages::STORAGE);
+        let bvh_nodes = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
+        let tlas = Tlas::empty();
+        let tlas_nodes = gpu
+            .device()
+            .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
+
         let mesh_info = gpu
             .device()
             .create_resizable_buffer(wgpu::BufferUsages::STORAGE);
@@ -99,7 +131,111 @@ impl MeshPool {
                     }],
                 });
         let mesh_info_bind_group =
-            Self::create_bind_group(gpu.device(), &mesh_info_layout, &mesh_info);
+            Self::mesh_info_bind_group(gpu.device(), &mesh_info_layout, &mesh_info);
+
+        let trace_bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout_wrap(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Trace BGL"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(TlasNode::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(Instance::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(MeshInfo::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(BvhNode::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(f32::NSIZE),
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 5,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: Some(u32::NSIZE),
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        let trace_bind_group = {
+            let instances = gpu
+                .device()
+                .create_resizable_buffer::<Instance>(wgpu::BufferUsages::STORAGE);
+            gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Trace BG"),
+                layout: &trace_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: tlas_nodes.as_tight_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: instances.as_tight_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: mesh_info.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: bvh_nodes.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: vertices.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: indices.as_entire_binding(),
+                    },
+                ],
+            })
+        };
 
         let mut this = Self {
             vertex_offset: AtomicU32::new(0),
@@ -112,36 +248,40 @@ impl MeshPool {
             mesh_info_cpu: vec![],
             mesh_info,
 
-            vertices: gpu
-                .device()
-                .create_resizable_buffer(wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE),
-            normals: gpu
-                .device()
-                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
-            tangents: gpu
-                .device()
-                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
-            tex_coords: gpu
-                .device()
-                .create_resizable_buffer(wgpu::BufferUsages::VERTEX),
-            indices: gpu
-                .device()
-                .create_resizable_buffer(wgpu::BufferUsages::INDEX | wgpu::BufferUsages::STORAGE),
-            bvh_nodes: gpu
-                .device()
-                .create_resizable_buffer(wgpu::BufferUsages::STORAGE),
+            vertices,
+            indices,
+            normals,
+            tangents,
+            tex_coords,
+            bvh_nodes,
+
+            tlas,
+            tlas_nodes,
+
+            trace_bind_group_layout,
+            trace_bind_group,
 
             gpu,
         };
 
-        this.add(make_plane_mesh(1., 1.).as_ref());
+        let mut plane_mesh = make_plane_mesh(1., 1.);
+        this.add(plane_mesh.as_ref());
+        let rot = glam::Mat3::from_rotation_x(-std::f32::consts::PI / 2.);
+        plane_mesh.vertices.iter_mut().for_each(|v| *v = rot * *v);
+        this.add(plane_mesh.as_ref());
         this.add(make_uv_sphere(1., 1).as_ref());
         this.add(make_uv_sphere(1., 10).as_ref());
 
         this
     }
 
-    pub fn create_bind_group(
+    pub fn generate_tlas(&mut self, instances: &[Instance]) {
+        self.tlas_nodes.clear();
+        self.tlas.build(instances, &self.mesh_info_cpu);
+        self.tlas_nodes.push(&self.gpu, &self.tlas.nodes);
+    }
+
+    pub fn mesh_info_bind_group(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         mesh_info: &ResizableBuffer<MeshInfo>,
@@ -200,7 +340,7 @@ impl MeshPool {
         self.mesh_info_cpu.push(mesh_info);
         self.mesh_info.push(&self.gpu, &[mesh_info]);
         self.mesh_info_bind_group =
-            Self::create_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
+            Self::mesh_info_bind_group(self.gpu.device(), &self.mesh_info_layout, &self.mesh_info);
 
         log::info!("Added new mesh with id: {mesh_index}");
         MeshId(mesh_index)
