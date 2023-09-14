@@ -1,5 +1,5 @@
-#import <shared.wgsl>
-#import <utils/math.wgsl>
+#import "shared.wgsl"
+#import "utils/math.wgsl"
 
 var<private> BDEPTH: f32 = 0.;
 var<private> TDEPTH: f32 = -1.;

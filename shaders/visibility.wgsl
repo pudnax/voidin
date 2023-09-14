@@ -1,6 +1,6 @@
-#import <shared.wgsl>
-#import <utils/math.wgsl>
-#import <encoding.wgsl>
+#import "shared.wgsl"
+#import "utils/math.wgsl"
+#import "encoding.wgsl"
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var texture_array: binding_array<texture_2d<f32>>;

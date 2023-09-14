@@ -14,7 +14,7 @@ struct ImportClause {
 }
 
 impl ImportClause {
-    pub const PREFIX: &str = "#import ";
+    pub const PREFIX: &'static str = "#import ";
 }
 
 impl<P: Into<PathBuf>> From<P> for ImportClause {
@@ -39,8 +39,8 @@ impl std::str::FromStr for ImportClause {
         let s = s.trim_start_matches(Self::PREFIX).trim();
 
         let splits = s
-            .find('<')
-            .and_then(|i0| s.rfind('>').map(|i1| (i0 + 1, i1)));
+            .find('"')
+            .and_then(|i0| s.rfind('"').map(|i1| (i0 + 1, i1)));
 
         if let Some((i0, i1)) = splits {
             let s = &s[i0..i1];

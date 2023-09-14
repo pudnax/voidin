@@ -1,7 +1,7 @@
-#import <shared.wgsl>
-#import <encoding.wgsl>
-#import <utils/ltc.wgsl>
-#import <utils/uv.wgsl>
+#import "shared.wgsl"
+#import "encoding.wgsl"
+#import "utils/ltc.wgsl"
+#import "utils/uv.wgsl"
 
 @group(0) @binding(0) var<uniform> global: Globals;
 @group(0) @binding(1) var<uniform> camera: Camera;

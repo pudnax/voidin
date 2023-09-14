@@ -3,23 +3,20 @@ use std::time::Duration;
 use color_eyre::Result;
 use voidin::*;
 
-struct Shadows {
+struct Demo {
     visibility_pass: pass::visibility::Visibility,
     shading_pass: pass::shading::ShadingPass,
 }
 
-impl Example for Shadows {
+impl Example for Demo {
     fn name() -> &'static str {
-        "Raytraced Shadows"
+        "Ring Light"
     }
 
     fn init(app: &mut App) -> Result<Self> {
         let visibility_pass = pass::visibility::Visibility::new(&app.world)?;
-        let shading_pass = pass::shading::ShadingPass::new(
-            "src/bin/raytraced_shadows.wgsl",
-            &app.world,
-            &app.gbuffer,
-        )?;
+        let shading_pass =
+            pass::shading::ShadingPass::new("src/bin/ring_light.wgsl", &app.world, &app.gbuffer)?;
 
         Ok(Self {
             visibility_pass,
@@ -120,5 +117,5 @@ fn main() -> Result<()> {
     let window = WindowBuilder::new();
 
     let camera = Camera::new(vec3(0., 6., 0.), 0., 0.);
-    run::<Shadows>(window, camera)
+    run::<Demo>(window, camera)
 }

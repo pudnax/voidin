@@ -1,5 +1,5 @@
-#import <shared.wgsl>
-#import <utils/uv.wgsl>
+#import "shared.wgsl"
+#import "utils/uv.wgsl"
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 

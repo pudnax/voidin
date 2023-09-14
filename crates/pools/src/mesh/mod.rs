@@ -268,6 +268,7 @@ impl MeshPool {
         this.add(plane_mesh.as_ref());
         let rot = glam::Mat3::from_rotation_x(-std::f32::consts::PI / 2.);
         plane_mesh.vertices.iter_mut().for_each(|v| *v = rot * *v);
+        plane_mesh.normals.iter_mut().for_each(|v| *v = rot * *v);
         this.add(plane_mesh.as_ref());
         this.add(make_uv_sphere(1., 1).as_ref());
         this.add(make_uv_sphere(1., 10).as_ref());

@@ -71,3 +71,4 @@ impl Example for Triangle {
 fn main() -> Result<()> {
     run_default::<Triangle>()
 }
+

@@ -34,7 +34,7 @@ impl GlobalsBindGroup {
         Self { layout, binding }
     }
 
-    const LAYOUT: wgpu::BindGroupLayoutDescriptor<'_> = wgpu::BindGroupLayoutDescriptor {
+    const LAYOUT: wgpu::BindGroupLayoutDescriptor<'static> = wgpu::BindGroupLayoutDescriptor {
         label: Some("Globals Bind Group Layout"),
         entries: &[
             wgpu::BindGroupLayoutEntry {

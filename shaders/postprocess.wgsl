@@ -1,5 +1,5 @@
-#import <shared.wgsl>
-#import <utils/color.wgsl>
+#import "shared.wgsl"
+#import "utils/color.wgsl"
 
 @group(0) @binding(0) var<uniform> un: Globals;
 @group(1) @binding(0) var src_texture : texture_2d<f32>;
