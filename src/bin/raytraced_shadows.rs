@@ -84,7 +84,7 @@ impl Example for Shadows {
             ..
         }: RenderContext,
     ) {
-        let mut encoder = &mut ctx.encoder;
+        let encoder = &mut ctx.encoder;
 
         self.visibility_pass.record(
             world,

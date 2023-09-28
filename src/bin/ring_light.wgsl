@@ -1,5 +1,5 @@
 #import "shared.wgsl"
-#import "encoding.wgsl"
+#import "utils/encoding.wgsl"
 #import "utils/ltc.wgsl"
 #import "utils/uv.wgsl"
 #import "utils/bvh.wgsl"
@@ -100,9 +100,9 @@ fn ray_disc_intersect(ray: Ray2, disk: Disk) -> f32 {
 // An extended version of the implementation from
 // "How to solve a cubic equation, revisited"
 // http://momentsingraphics.de/?p=105
-fn solve_cubic(coeffs: vec4<f32>) -> vec3<f32> {
+fn solve_cubic(coefficients: vec4<f32>) -> vec3<f32> {
 	// Normalize the polynomial
-    var coeffs = vec4(coeffs.xyz / coeffs.w, coeffs.w);
+    var coeffs = vec4(coefficients.xyz / coefficients.w, coefficients.w);
 	// Divide middle coefficients by three
     coeffs.y /= 3.0;
     coeffs.z /= 3.0;
@@ -320,147 +320,6 @@ fn ltc_evaluate_ring2(N: vec3<f32>, V: vec3<f32>, P: vec3<f32>, Minv: mat3x3<f32
     return l1 - l2;
 }
 
-fn ltc_evaluate_ring3(N: vec3<f32>, V: vec3<f32>, P: vec3<f32>, Minv: mat3x3<f32>, disk: Disk, two_sided: bool) -> vec3<f32> {
-    let T1 = normalize(V - N * dot(V, N));
-    let T2 = cross(N, T1);
-
-    let points = init_disk_points(disk);
-
-    let R = transpose(mat3x3(T1, T2, N));
-    var L_: array<vec3<f32>, 3>;
-    L_[0] = R * (points[0] - P);
-    L_[1] = R * (points[1] - P);
-    L_[2] = R * (points[2] - P);
-
-    var Lo_i = vec3(0.);
-
-    var C = 0.5 * (L_[0] + L_[2]);
-    var V1 = 0.5 * (L_[1] - L_[2]);
-    var V2 = 0.5 * (L_[1] - L_[0]);
-
-    C = Minv * C;
-    V1 = Minv * V1;
-    V2 = Minv * V2;
-
-    var occlusion = 1.0;
-    if !two_sided && dot(cross(V1, V2), C) < 0.0 {
-        occlusion = 0.0;
-    }
-
-  // compute eigenvectors of ellipse
-    var a: f32; var b: f32;
-    let d11 = dot(V1, V1);
-    let d22 = dot(V2, V2);
-    let d12 = dot(V1, V2);
-    if abs(d12) / sqrt(d11 * d22) > 0.0001 {
-        let tr = d11 + d22;
-        var det = -d12 * d12 + d11 * d22;
-
-    // use sqrt matrix to solve for eigenvalues
-        det = sqrt(det);
-        let u = 0.5 * sqrt(tr - 2.0 * det);
-        let v = 0.5 * sqrt(tr + 2.0 * det);
-        let e_max = sqr(u + v);
-        let e_min = sqr(u - v);
-
-        var V1_: vec3<f32>;
-        var V2_: vec3<f32>;
-
-        if d11 > d22 {
-            V1_ = d12 * V1 + (e_max - d11) * V2;
-            V2_ = d12 * V1 + (e_min - d11) * V2;
-        } else {
-            V1_ = d12 * V2 + (e_max - d22) * V1;
-            V2_ = d12 * V2 + (e_min - d22) * V1;
-        }
-
-        a = 1.0 / e_max;
-        b = 1.0 / e_min;
-        V1 = normalize(V1_);
-        V2 = normalize(V2_);
-    } else {
-        a = 1.0 / dot(V1, V1);
-        b = 1.0 / dot(V2, V2);
-        V1 *= sqrt(a);
-        V2 *= sqrt(b);
-    }
-
-    var V3 = cross(V1, V2);
-    if dot(C, V3) < 0.0 {
-        V3 *= -1.0;
-    }
-
-    let L = dot(V3, C);
-    let x0 = dot(V1, C) / L;
-    let y0 = dot(V2, C) / L;
-
-    let E1 = inverseSqrt(a);
-    let E2 = inverseSqrt(b);
-
-    a *= L * L;
-    b *= L * L;
-
-    let c0 = a * b;
-    let c1 = a * b * (1.0 + x0 * x0 + y0 * y0) - a - b;
-    let c2 = 1.0 - a * (1.0 + x0 * x0) - b * (1.0 + y0 * y0);
-    let c3 = 1.0;
-
-    let roots = solve_cubic(vec4(c0, c1, c2, c3));
-    var spec1: f32;
-        {
-        let e1 = roots.x;
-        let e2 = roots.y;
-        let e3 = roots.z;
-
-        var avgDir = vec3(a * x0 / (a - e2), b * y0 / (b - e2), 1.0);
-
-        let rotate = mat3x3(V1, V2, V3);
-
-        avgDir = rotate * avgDir;
-        avgDir = normalize(avgDir);
-
-        var L1 = sqrt(-e2 / e3);
-        var L2 = sqrt(-e2 / e1);
-
-        let formFactor = L1 * L2 * inverseSqrt((1.0 + L1 * L1) * (1.0 + L2 * L2));
-
-		// use tabulated horizon-clipped sphere
-        var uv = vec2(avgDir.z * 0.5 + 0.5, formFactor);
-        uv = uv * LUT_SCALE + LUT_BIAS;
-        let scale = textureSample(texture_array[LTC2_TEXTURE], tex_ltc_sampler, uv).w;
-        spec1 = formFactor * scale;
-    }
-    let z = (sin(global.time) * 2.);
-    var spec2: f32;
-        {
-        let e1 = roots.x ;
-        let e2 = roots.y ;
-        let e3 = roots.z ;
-
-        var avgDir = vec3(a * x0 / (a - e2), b * y0 / (b - e2), 1.0);
-
-        let rotate = mat3x3(V1, V2, V3);
-
-        avgDir = rotate * avgDir;
-        avgDir = normalize(avgDir);
-
-        var L1 = sqrt(-e2 / e3) ;
-        var L2 = sqrt(-e2 / e1) ;
-
-        let formFactor = L1 * L2 * inverseSqrt((1.0 + L1 * L1) * (1.0 + L2 * L2));
-
-		// use tabulated horizon-clipped sphere
-        var uv = vec2(avgDir.z * 0.5 + 0.5, formFactor);
-        uv = uv * LUT_SCALE + LUT_BIAS;
-        let scale = textureSample(texture_array[LTC2_TEXTURE], tex_ltc_sampler, uv).w;
-        spec2 = formFactor * scale;
-    }
-
-    let spec = spec2;
-
-    return vec3(spec) * occlusion;
-}
-
 struct VertexOutput {
   @builtin(position) pos: vec4<f32>,
   @location(0) uv: vec2<f32>,
@@ -539,7 +398,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let ltc = ltc_matrix(nor, rd, saturate(0.3));
     let two_sided = 0 == 0;
-    var sspec = ltc_evaluate_ring(nor, rd, pos, ltc.matrix, disk, two_sided);
+    var sspec = ltc_evaluate_ring2(nor, rd, pos, ltc.matrix, disk, two_sided);
     sspec *= vec3(1.) * ltc.t2.x + (1.0 - vec3(1.)) * ltc.t2.y;
     let one = mat3x3(vec3(1., 0., 0.), vec3(0., 1., 0.), vec3(0., 0., 1.));
     var ddiff = ltc_evaluate_ring(nor, rd, pos, one, disk, two_sided);

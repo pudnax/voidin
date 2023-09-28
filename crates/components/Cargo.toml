@@ -16,9 +16,9 @@ ahash = { workspace = true }
 png = { workspace = true }
 dolly = { workspace = true }
 either = { workspace = true }
-pretty-type-name = "1.0.1"
-notify = "6.0.0"
-notify-debouncer-mini = "0.3.0"
-clean-path = "0.2.1"
+pretty-type-name = "1.0"
+notify = "^6"
+notify-debouncer-mini = "0.4"
+clean-path = "0.2"
 crossbeam-channel = "^0.5"
 chrono = "^0.4"

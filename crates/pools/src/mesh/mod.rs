@@ -277,6 +277,9 @@ impl MeshPool {
     }
 
     pub fn generate_tlas(&mut self, instances: &[Instance]) {
+        if instances.is_empty() {
+            return;
+        }
         self.tlas_nodes.clear();
         self.tlas.build(instances, &self.mesh_info_cpu);
         self.tlas_nodes.push(&self.gpu, &self.tlas.nodes);

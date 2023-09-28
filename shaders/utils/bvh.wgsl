@@ -1,5 +1,5 @@
-#import <./stack.wgsl>
-#import <./intersections.wgsl>
+#import "./stack.wgsl"
+#import "./intersections.wgsl"
 
 struct TlasNode {
 	min: vec3<f32>,

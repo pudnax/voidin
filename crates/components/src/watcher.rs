@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use notify_debouncer_mini::DebouncedEventKind;
+use notify_debouncer_mini::{DebounceEventResult, DebouncedEventKind};
 use winit::event_loop::EventLoopProxy;
 
 use std::{
@@ -16,7 +16,6 @@ impl Watcher {
     pub fn new(proxy: EventLoopProxy<PathBuf>) -> Result<Self> {
         let watcher = notify_debouncer_mini::new_debouncer(
             Duration::from_millis(100),
-            None,
             watch_callback(proxy),
         )?;
 
@@ -36,9 +35,7 @@ impl Watcher {
     }
 }
 
-fn watch_callback(
-    proxy: EventLoopProxy<PathBuf>,
-) -> impl FnMut(notify_debouncer_mini::DebounceEventResult) {
+fn watch_callback(proxy: EventLoopProxy<PathBuf>) -> impl FnMut(DebounceEventResult) {
     move |event| match event {
         Ok(events) => {
             if let Some(path) = events
@@ -56,8 +53,6 @@ fn watch_callback(
                 proxy.send_event(path).expect("Event Loop has been dropped");
             }
         }
-        Err(errs) => errs.into_iter().for_each(|err| {
-            eprintln!("File watcher error: {err}");
-        }),
+        Err(errors) => eprintln!("File watcher error: {errors}"),
     }
 }

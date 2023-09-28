@@ -62,8 +62,8 @@ fn integrate_edge(v1: vec3<f32>, v2: vec3<f32>) -> vec3<f32> {
     return cross(v1, v2) * theta_sintheta;
 }
 
-fn sdsquare(p: vec2<f32>) -> f32 {
-    var p = p - 0.5;
+fn sdsquare(pos: vec2<f32>) -> f32 {
+    var p = pos - 0.5;
     p = abs(p) - 0.5;
     return length(max(p, vec2(0.))) + min(max(p.x, p.y), 0.);
 }
@@ -111,11 +111,11 @@ fn apply_texture(tex_idx: u32, p0: vec3<f32>, p1: vec3<f32>, p2: vec3<f32>) -> v
     return col;
 }
 
-fn ltc_evaluate_rect(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, minv: mat3x3<f32>, points: array<vec3<f32>,4>, two_sided: bool) -> vec3<f32> {
+fn ltc_evaluate_rect(nor: vec3<f32>, view: vec3<f32>, pos: vec3<f32>, mminv: mat3x3<f32>, points: array<vec3<f32>,4>, two_sided: bool) -> vec3<f32> {
     let T1 = normalize(view - nor * dot(view, nor));
     let T2 = cross(nor, T1);
 
-    let minv = minv * transpose(mat3x3(T1, T2, nor));
+    let minv = mminv * transpose(mat3x3(T1, T2, nor));
 
     var L = array<vec3<f32>, 4>(
         minv * (points[0] - pos),

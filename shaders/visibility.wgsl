@@ -1,6 +1,6 @@
 #import "shared.wgsl"
 #import "utils/math.wgsl"
-#import "encoding.wgsl"
+#import "utils/encoding.wgsl"
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(1) @binding(0) var texture_array: binding_array<texture_2d<f32>>;
@@ -59,7 +59,7 @@ fn get_tbn(normal: vec3<f32>, tangent: vec3<f32>, bitangent: vec3<f32>) -> mat3x
     return mat3x3(
         normalize(tangent),
         normalize(bitangent),
-        normalize(normal)
+        normalize(normal),
     );
 }
 

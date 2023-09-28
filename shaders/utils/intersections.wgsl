@@ -1,4 +1,4 @@
-#import <./math.wgsl>
+#import "./math.wgsl"
 
 struct Ray {
     eye: vec3<f32>,

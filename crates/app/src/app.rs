@@ -171,9 +171,10 @@ impl App {
         let draw_cmd_bind_group = draw_cmd_buffer.create_storage_write_bind_group(&mut world);
 
         let profiler = RefCell::new(GpuProfiler::new(
+            gpu.adapter(),
+            gpu.device(),
+            gpu.queue(),
             4,
-            gpu.queue().get_timestamp_period(),
-            features,
         ));
 
         let egui_renderer = egui_wgpu::renderer::Renderer::new(

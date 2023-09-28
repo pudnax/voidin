@@ -81,7 +81,7 @@ impl Example for Demo {
             ..
         }: RenderContext,
     ) {
-        let mut encoder = &mut ctx.encoder;
+        let encoder = &mut ctx.encoder;
 
         self.visibility_pass.record(
             world,

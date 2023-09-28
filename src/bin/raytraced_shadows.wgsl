@@ -1,5 +1,5 @@
 #import "shared.wgsl"
-#import "encoding.wgsl"
+#import "utils/encoding.wgsl"
 #import "utils/ltc.wgsl"
 #import "utils/uv.wgsl"
 #import "utils/bvh.wgsl"

@@ -1,8 +1,8 @@
 const PRES = 16u;
 
 // https://www.shadertoy.com/view/4llcRl
-fn encode_octahedral_32(nor: vec3<f32>) -> u32 {
-    var nor = nor / (abs(nor.x) + abs(nor.y) + abs(nor.z));
+fn encode_octahedral_32(normal: vec3<f32>) -> u32 {
+    var nor = normal / (abs(normal.x) + abs(normal.y) + abs(normal.z));
     if nor.z < 0.0 {
         let xy = (1.0 - abs(nor.yx)) * sign(nor.xy);
         nor = vec3(xy, nor.z);
@@ -16,7 +16,7 @@ fn encode_octahedral_32(nor: vec3<f32>) -> u32 {
 
 fn decode_octahedral_32(data: u32) -> vec3<f32> {
     let mu = (1u << PRES) - 1u;
-    let d = vec2<u32>(data, data >> PRES) & mu;
+    let d = vec2<u32>(data, data >> PRES) & vec2(mu);
     var v = vec2<f32>(d) / f32(mu);
 
     v = v * 2.0 - 1.0;
