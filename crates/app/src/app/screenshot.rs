@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use wgpu::MapMode;
 
 use crate::Gpu;
@@ -15,8 +17,14 @@ impl ScreenshotCtx {
         let image_dimentions =
             ImageDimentions::new(width, height, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
 
+        let data = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Screen Copy Buffer"),
+            size: image_dimentions.linear_size(),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
         let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("Screen Mapped Texture"),
+            label: Some("Screen Copy Texture"),
             size: wgpu::Extent3d {
                 width: image_dimentions.width,
                 height: image_dimentions.height,
@@ -28,13 +36,6 @@ impl ScreenshotCtx {
             mip_level_count: 1,
             sample_count: 1,
             view_formats: &[],
-        });
-
-        let data = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Screen Mapped Buffer"),
-            size: image_dimentions.linear_size(),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
         });
 
         Self {
@@ -50,13 +51,13 @@ impl ScreenshotCtx {
             ImageDimentions::new(width, height, wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
 
         self.data = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Screen mapped Buffer"),
+            label: Some("Screen Copy Buffer"),
             size: image_dimentions.linear_size(),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
         self.texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("Screen Mapped Texture"),
+            label: Some("Screen Copy Texture"),
             size: wgpu::Extent3d {
                 width: image_dimentions.width,
                 height: image_dimentions.height,
@@ -77,8 +78,10 @@ impl ScreenshotCtx {
         world: &World,
         blitter: &Blitter,
         src_texture: &wgpu::TextureView,
-    ) -> (Vec<u8>, ImageDimentions) {
+        callback: impl FnOnce(Arc<wgpu::Buffer>, ImageDimentions) + Send + 'static,
+    ) {
         let device = world.device();
+        let dims = self.image_dimentions;
 
         let view = self.texture.create_view(&Default::default());
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -98,30 +101,31 @@ impl ScreenshotCtx {
                 buffer: &self.data,
                 layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: Some(self.image_dimentions.padded_bytes_per_row),
+                    bytes_per_row: Some(dims.padded_bytes_per_row),
                     rows_per_image: None,
                 },
             },
             self.texture.size(),
         );
 
-        let submit = world.queue().submit(Some(encoder.finish()));
+        let download = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
+            size: dims.linear_size(),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+            label: Some("Download Buffer"),
+        }));
+        encoder.copy_buffer_to_buffer(&self.data, 0, &download, 0, dims.linear_size());
+        world.queue().submit(Some(encoder.finish()));
 
-        let image_slice = self.data.slice(0..self.image_dimentions.linear_size());
-        image_slice.map_async(MapMode::Read, |res| {
+        let buff = download.clone();
+        let image_slice = download.slice(0..dims.linear_size());
+        image_slice.map_async(MapMode::Read, move |res| {
             if let Err(err) = res {
                 log::error!("Oh no, failed to map buffer: {err}");
+                return;
             }
+
+            callback(buff, dims);
         });
-
-        device.poll(wgpu::Maintain::WaitForSubmissionIndex(submit));
-
-        let mapped_slice = image_slice.get_mapped_range();
-        let frame = mapped_slice.to_vec();
-
-        drop(mapped_slice);
-        self.data.unmap();
-
-        (frame, self.image_dimentions)
     }
 }

@@ -15,8 +15,8 @@ use components::{
         StorageWriteBindGroupLayout, StorageWriteBindGroupLayoutDyn,
     },
     world::{Read, Write},
-    Blitter, DrawIndexedIndirect, Gpu, ImageDimentions, Recorder, ResizableBuffer, Watcher, World,
-    {CameraUniform, CameraUniformBinding},
+    Blitter, DrawIndexedIndirect, Gpu, ImageDimentions, RecordEvent, Recorder, ResizableBuffer,
+    Watcher, World, {CameraUniform, CameraUniformBinding},
 };
 
 pub mod gbuffer;
@@ -347,9 +347,10 @@ impl App {
 
         profiler.end_frame().ok();
 
-        if self.recorder.is_active() {
-            self.capture_frame(|frame, _| {
-                self.recorder.record(frame);
+        if self.recorder.is_active() && self.recorder.ffmpeg_installed() {
+            let tx = self.recorder.sender.clone();
+            self.capture_frame(move |frame, _| {
+                let _ = tx.send(RecordEvent::Record(frame));
             });
         }
 
@@ -424,15 +425,16 @@ impl App {
 
         for action in actions {
             match action {
-                StateAction::Screenshot => {
-                    self.capture_frame(|frame, dims| {
-                        self.recorder.screenshot(frame, dims);
-                    });
-                }
                 StateAction::StartRecording => {
                     self.recorder.start(self.screenshot_ctx.image_dimentions)
                 }
                 StateAction::FinishRecording => self.recorder.finish(),
+                StateAction::Screenshot => {
+                    let tx = self.recorder.sender.clone();
+                    self.capture_frame(move |frame, dims| {
+                        let _ = tx.send(RecordEvent::Screenshot((frame, dims)));
+                    });
+                }
             }
         }
         Ok(())
@@ -442,13 +444,16 @@ impl App {
         self.get_pipeline_arena_mut().reload_pipelines(&path);
     }
 
-    pub fn capture_frame(&self, callback: impl FnOnce(Vec<u8>, ImageDimentions)) {
-        let (frame, dims) = self.screenshot_ctx.capture_frame(
+    pub fn capture_frame(
+        &self,
+        callback: impl FnOnce(Arc<wgpu::Buffer>, ImageDimentions) + Send + 'static,
+    ) {
+        self.screenshot_ctx.capture_frame(
             &self.world,
             &self.blitter,
             self.view_target.main_view(),
+            callback,
         );
-        callback(frame, dims)
     }
 
     pub fn get_pipeline_arena(&self) -> Read<PipelineArena> {

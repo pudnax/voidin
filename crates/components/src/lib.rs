@@ -29,7 +29,7 @@ pub use camera::{Camera, CameraUniform, CameraUniformBinding};
 pub use fps_counter::FpsCounter;
 pub use import_resolver::{ImportResolver, ResolvedFile};
 pub use input::{Input, KeyMap, KeyboardMap, KeyboardState};
-pub use recorder::Recorder;
+pub use recorder::{RecordEvent, Recorder};
 pub use watcher::Watcher;
 pub use world::World;
 

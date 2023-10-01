@@ -5,6 +5,7 @@ use std::{
     io::{BufWriter, Write},
     path::Path,
     process::{Child, Command, Stdio},
+    sync::Arc,
     time::Instant,
 };
 
@@ -15,13 +16,13 @@ use crate::{create_folder, ImageDimentions, SCREENSHOTS_FOLDER, VIDEO_FOLDER};
 
 pub enum RecordEvent {
     Start(ImageDimentions),
-    Record(Vec<u8>),
+    Record(Arc<wgpu::Buffer>),
     Finish,
-    Screenshot((Vec<u8>, ImageDimentions)),
+    Screenshot((Arc<wgpu::Buffer>, ImageDimentions)),
 }
 
 pub struct Recorder {
-    sender: Sender<RecordEvent>,
+    pub sender: Sender<RecordEvent>,
     ffmpeg_installed: bool,
     pub ffmpeg_version: String,
     is_active: bool,
@@ -73,17 +74,7 @@ impl Recorder {
         self.send(RecordEvent::Finish);
     }
 
-    pub fn record(&self, frame: Vec<u8>) {
-        if self.is_active {
-            self.send(RecordEvent::Record(frame))
-        }
-    }
-
-    pub fn screenshot(&self, frame: Vec<u8>, dims: ImageDimentions) {
-        self.send(RecordEvent::Screenshot((frame, dims)));
-    }
-
-    fn send(&self, event: RecordEvent) {
+    pub fn send(&self, event: RecordEvent) {
         if !(self.ffmpeg_installed || matches!(event, RecordEvent::Screenshot(_))) {
             return;
         }
@@ -168,6 +159,8 @@ fn record_thread(rx: Receiver<RecordEvent>) {
 
                     let padded_bytes = recorder.image_dimentions.padded_bytes_per_row as _;
                     let unpadded_bytes = recorder.image_dimentions.unpadded_bytes_per_row as _;
+                    let frame_slice = frame.slice(0..recorder.image_dimentions.linear_size());
+                    let frame = frame_slice.get_mapped_range();
                     for chunk in frame
                         .chunks(padded_bytes)
                         .map(|chunk| &chunk[..unpadded_bytes])
@@ -185,7 +178,9 @@ fn record_thread(rx: Receiver<RecordEvent>) {
                 eprintln!("Recording finished");
             }
             RecordEvent::Screenshot((frame, image_dimentions)) => {
-                match save_screenshot(frame, image_dimentions) {
+                let frame_slice = frame.slice(0..image_dimentions.linear_size());
+                let frame = frame_slice.get_mapped_range();
+                match save_screenshot(&frame, image_dimentions) {
                     Ok(_) => {}
                     Err(err) => {
                         eprintln!("{err}")
@@ -196,7 +191,7 @@ fn record_thread(rx: Receiver<RecordEvent>) {
     }
 }
 
-pub fn save_screenshot(frame: Vec<u8>, image_dimentions: ImageDimentions) -> Result<()> {
+pub fn save_screenshot(frame: &[u8], image_dimentions: ImageDimentions) -> Result<()> {
     let now = Instant::now();
     let screenshots_folder = Path::new(SCREENSHOTS_FOLDER);
     create_folder(screenshots_folder)?;
