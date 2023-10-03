@@ -77,7 +77,7 @@ impl ScreenshotCtx {
         &self,
         world: &World,
         blitter: &Blitter,
-        src_texture: &wgpu::TextureView,
+        src_texture: &wgpu::BindGroup,
         callback: impl FnOnce(Arc<wgpu::Buffer>, ImageDimentions) + Send + 'static,
     ) {
         let device = world.device();
@@ -87,9 +87,9 @@ impl ScreenshotCtx {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Screenshot"),
         });
-        blitter.blit_to_texture(
+        blitter.blit_to_texture_with_binding(
             &mut encoder,
-            world,
+            world.device(),
             src_texture,
             &view,
             self.texture.format(),

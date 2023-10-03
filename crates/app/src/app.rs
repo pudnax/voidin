@@ -451,7 +451,7 @@ impl App {
         self.screenshot_ctx.capture_frame(
             &self.world,
             &self.blitter,
-            self.view_target.main_view(),
+            self.view_target.main_binding(),
             callback,
         );
     }
