@@ -199,6 +199,16 @@ impl ImageDimentions {
     }
 }
 
+impl From<ImageDimentions> for wgpu::Extent3d {
+    fn from(value: ImageDimentions) -> Self {
+        wgpu::Extent3d {
+            width: value.width,
+            height: value.height,
+            depth_or_array_layers: 1,
+        }
+    }
+}
+
 pub fn create_folder(name: impl AsRef<Path>) -> io::Result<()> {
     match std::fs::create_dir(name) {
         Ok(_) => {}
